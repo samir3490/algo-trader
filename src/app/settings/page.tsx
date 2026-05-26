@@ -320,11 +320,11 @@ function SettingsContent() {
   }
 
   function handleAddAccount() {
-    window.location.href = "/api/zerodha/login";
+    window.location.assign("/api/zerodha/login");
   }
 
   async function handleReconnect(kiteUserId: string) {
-    window.location.href = "/api/zerodha/login";
+    window.location.assign("/api/zerodha/login");
   }
 
   async function handleSave() {
@@ -394,8 +394,9 @@ function SettingsContent() {
             </div>
           </div>
           <button
+            type="button"
             onClick={handleAddAccount}
-            className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+            className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             Add Account
@@ -415,8 +416,9 @@ function SettingsContent() {
               Connect your Zerodha accounts to start live trading
             </p>
             <button
+              type="button"
               onClick={handleAddAccount}
-              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               Connect Zerodha Account
