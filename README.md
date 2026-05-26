@@ -1,36 +1,92 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AlgoTrader - Indian Market Algo Trading Platform
+
+A comprehensive algorithmic trading platform built for the Indian share market (NSE/BSE) with paper trading, real-time strategy execution, and Zerodha integration.
+
+## Features
+
+- **Paper Trading** - Practice with virtual money (₹10,00,000) using real market data
+- **Algo Strategies** - Pre-built strategies: SMA Crossover, EMA Crossover, RSI, MACD, Bollinger Bands
+- **Zerodha Integration** - Connect your Zerodha account for live intraday trading
+- **Auto Order Placement** - Automatically place orders based on strategy signals
+- **Real-time Dashboard** - Portfolio tracking, watchlists, and P&L monitoring
+- **Order Management** - Track all paper and live orders in one place
+
+## Tech Stack
+
+- **Framework**: Next.js 15 (App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS
+- **Database**: PostgreSQL + Prisma ORM
+- **Broker API**: Zerodha Kite Connect
+- **Charts**: Recharts
+- **State**: Zustand
+- **Deployment**: Vercel
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
+- Node.js 18+
+- PostgreSQL database (Neon, Supabase, or Vercel Postgres)
+- Zerodha Kite Connect API credentials (from [Kite Connect Developer](https://developers.kite.trade/))
+
+### Setup
+
+1. Clone the repository:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/YOUR_USERNAME/algo-trader.git
+cd algo-trader
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. Install dependencies:
+```bash
+npm install
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+3. Set up environment variables:
+```bash
+cp .env.example .env
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Edit `.env` with your values:
+- `DATABASE_URL` - PostgreSQL connection string
+- `NEXTAUTH_SECRET` - Random secret for auth
+- `KITE_API_KEY` - Zerodha Kite Connect API key
+- `KITE_API_SECRET` - Zerodha Kite Connect API secret
 
-## Learn More
+4. Set up the database:
+```bash
+npx prisma db push
+```
 
-To learn more about Next.js, take a look at the following resources:
+5. Run the development server:
+```bash
+npm run dev
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Open [http://localhost:3000](http://localhost:3000)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Zerodha Integration
 
-## Deploy on Vercel
+1. Create an app at [Kite Connect Developer Console](https://developers.kite.trade/)
+2. Set the redirect URL to `http://localhost:3000/api/zerodha/callback`
+3. Add your API key and secret to `.env`
+4. Click "Connect to Zerodha" in the Live Trading page
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Trading Strategies
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Strategy | Description | Parameters |
+|----------|-------------|------------|
+| SMA Crossover | Short/Long SMA crossover signals | Short Period, Long Period |
+| EMA Crossover | Exponential MA crossover (faster response) | Short Period, Long Period |
+| RSI | Overbought/Oversold levels | Period, Oversold, Overbought |
+| MACD | Signal line crossover | Fast, Slow, Signal periods |
+| Bollinger Bands | Mean reversion at band touches | Period, Multiplier |
+
+## Disclaimer
+
+This software is for educational purposes. Algorithmic trading involves significant financial risk. Always test strategies with paper trading before using real money. The developers are not responsible for any financial losses.
+
+## License
+
+MIT

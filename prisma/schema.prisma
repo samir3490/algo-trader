@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  password      String?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  kiteAccessToken String?
+  kiteUserId      String?
+
+  strategies     Strategy[]
+  paperPortfolio PaperPortfolio?
+  orders         Order[]
+  watchlists     Watchlist[]
+}
+
+model Strategy {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  type        StrategyType
+  config      Json
+  isActive    Boolean  @default(false)
+  isPaper     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  orders Order[]
+}
+
+enum StrategyType {
+  SMA_CROSSOVER
+  EMA_CROSSOVER
+  RSI
+  MACD
+  BOLLINGER_BANDS
+  VWAP
+  SUPERTREND
+  CUSTOM
+}
+
+model PaperPortfolio {
+  id           String  @id @default(cuid())
+  balance      Float   @default(1000000)
+  initialBalance Float @default(1000000)
+  totalPnL     Float   @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  holdings PaperHolding[]
+  trades   PaperTrade[]
+}
+
+model PaperHolding {
+  id            String @id @default(cuid())
+  symbol        String
+  exchange      String @default("NSE")
+  quantity      Int
+  avgPrice      Float
+  currentPrice  Float  @default(0)
+  pnl           Float  @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  portfolioId String
+  portfolio   PaperPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+}
+
+model PaperTrade {
+  id         String    @id @default(cuid())
+  symbol     String
+  exchange   String    @default("NSE")
+  side       OrderSide
+  quantity   Int
+  price      Float
+  total      Float
+  executedAt DateTime  @default(now())
+
+  portfolioId String
+  portfolio   PaperPortfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  symbol        String
+  exchange      String      @default("NSE")
+  side          OrderSide
+  orderType     OrderType   @default(MARKET)
+  quantity      Int
+  price         Float?
+  triggerPrice  Float?
+  status        OrderStatus @default(PENDING)
+  kiteOrderId   String?
+  isPaper       Boolean     @default(true)
+  executedAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  strategyId String?
+  strategy   Strategy? @relation(fields: [strategyId], references: [id])
+}
+
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  MARKET
+  LIMIT
+  SL
+  SL_M
+}
+
+enum OrderStatus {
+  PENDING
+  PLACED
+  EXECUTED
+  CANCELLED
+  REJECTED
+  EXPIRED
+}
+
+model Watchlist {
+  id        String   @id @default(cuid())
+  name      String
+  symbols   String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
