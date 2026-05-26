@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   TrendingUp,
   Activity,
@@ -15,8 +15,13 @@ import {
   ChevronDown,
   Zap,
   Shield,
+  Info,
+  Target,
+  Signal,
+  Hash,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
+import { NSE_INSTRUMENTS } from "@/lib/instruments";
 
 type StrategyType = "sma" | "ema" | "rsi" | "macd" | "bollinger";
 type Timeframe = "1min" | "5min" | "15min" | "30min" | "1hr" | "Day";
@@ -37,15 +42,32 @@ interface StrategyDefinition {
 
 interface ActiveStrategy {
   id: string;
+  name: string;
   type: StrategyType;
   symbol: string;
+  exchange: string;
   mode: "paper" | "live";
-  status: "running" | "paused";
-  signalsToday: number;
+  status: "running" | "paused" | "stopped";
+  signals: number;
   pnl: number;
   params: Record<string, number>;
   timeframe: Timeframe;
+  createdAt: string;
 }
+
+// ── Constants ────────────────────────────────────────────────────────────
+
+const ACTIVE_STRATEGIES_KEY = "activeStrategies";
+
+const NIFTY50_SYMBOLS = NSE_INSTRUMENTS.slice(0, 50).map((i) => i.symbol);
+
+const BANK_NIFTY_SYMBOLS = [
+  "HDFCBANK", "ICICIBANK", "SBIN", "KOTAKBANK", "AXISBANK",
+  "INDUSINDBK", "BANDHANBNK", "FEDERALBNK", "IDFCFIRSTB", "PNB",
+  "BANKBARODA", "CANBK",
+];
+
+const TOP100_SYMBOLS = NSE_INSTRUMENTS.slice(0, 100).map((i) => i.symbol);
 
 const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
   {
@@ -112,7 +134,27 @@ function getStrategyDef(type: StrategyType): StrategyDefinition {
   return STRATEGY_DEFINITIONS.find((d) => d.id === type)!;
 }
 
+// ── Persistence ──────────────────────────────────────────────────────────
+
+function loadActiveStrategies(): ActiveStrategy[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(ACTIVE_STRATEGIES_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return [];
+}
+
+function saveActiveStrategies(strategies: ActiveStrategy[]) {
+  try {
+    localStorage.setItem(ACTIVE_STRATEGIES_KEY, JSON.stringify(strategies));
+  } catch {}
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────
+
 export default function StrategiesPage() {
+  const [mounted, setMounted] = useState(false);
   const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([]);
 
   const [cardState, setCardState] = useState<
@@ -120,39 +162,70 @@ export default function StrategiesPage() {
       StrategyType,
       {
         params: Record<string, number>;
-        symbol: string;
+        symbols: string;
         timeframe: Timeframe;
         paperTrading: boolean;
         active: boolean;
       }
     >
   >(() => {
-    const init: any = {};
+    const init: Record<string, {
+      params: Record<string, number>;
+      symbols: string;
+      timeframe: Timeframe;
+      paperTrading: boolean;
+      active: boolean;
+    }> = {};
     for (const def of STRATEGY_DEFINITIONS) {
       init[def.id] = {
         params: getDefaultParams(def),
-        symbol: "RELIANCE",
+        symbols: "RELIANCE",
         timeframe: "15min" as Timeframe,
         paperTrading: true,
         active: false,
       };
     }
-    return init;
+    return init as Record<StrategyType, typeof init[string]>;
   });
 
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<StrategyType>("sma");
-  const [modalSymbol, setModalSymbol] = useState("RELIANCE");
+  const [modalSymbols, setModalSymbols] = useState("RELIANCE");
   const [modalTimeframe, setModalTimeframe] = useState<Timeframe>("15min");
   const [modalPaper, setModalPaper] = useState(true);
   const [modalParams, setModalParams] = useState<Record<string, number>>(() =>
     getDefaultParams(STRATEGY_DEFINITIONS[0])
   );
 
+  // Load persisted strategies on mount
+  useEffect(() => {
+    const loaded = loadActiveStrategies();
+    setActiveStrategies(loaded);
+
+    const newCardState = { ...cardState };
+    for (const strat of loaded) {
+      if (newCardState[strat.type]) {
+        newCardState[strat.type] = {
+          ...newCardState[strat.type],
+          active: strat.status === "running" || strat.status === "paused",
+        };
+      }
+    }
+    setCardState(newCardState);
+    setMounted(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Persist strategies whenever they change
+  useEffect(() => {
+    if (!mounted) return;
+    saveActiveStrategies(activeStrategies);
+  }, [activeStrategies, mounted]);
+
   const openModal = useCallback(() => {
     const def = STRATEGY_DEFINITIONS[0];
     setModalType(def.id);
-    setModalSymbol("RELIANCE");
+    setModalSymbols("RELIANCE");
     setModalTimeframe("15min");
     setModalPaper(true);
     setModalParams(getDefaultParams(def));
@@ -164,44 +237,62 @@ export default function StrategiesPage() {
     setModalParams(getDefaultParams(getStrategyDef(type)));
   }, []);
 
+  function parseSymbols(input: string): string[] {
+    return input
+      .split(",")
+      .map((s) => s.trim().toUpperCase())
+      .filter((s) => s.length > 0);
+  }
+
   const handleModalSave = useCallback(() => {
-    const newStrategy: ActiveStrategy = {
-      id: `active-${Date.now()}`,
+    const symbols = parseSymbols(modalSymbols);
+    const def = getStrategyDef(modalType);
+
+    const newStrategies: ActiveStrategy[] = symbols.map((sym) => ({
+      id: `active-${Date.now()}-${sym}`,
+      name: def.name,
       type: modalType,
-      symbol: modalSymbol.toUpperCase(),
+      symbol: sym,
+      exchange: "NSE",
       mode: modalPaper ? "paper" : "live",
-      status: "running",
-      signalsToday: 0,
+      status: "running" as const,
+      signals: 0,
       pnl: 0,
       params: { ...modalParams },
       timeframe: modalTimeframe,
-    };
-    setActiveStrategies((prev) => [...prev, newStrategy]);
+      createdAt: new Date().toISOString(),
+    }));
+
+    setActiveStrategies((prev) => [...prev, ...newStrategies]);
     setModalOpen(false);
-  }, [modalType, modalSymbol, modalPaper, modalParams, modalTimeframe]);
+  }, [modalType, modalSymbols, modalPaper, modalParams, modalTimeframe]);
 
   const toggleCardActive = useCallback(
     (id: StrategyType) => {
       const state = cardState[id];
       if (!state.active) {
         const def = getStrategyDef(id);
-        const newActive: ActiveStrategy = {
-          id: `active-${Date.now()}`,
+        const symbols = parseSymbols(state.symbols);
+        const newStrategies: ActiveStrategy[] = symbols.map((sym) => ({
+          id: `active-${Date.now()}-${sym}`,
+          name: def.name,
           type: id,
-          symbol: state.symbol.toUpperCase(),
+          symbol: sym,
+          exchange: "NSE",
           mode: state.paperTrading ? "paper" : "live",
-          status: "running",
-          signalsToday: 0,
+          status: "running" as const,
+          signals: 0,
           pnl: 0,
           params: { ...state.params },
           timeframe: state.timeframe,
-        };
-        setActiveStrategies((prev) => [...prev, newActive]);
+          createdAt: new Date().toISOString(),
+        }));
+        setActiveStrategies((prev) => [...prev, ...newStrategies]);
       } else {
+        const symbols = parseSymbols(state.symbols);
         setActiveStrategies((prev) =>
           prev.filter(
-            (s) =>
-              !(s.type === id && s.symbol === state.symbol.toUpperCase())
+            (s) => !(s.type === id && symbols.includes(s.symbol))
           )
         );
       }
@@ -227,6 +318,28 @@ export default function StrategiesPage() {
     setActiveStrategies((prev) => prev.filter((s) => s.id !== id));
   }, []);
 
+  const applyPreset = (target: "card" | "modal", cardId: StrategyType | null, preset: string) => {
+    let symbols = "";
+    if (preset === "nifty50") symbols = NIFTY50_SYMBOLS.join(", ");
+    else if (preset === "banknifty") symbols = BANK_NIFTY_SYMBOLS.join(", ");
+    else if (preset === "top100") symbols = TOP100_SYMBOLS.join(", ");
+
+    if (target === "modal") {
+      setModalSymbols(symbols);
+    } else if (cardId) {
+      setCardState((prev) => ({
+        ...prev,
+        [cardId]: { ...prev[cardId], symbols },
+      }));
+    }
+  };
+
+  // Performance stats
+  const totalSignals = activeStrategies.reduce((sum, s) => sum + s.signals, 0);
+  const totalPnl = activeStrategies.reduce((sum, s) => sum + s.pnl, 0);
+  const runningCount = activeStrategies.filter((s) => s.status === "running").length;
+  const pausedCount = activeStrategies.filter((s) => s.status === "paused").length;
+
   return (
     <div className="min-h-screen space-y-8">
       {/* Header */}
@@ -245,6 +358,80 @@ export default function StrategiesPage() {
           Create Strategy
         </button>
       </div>
+
+      {/* ── How Strategies Work ────────────────────────────────────────── */}
+      <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
+        <div className="flex items-start gap-3">
+          <Info className="h-5 w-5 text-blue-400 mt-0.5 shrink-0" />
+          <div className="space-y-2">
+            <h3 className="text-sm font-semibold text-blue-300">How Strategies Work</h3>
+            <ul className="space-y-1.5 text-xs text-gray-400 leading-relaxed">
+              <li className="flex items-start gap-2">
+                <Signal className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
+                Strategies scan configured stocks at the selected timeframe interval
+              </li>
+              <li className="flex items-start gap-2">
+                <Target className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
+                When a BUY/SELL signal is generated, it will auto-place orders in the selected mode
+              </li>
+              <li className="flex items-start gap-2">
+                <Shield className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
+                <span>
+                  <strong className="text-amber-400">Paper mode:</strong> orders placed in paper portfolio
+                  <span className="mx-2 text-gray-600">|</span>
+                  <strong className="text-red-400">Live mode:</strong> orders placed via Zerodha
+                </span>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Strategy Performance Overview ──────────────────────────────── */}
+      {activeStrategies.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="rounded-xl border border-gray-800 bg-[#111827] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Hash className="h-4 w-4 text-blue-400" />
+              <span className="text-xs text-gray-400 uppercase tracking-wider">Total Strategies</span>
+            </div>
+            <p className="text-xl font-bold text-white">
+              {activeStrategies.length}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">
+              {runningCount} running · {pausedCount} paused
+            </p>
+          </div>
+          <div className="rounded-xl border border-gray-800 bg-[#111827] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Signal className="h-4 w-4 text-purple-400" />
+              <span className="text-xs text-gray-400 uppercase tracking-wider">Total Signals</span>
+            </div>
+            <p className="text-xl font-bold text-white">{totalSignals}</p>
+            <p className="text-xs text-gray-500 mt-1">Across all strategies</p>
+          </div>
+          <div className="rounded-xl border border-gray-800 bg-[#111827] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <TrendingUp className="h-4 w-4 text-emerald-400" />
+              <span className="text-xs text-gray-400 uppercase tracking-wider">Total P&amp;L</span>
+            </div>
+            <p className={cn("text-xl font-bold", totalPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
+              {formatCurrency(totalPnl)}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Combined performance</p>
+          </div>
+          <div className="rounded-xl border border-gray-800 bg-[#111827] p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Target className="h-4 w-4 text-cyan-400" />
+              <span className="text-xs text-gray-400 uppercase tracking-wider">Unique Symbols</span>
+            </div>
+            <p className="text-xl font-bold text-white">
+              {new Set(activeStrategies.map((s) => s.symbol)).size}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">Being monitored</p>
+          </div>
+        </div>
+      )}
 
       {/* Strategy Cards Grid */}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -317,20 +504,38 @@ export default function StrategiesPage() {
                 </div>
               </div>
 
-              {/* Symbol */}
+              {/* Symbols (multi-symbol) */}
               <div className="mb-3">
-                <label className="mb-1 block text-xs text-gray-500">Symbol</label>
+                <label className="mb-1 block text-xs text-gray-500">Symbols (comma-separated)</label>
                 <input
                   type="text"
-                  value={state.symbol}
+                  value={state.symbols}
                   onChange={(e) =>
                     setCardState((prev) => ({
                       ...prev,
-                      [def.id]: { ...prev[def.id], symbol: e.target.value },
+                      [def.id]: { ...prev[def.id], symbols: e.target.value },
                     }))
                   }
-                  className="w-full rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-1.5 text-sm uppercase text-white outline-none transition-colors focus:border-blue-500"
+                  placeholder="RELIANCE, TCS, INFY"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-1.5 text-sm uppercase text-white outline-none transition-colors focus:border-blue-500 placeholder:text-gray-600 placeholder:normal-case"
                 />
+                {/* Preset buttons */}
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-[10px] text-gray-600">Presets:</span>
+                  {[
+                    { label: "Nifty 50", key: "nifty50" },
+                    { label: "Bank Nifty", key: "banknifty" },
+                    { label: "Top 100", key: "top100" },
+                  ].map((preset) => (
+                    <button
+                      key={preset.key}
+                      onClick={() => applyPreset("card", def.id, preset.key)}
+                      className="rounded px-2 py-0.5 text-[10px] font-medium text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 transition-colors"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               {/* Timeframe */}
@@ -362,7 +567,6 @@ export default function StrategiesPage() {
 
               {/* Paper / Live toggle + Activate */}
               <div className="flex items-center justify-between border-t border-gray-800 pt-4">
-                {/* Paper/Live toggle */}
                 <button
                   onClick={() =>
                     setCardState((prev) => ({
@@ -410,7 +614,7 @@ export default function StrategiesPage() {
         <div className="flex items-center justify-between border-b border-gray-800 px-6 py-4">
           <h2 className="text-lg font-semibold text-white">Active Strategies</h2>
           <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-400">
-            {activeStrategies.length} running
+            {runningCount} running
           </span>
         </div>
 
@@ -427,7 +631,8 @@ export default function StrategiesPage() {
                   <th className="px-6 py-3 font-medium">Symbol</th>
                   <th className="px-6 py-3 font-medium">Mode</th>
                   <th className="px-6 py-3 font-medium">Status</th>
-                  <th className="px-6 py-3 font-medium">Signals Today</th>
+                  <th className="px-6 py-3 font-medium">Timeframe</th>
+                  <th className="px-6 py-3 font-medium">Signals</th>
                   <th className="px-6 py-3 font-medium">P&amp;L</th>
                   <th className="px-6 py-3 font-medium text-right">Actions</th>
                 </tr>
@@ -475,7 +680,9 @@ export default function StrategiesPage() {
                             "inline-flex items-center gap-1.5 text-xs font-medium",
                             s.status === "running"
                               ? "text-emerald-400"
-                              : "text-yellow-400"
+                              : s.status === "paused"
+                                ? "text-yellow-400"
+                                : "text-red-400"
                           )}
                         >
                           <span
@@ -483,14 +690,19 @@ export default function StrategiesPage() {
                               "h-1.5 w-1.5 rounded-full",
                               s.status === "running"
                                 ? "bg-emerald-400"
-                                : "bg-yellow-400"
+                                : s.status === "paused"
+                                  ? "bg-yellow-400"
+                                  : "bg-red-400"
                             )}
                           />
-                          {s.status === "running" ? "Running" : "Paused"}
+                          {s.status === "running" ? "Running" : s.status === "paused" ? "Paused" : "Stopped"}
                         </span>
                       </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-gray-400 text-xs">
+                        {s.timeframe}
+                      </td>
                       <td className="whitespace-nowrap px-6 py-4 text-gray-300">
-                        {s.signalsToday}
+                        {s.signals}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
                         <span
@@ -549,7 +761,7 @@ export default function StrategiesPage() {
             className="absolute inset-0 bg-black/60 backdrop-blur-sm"
             onClick={() => setModalOpen(false)}
           />
-          <div className="relative w-full max-w-md rounded-xl border border-gray-800 bg-[#111827] p-6 shadow-2xl">
+          <div className="relative w-full max-w-md rounded-xl border border-gray-800 bg-[#111827] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-semibold text-white">
                 Create Strategy
@@ -586,17 +798,39 @@ export default function StrategiesPage() {
                 </div>
               </div>
 
-              {/* Symbol */}
+              {/* Symbols (multi-symbol) */}
               <div>
                 <label className="mb-1.5 block text-sm font-medium text-gray-300">
-                  Symbol
+                  Symbols (comma-separated)
                 </label>
                 <input
                   type="text"
-                  value={modalSymbol}
-                  onChange={(e) => setModalSymbol(e.target.value)}
-                  className="w-full rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm uppercase text-white outline-none transition-colors focus:border-blue-500"
+                  value={modalSymbols}
+                  onChange={(e) => setModalSymbols(e.target.value)}
+                  placeholder="RELIANCE, TCS, INFY"
+                  className="w-full rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm uppercase text-white outline-none transition-colors focus:border-blue-500 placeholder:text-gray-600 placeholder:normal-case"
                 />
+                <div className="flex items-center gap-2 mt-2">
+                  <span className="text-[10px] text-gray-600">Presets:</span>
+                  {[
+                    { label: "Nifty 50", key: "nifty50" },
+                    { label: "Bank Nifty", key: "banknifty" },
+                    { label: "Top 100", key: "top100" },
+                  ].map((preset) => (
+                    <button
+                      key={preset.key}
+                      onClick={() => applyPreset("modal", null, preset.key)}
+                      className="rounded px-2 py-0.5 text-[10px] font-medium text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 transition-colors"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                {parseSymbols(modalSymbols).length > 1 && (
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    {parseSymbols(modalSymbols).length} symbols selected — a separate strategy will run for each
+                  </p>
+                )}
               </div>
 
               {/* Timeframe */}
@@ -689,6 +923,11 @@ export default function StrategiesPage() {
                 className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
               >
                 Save &amp; Activate
+                {parseSymbols(modalSymbols).length > 1 && (
+                  <span className="ml-1 text-blue-200">
+                    ({parseSymbols(modalSymbols).length} symbols)
+                  </span>
+                )}
               </button>
             </div>
           </div>
