@@ -50,6 +50,33 @@ interface Holding {
   dayChange: number;
 }
 
+interface StockQuote {
+  symbol: string;
+  exchange: string;
+  lastPrice: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  change: number;
+  changePercent: number;
+  buyDepth: { price: number; quantity: number; orders: number }[];
+  sellDepth: { price: number; quantity: number; orders: number }[];
+  lowerCircuit: number;
+  upperCircuit: number;
+  totalBuyQty: number;
+  totalSellQty: number;
+}
+
+const POPULAR_STOCKS = [
+  "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
+  "HINDUNILVR", "ITC", "SBIN", "BHARTIARTL", "KOTAKBANK",
+  "LT", "AXISBANK", "MARUTI", "BAJFINANCE", "TITAN",
+  "SUNPHARMA", "WIPRO", "HCLTECH", "TATAMOTORS", "TATASTEEL",
+  "POWERGRID", "NTPC", "ONGC", "ADANIENT", "TECHM",
+];
+
 const ERROR_MESSAGES: Record<string, string> = {
   api_key_missing: "Zerodha API key is not configured. Please add KITE_API_KEY to your environment variables.",
   auth_failed: "Zerodha authentication failed. Please try connecting again.",
@@ -89,6 +116,13 @@ function LiveTradingContent() {
   const [quantity, setQuantity] = useState("");
   const [price, setPrice] = useState("");
   const [triggerPrice, setTriggerPrice] = useState("");
+
+  const [quote, setQuote] = useState<StockQuote | null>(null);
+  const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const filteredStocks = symbol.length > 0
+    ? POPULAR_STOCKS.filter((s) => s.startsWith(symbol.toUpperCase()))
+    : POPULAR_STOCKS;
 
   const [activeTab, setActiveTab] = useState<TabType>("positions");
 
@@ -194,6 +228,30 @@ function LiveTradingContent() {
       setHoldings(mapped);
     } catch { /* ignore */ }
   }, []);
+
+  const fetchQuote = useCallback(async (sym: string) => {
+    if (!sym.trim() || !connected) return;
+    setIsLoadingQuote(true);
+    try {
+      const res = await fetch(`/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${exchange}`);
+      if (!res.ok) {
+        setQuote(null);
+        return;
+      }
+      const data = await res.json();
+      setQuote(data);
+    } catch {
+      setQuote(null);
+    } finally {
+      setIsLoadingQuote(false);
+    }
+  }, [connected, exchange]);
+
+  useEffect(() => {
+    if (!symbol.trim() || !connected) return;
+    const timer = setTimeout(() => fetchQuote(symbol), 600);
+    return () => clearTimeout(timer);
+  }, [symbol, exchange, connected, fetchQuote]);
 
   useEffect(() => {
     if (!connected) return;
@@ -398,20 +456,101 @@ function LiveTradingContent() {
               </div>
 
               <div className="space-y-4">
-                {/* Symbol */}
-                <div>
+                {/* Symbol with search suggestions */}
+                <div className="relative">
                   <label className="text-xs text-gray-400 mb-1 block">Symbol</label>
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
                     <input
                       type="text"
                       value={symbol}
-                      onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+                      onChange={(e) => { setSymbol(e.target.value.toUpperCase()); setShowSuggestions(true); }}
+                      onFocus={() => setShowSuggestions(true)}
+                      onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                       placeholder="e.g. RELIANCE"
                       className="w-full bg-[#0a0f1a] border border-gray-700 rounded-md py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
                     />
+                    {isLoadingQuote && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-400 animate-spin" />
+                    )}
                   </div>
+                  {showSuggestions && filteredStocks.length > 0 && (
+                    <div className="absolute z-50 w-full mt-1 bg-[#1a2035] border border-gray-700 rounded-md shadow-xl max-h-48 overflow-y-auto">
+                      {filteredStocks.map((s) => (
+                        <button
+                          key={s}
+                          onMouseDown={(e) => e.preventDefault()}
+                          onClick={() => { setSymbol(s); setShowSuggestions(false); }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-600/20 hover:text-white transition-colors"
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
+
+                {/* Stock Quote Panel */}
+                {quote && (
+                  <div className="bg-[#0a0f1a] border border-gray-700 rounded-md p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-white">{quote.symbol}</span>
+                      <span className={cn("text-lg font-bold", quote.changePercent >= 0 ? "text-green-400" : "text-red-400")}>
+                        {formatCurrency(quote.lastPrice)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", quote.changePercent >= 0 ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400")}>
+                        {quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)} ({formatPercent(quote.changePercent)})
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-2 text-xs">
+                      <div><span className="text-gray-500">Open</span><p className="text-gray-300">{formatCurrency(quote.open)}</p></div>
+                      <div><span className="text-gray-500">High</span><p className="text-green-400">{formatCurrency(quote.high)}</p></div>
+                      <div><span className="text-gray-500">Low</span><p className="text-red-400">{formatCurrency(quote.low)}</p></div>
+                      <div><span className="text-gray-500">Close</span><p className="text-gray-300">{formatCurrency(quote.close)}</p></div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div><span className="text-gray-500">Volume</span><p className="text-gray-300">{(quote.volume || 0).toLocaleString("en-IN")}</p></div>
+                      <div><span className="text-gray-500">Circuit</span><p className="text-gray-300">{formatCurrency(quote.lowerCircuit)} - {formatCurrency(quote.upperCircuit)}</p></div>
+                    </div>
+
+                    {/* Market Depth */}
+                    {(quote.buyDepth.length > 0 || quote.sellDepth.length > 0) && (
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1.5 font-medium">Market Depth</p>
+                        <div className="grid grid-cols-2 gap-2 text-xs">
+                          <div>
+                            <div className="grid grid-cols-3 text-gray-500 mb-1">
+                              <span>Bid</span><span className="text-right">Qty</span><span className="text-right">Ord</span>
+                            </div>
+                            {quote.buyDepth.map((b, i) => (
+                              <div key={i} className="grid grid-cols-3 text-green-400/80 py-0.5">
+                                <span>{b.price.toFixed(2)}</span>
+                                <span className="text-right">{b.quantity}</span>
+                                <span className="text-right">{b.orders}</span>
+                              </div>
+                            ))}
+                            <div className="mt-1 text-gray-500">Total: <span className="text-green-400">{(quote.totalBuyQty || 0).toLocaleString("en-IN")}</span></div>
+                          </div>
+                          <div>
+                            <div className="grid grid-cols-3 text-gray-500 mb-1">
+                              <span>Ask</span><span className="text-right">Qty</span><span className="text-right">Ord</span>
+                            </div>
+                            {quote.sellDepth.map((s, i) => (
+                              <div key={i} className="grid grid-cols-3 text-red-400/80 py-0.5">
+                                <span>{s.price.toFixed(2)}</span>
+                                <span className="text-right">{s.quantity}</span>
+                                <span className="text-right">{s.orders}</span>
+                              </div>
+                            ))}
+                            <div className="mt-1 text-gray-500">Total: <span className="text-red-400">{(quote.totalSellQty || 0).toLocaleString("en-IN")}</span></div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Exchange */}
                 <div>

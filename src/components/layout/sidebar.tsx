@@ -15,8 +15,6 @@ import {
   TrendingUp,
   ChevronLeft,
   ChevronRight,
-  ToggleLeft,
-  ToggleRight,
 } from "lucide-react";
 
 const navItems = [
@@ -31,7 +29,6 @@ const navItems = [
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [isLiveMode, setIsLiveMode] = useState(false);
   const marketOpen = isMarketOpen();
 
   return (
@@ -117,28 +114,6 @@ export default function Sidebar() {
           );
         })}
       </nav>
-
-      {/* Trading Mode Toggle */}
-      <div className="border-t border-border px-3 py-4">
-        <button
-          onClick={() => setIsLiveMode(!isLiveMode)}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all",
-            isLiveMode
-              ? "bg-loss-muted/40 text-loss"
-              : "bg-bg-tertiary text-profit"
-          )}
-        >
-          {isLiveMode ? (
-            <ToggleRight className="h-5 w-5 shrink-0" />
-          ) : (
-            <ToggleLeft className="h-5 w-5 shrink-0" />
-          )}
-          {!collapsed && (
-            <span>{isLiveMode ? "Live Trading" : "Paper Trading"}</span>
-          )}
-        </button>
-      </div>
 
       {/* Collapse Toggle */}
       <div className="border-t border-border px-3 py-3">
