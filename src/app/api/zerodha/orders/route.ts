@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { KiteConnect } from "kiteconnect";
 import { sendOrderEmail } from "@/lib/email";
-import { getAccountToken } from "@/lib/zerodha/account-token";
+import { getAccountToken, getAccountApiKey } from "@/lib/zerodha/account-token";
 
 export async function GET(request: NextRequest) {
   const accountId = request.nextUrl.searchParams.get("accountId");
   const accessToken = getAccountToken(request, accountId);
-  if (!accessToken) {
+  const apiKey = getAccountApiKey(request, accountId);
+  if (!accessToken || !apiKey) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   try {
-    const kite = new KiteConnect({ api_key: process.env.KITE_API_KEY! });
+    const kite = new KiteConnect({ api_key: apiKey });
     kite.setAccessToken(accessToken);
     const orders = await kite.getOrders();
     return NextResponse.json({ orders });
@@ -72,13 +73,12 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const accountId = body.accountId as string | undefined;
   const accessToken = getAccountToken(request, accountId);
-  if (!accessToken) {
+  const apiKey = getAccountApiKey(request, accountId);
+  if (!accessToken || !apiKey) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   try {
-    const apiKey = process.env.KITE_API_KEY!;
-
     const orderParams = {
       tradingsymbol: body.symbol,
       exchange: body.exchange || "NSE",

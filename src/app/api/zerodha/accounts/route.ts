@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { KiteConnect } from "kiteconnect";
-import { getAllAccountIds } from "@/lib/zerodha/account-token";
+import { getAllAccountIds, getAccountApiKey } from "@/lib/zerodha/account-token";
 
 export async function GET(request: NextRequest) {
   const accountIds = getAllAccountIds(request);
@@ -9,9 +9,10 @@ export async function GET(request: NextRequest) {
   if (accountIds.length === 0) {
     const legacyToken = request.cookies.get("kite_access_token")?.value;
     const legacyUserId = request.cookies.get("kite_user_id")?.value;
-    if (legacyToken && legacyUserId) {
+    const apiKey = getAccountApiKey(request, legacyUserId);
+    if (legacyToken && legacyUserId && apiKey) {
       try {
-        const kite = new KiteConnect({ api_key: process.env.KITE_API_KEY! });
+        const kite = new KiteConnect({ api_key: apiKey });
         kite.setAccessToken(legacyToken);
         const profile = await kite.getProfile();
         return NextResponse.json({
@@ -43,10 +44,11 @@ export async function GET(request: NextRequest) {
   const accounts = await Promise.all(
     accountIds.map(async (id) => {
       const token = request.cookies.get(`kite_token_${id}`)?.value;
-      if (!token) return { kiteUserId: id, connected: false };
+      const apiKey = getAccountApiKey(request, id);
+      if (!token || !apiKey) return { kiteUserId: id, connected: false };
 
       try {
-        const kite = new KiteConnect({ api_key: process.env.KITE_API_KEY! });
+        const kite = new KiteConnect({ api_key: apiKey });
         kite.setAccessToken(token);
         const profile = await kite.getProfile();
         return {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { KiteConnect } from "kiteconnect";
-import { getAccountToken } from "@/lib/zerodha/account-token";
+import { getAccountToken, getAccountApiKey } from "@/lib/zerodha/account-token";
 
 async function cancelOrderViaProxy(
   apiKey: string,
@@ -55,7 +55,8 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const accountId = body.accountId as string | undefined;
   const accessToken = getAccountToken(request, accountId);
-  if (!accessToken) {
+  const apiKey = getAccountApiKey(request, accountId);
+  if (!accessToken || !apiKey) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
@@ -65,8 +66,6 @@ export async function POST(request: NextRequest) {
     if (!orderId) {
       return NextResponse.json({ error: "orderId is required" }, { status: 400 });
     }
-
-    const apiKey = process.env.KITE_API_KEY!;
 
     if (process.env.ZERODHA_PROXY_URL) {
       const result = await cancelOrderViaProxy(apiKey, accessToken, orderId, variety);

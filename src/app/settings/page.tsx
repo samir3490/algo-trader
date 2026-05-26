@@ -165,6 +165,9 @@ function SettingsContent() {
   const [labelInput, setLabelInput] = useState("");
   const [disconnectingAccount, setDisconnectingAccount] = useState<string | null>(null);
 
+  // Available Kite Connect app credentials
+  const [availableApps, setAvailableApps] = useState<{ index: number; label: string; apiKeyPrefix: string }[]>([]);
+
   useEffect(() => {
     if (!user) return;
 
@@ -181,8 +184,17 @@ function SettingsContent() {
       }
     }
 
+    async function loadCredentials() {
+      try {
+        const res = await fetch("/api/zerodha/credentials");
+        const data = await res.json();
+        setAvailableApps(data.credentials || []);
+      } catch { /* ignore */ }
+    }
+
     loadFromFirestore();
     loadAccounts();
+    loadCredentials();
   }, [user]);
 
   // Handle new account added via OAuth redirect
@@ -403,24 +415,44 @@ function SettingsContent() {
               </p>
             </div>
           </div>
-          <a
-            href="/api/zerodha/login"
-            className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
-          >
-            <Plus className="h-4 w-4" />
-            Add Account
-          </a>
+          {availableApps.length <= 1 ? (
+            <a
+              href="/api/zerodha/login"
+              className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
+            >
+              <Plus className="h-4 w-4" />
+              Add Account
+            </a>
+          ) : (
+            <div className="flex items-center gap-2">
+              {availableApps.map((app) => (
+                <a
+                  key={app.index}
+                  href={`/api/zerodha/login?credIndex=${app.index}`}
+                  className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
+                  title={`API Key: ${app.apiKeyPrefix}`}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  {app.label}
+                </a>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 px-4 py-3 mb-4">
           <p className="text-xs text-blue-300">
-            <strong>Adding a new account?</strong> You&apos;ll be redirected to Zerodha&apos;s login page.
-            Log in with the Zerodha credentials of the account you want to add.
+            <strong>Adding a new account?</strong>
+            {availableApps.length > 1
+              ? " Select the Kite Connect app that matches the account you want to add. Each account needs its own app."
+              : " You\u2019ll be redirected to Zerodha\u2019s login page."
+            }
+            {" "}Log in with the Zerodha credentials of the account you want to add.
             If it keeps connecting the same account, first log out at{" "}
             <a href="https://kite.zerodha.com" target="_blank" rel="noopener noreferrer" className="underline">
               kite.zerodha.com
             </a>{" "}
-            and then click Add Account.
+            and then try again.
           </p>
         </div>
 
@@ -436,13 +468,28 @@ function SettingsContent() {
             <p className="text-xs text-text-tertiary mb-4">
               Connect your Zerodha accounts to start live trading
             </p>
-            <a
-              href="/api/zerodha/login"
-              className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-              Connect Zerodha Account
-            </a>
+            {availableApps.length <= 1 ? (
+              <a
+                href="/api/zerodha/login"
+                className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                Connect Zerodha Account
+              </a>
+            ) : (
+              <div className="flex flex-wrap justify-center gap-2">
+                {availableApps.map((app) => (
+                  <a
+                    key={app.index}
+                    href={`/api/zerodha/login?credIndex=${app.index}`}
+                    className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
+                  >
+                    <Plus className="h-4 w-4" />
+                    {app.label}
+                  </a>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-3">
