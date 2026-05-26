@@ -197,7 +197,7 @@ function SettingsContent() {
 
   useEffect(() => {
     if (toast) {
-      const timer = setTimeout(() => setToast(null), 3000);
+      const timer = setTimeout(() => setToast(null), 6000);
       return () => clearTimeout(timer);
     }
   }, [toast]);
@@ -208,6 +208,9 @@ function SettingsContent() {
       const data = await res.json();
 
       if (data.connected) {
+        const existingAccounts = await getZerodhaAccounts();
+        const isExisting = existingAccounts.some((a) => a.kiteUserId === (data.userId || kiteUserId));
+
         await saveZerodhaAccount({
           kiteUserId: data.userId || kiteUserId,
           userName: data.userName || "",
@@ -215,8 +218,15 @@ function SettingsContent() {
           broker: data.broker || "",
           connectedAt: new Date().toISOString(),
         });
-        setToast(`Account ${data.userName || kiteUserId} connected successfully!`);
+
+        if (isExisting) {
+          setToast(`Account ${data.userName || kiteUserId} reconnected! To add a different account, log out of kite.zerodha.com first.`);
+        } else {
+          setToast(`New account ${data.userName || kiteUserId} added successfully!`);
+        }
         await loadAccounts();
+      } else {
+        setToast("Connection failed. Please try again.");
       }
     } catch (e) {
       console.error("Error saving new account:", e);
@@ -323,12 +333,8 @@ function SettingsContent() {
     }
   }
 
-  function handleAddAccount() {
-    window.location.assign("/api/zerodha/login");
-  }
-
   async function handleReconnect(kiteUserId: string) {
-    window.location.assign("/api/zerodha/login");
+    window.location.href = "/api/zerodha/login";
   }
 
   async function handleSave() {
@@ -397,14 +403,25 @@ function SettingsContent() {
               </p>
             </div>
           </div>
-          <button
-            type="button"
-            onClick={handleAddAccount}
+          <a
+            href="/api/zerodha/login"
             className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
           >
             <Plus className="h-4 w-4" />
             Add Account
-          </button>
+          </a>
+        </div>
+
+        <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 px-4 py-3 mb-4">
+          <p className="text-xs text-blue-300">
+            <strong>Adding a new account?</strong> You&apos;ll be redirected to Zerodha&apos;s login page.
+            Log in with the Zerodha credentials of the account you want to add.
+            If it keeps connecting the same account, first log out at{" "}
+            <a href="https://kite.zerodha.com" target="_blank" rel="noopener noreferrer" className="underline">
+              kite.zerodha.com
+            </a>{" "}
+            and then click Add Account.
+          </p>
         </div>
 
         {loadingAccounts ? (
@@ -419,14 +436,13 @@ function SettingsContent() {
             <p className="text-xs text-text-tertiary mb-4">
               Connect your Zerodha accounts to start live trading
             </p>
-            <button
-              type="button"
-              onClick={handleAddAccount}
+            <a
+              href="/api/zerodha/login"
               className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               Connect Zerodha Account
-            </button>
+            </a>
           </div>
         ) : (
           <div className="space-y-3">
