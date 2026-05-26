@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { formatCurrency } from "@/lib/utils";
 import {
   ClipboardList,
@@ -13,9 +13,10 @@ import {
   XCircle,
   AlertCircle,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
 
-type OrderStatus = "EXECUTED" | "PENDING" | "REJECTED" | "CANCELLED" | "OPEN";
+type OrderStatus = "EXECUTED" | "PENDING" | "REJECTED" | "CANCELLED" | "OPEN" | "COMPLETE";
 type OrderSide = "BUY" | "SELL";
 type OrderMode = "PAPER" | "LIVE";
 type OrderType = "MARKET" | "LIMIT" | "SL" | "SL-M";
@@ -34,11 +35,9 @@ interface Order {
   mode: OrderMode;
 }
 
-
-
-
-const statusConfig: Record<OrderStatus, { label: string; color: string; bg: string; icon: React.ElementType }> = {
+const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   EXECUTED: { label: "Executed", color: "text-profit", bg: "bg-profit/10", icon: CheckCircle2 },
+  COMPLETE: { label: "Executed", color: "text-profit", bg: "bg-profit/10", icon: CheckCircle2 },
   PENDING: { label: "Pending", color: "text-warning", bg: "bg-warning/10", icon: Clock },
   OPEN: { label: "Open", color: "text-info", bg: "bg-info/10", icon: AlertCircle },
   REJECTED: { label: "Rejected", color: "text-loss", bg: "bg-loss/10", icon: XCircle },
@@ -52,15 +51,102 @@ const tabs: { key: TabKey; label: string }[] = [
 ];
 
 function formatTime(iso: string): string {
+  if (!iso) return "—";
   const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
   return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
 }
 
+interface PaperTrade {
+  id?: string;
+  timestamp?: string;
+  time?: string;
+  symbol?: string;
+  tradingsymbol?: string;
+  exchange?: string;
+  side?: string;
+  transaction_type?: string;
+  type?: string;
+  order_type?: string;
+  quantity?: number;
+  qty?: number;
+  price?: number;
+  average_price?: number;
+  status?: string;
+}
+
+function mapPaperTrade(t: PaperTrade, idx: number): Order {
+  return {
+    id: t.id || `paper-${idx}`,
+    time: t.timestamp || t.time || "",
+    symbol: t.symbol || t.tradingsymbol || "UNKNOWN",
+    exchange: t.exchange || "NSE",
+    side: ((t.side || t.transaction_type || "BUY") as OrderSide),
+    type: ((t.type || t.order_type || "MARKET") as OrderType),
+    quantity: t.quantity || t.qty || 0,
+    price: t.price || t.average_price || 0,
+    status: ((t.status || "EXECUTED") as OrderStatus),
+    mode: "PAPER",
+  };
+}
+
 export default function OrdersPage() {
-  const [orders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+
+  const fetchAllOrders = useCallback(async () => {
+    setIsLoading(true);
+    const allOrders: Order[] = [];
+
+    // Fetch live Zerodha orders
+    try {
+      const res = await fetch("/api/zerodha/orders");
+      if (res.ok) {
+        const data = await res.json();
+        const liveOrders: Order[] = (data.orders || []).map((o: any, idx: number) => ({
+          id: o.order_id || `live-${idx}`,
+          time: o.order_timestamp || o.exchange_timestamp || "",
+          symbol: o.tradingsymbol || "",
+          exchange: o.exchange || "NSE",
+          side: (o.transaction_type || "BUY") as OrderSide,
+          type: (o.order_type || "MARKET") as OrderType,
+          quantity: o.quantity || 0,
+          price: o.average_price || o.price || 0,
+          status: (o.status === "COMPLETE" ? "EXECUTED" : o.status || "PENDING") as OrderStatus,
+          mode: "LIVE" as OrderMode,
+        }));
+        allOrders.push(...liveOrders);
+      }
+    } catch { /* Zerodha may not be connected */ }
+
+    // Load paper trades from localStorage
+    try {
+      const raw = localStorage.getItem("paperTrades");
+      if (raw) {
+        const parsed: PaperTrade[] = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          allOrders.push(...parsed.map(mapPaperTrade));
+        }
+      }
+    } catch { /* invalid localStorage data */ }
+
+    allOrders.sort((a, b) => {
+      if (!a.time && !b.time) return 0;
+      if (!a.time) return 1;
+      if (!b.time) return -1;
+      return new Date(b.time).getTime() - new Date(a.time).getTime();
+    });
+
+    setOrders(allOrders);
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => {
+    fetchAllOrders();
+  }, [fetchAllOrders]);
 
   const filtered = orders.filter((o) => {
     if (activeTab === "paper" && o.mode !== "PAPER") return false;
@@ -89,8 +175,12 @@ export default function OrdersPage() {
             <p className="text-sm text-text-secondary">Track and manage all your trading orders</p>
           </div>
         </div>
-        <button className="flex items-center gap-2 rounded-lg bg-bg-secondary px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary border border-border">
-          <RefreshCw className="h-4 w-4" />
+        <button
+          onClick={fetchAllOrders}
+          disabled={isLoading}
+          className="flex items-center gap-2 rounded-lg bg-bg-secondary px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary border border-border disabled:opacity-50"
+        >
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Refresh
         </button>
       </div>
@@ -166,7 +256,16 @@ export default function OrdersPage() {
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
-            {filtered.length === 0 ? (
+            {isLoading ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-12 text-center text-text-tertiary">
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Loading orders...
+                  </div>
+                </td>
+              </tr>
+            ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={8} className="px-4 py-12 text-center text-text-tertiary">
                   No orders found matching your filters.
@@ -174,7 +273,7 @@ export default function OrdersPage() {
               </tr>
             ) : (
               filtered.map((order) => {
-                const sc = statusConfig[order.status];
+                const sc = statusConfig[order.status] || statusConfig.PENDING;
                 const StatusIcon = sc.icon;
                 return (
                   <tr key={order.id} className="transition-colors hover:bg-bg-hover/50">
@@ -233,7 +332,7 @@ export default function OrdersPage() {
         <span>
           Total value: {formatCurrency(
             filtered
-              .filter((o) => o.status === "EXECUTED")
+              .filter((o) => o.status === "EXECUTED" || o.status === "COMPLETE")
               .reduce((sum, o) => sum + o.price * o.quantity, 0)
           )}
         </span>

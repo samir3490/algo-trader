@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
@@ -9,9 +9,11 @@ import {
   Inbox,
   Link2,
   Loader2,
+  LogOut,
   Power,
   Search,
   ShieldAlert,
+  XCircle,
   Zap,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent, isMarketOpen, getMarketStatus } from "@/lib/utils";
@@ -32,6 +34,7 @@ interface Position {
 }
 
 interface KiteOrder {
+  orderId: string;
   time: string;
   symbol: string;
   type: string;
@@ -69,12 +72,78 @@ interface StockQuote {
   totalSellQty: number;
 }
 
-const POPULAR_STOCKS = [
-  "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
-  "HINDUNILVR", "ITC", "SBIN", "BHARTIARTL", "KOTAKBANK",
-  "LT", "AXISBANK", "MARUTI", "BAJFINANCE", "TITAN",
-  "SUNPHARMA", "WIPRO", "HCLTECH", "TATAMOTORS", "TATASTEEL",
-  "POWERGRID", "NTPC", "ONGC", "ADANIENT", "TECHM",
+const STOCK_LIST: { symbol: string; name: string }[] = [
+  { symbol: "RELIANCE", name: "Reliance Industries" },
+  { symbol: "TCS", name: "Tata Consultancy Services" },
+  { symbol: "HDFCBANK", name: "HDFC Bank" },
+  { symbol: "INFY", name: "Infosys" },
+  { symbol: "ICICIBANK", name: "ICICI Bank" },
+  { symbol: "HINDUNILVR", name: "Hindustan Unilever" },
+  { symbol: "ITC", name: "ITC Limited" },
+  { symbol: "SBIN", name: "State Bank of India" },
+  { symbol: "BHARTIARTL", name: "Bharti Airtel" },
+  { symbol: "KOTAKBANK", name: "Kotak Mahindra Bank" },
+  { symbol: "LT", name: "Larsen & Toubro" },
+  { symbol: "AXISBANK", name: "Axis Bank" },
+  { symbol: "MARUTI", name: "Maruti Suzuki" },
+  { symbol: "BAJFINANCE", name: "Bajaj Finance" },
+  { symbol: "TITAN", name: "Titan Company" },
+  { symbol: "SUNPHARMA", name: "Sun Pharmaceutical" },
+  { symbol: "WIPRO", name: "Wipro" },
+  { symbol: "HCLTECH", name: "HCL Technologies" },
+  { symbol: "TATAMOTORS", name: "Tata Motors" },
+  { symbol: "TATASTEEL", name: "Tata Steel" },
+  { symbol: "POWERGRID", name: "Power Grid Corp" },
+  { symbol: "NTPC", name: "NTPC Limited" },
+  { symbol: "ONGC", name: "Oil & Natural Gas Corp" },
+  { symbol: "ADANIENT", name: "Adani Enterprises" },
+  { symbol: "TECHM", name: "Tech Mahindra" },
+  { symbol: "ASIANPAINT", name: "Asian Paints" },
+  { symbol: "BAJAJFINSV", name: "Bajaj Finserv" },
+  { symbol: "DRREDDY", name: "Dr. Reddy's Laboratories" },
+  { symbol: "NESTLEIND", name: "Nestle India" },
+  { symbol: "ULTRACEMCO", name: "UltraTech Cement" },
+  { symbol: "JSWSTEEL", name: "JSW Steel" },
+  { symbol: "M&M", name: "Mahindra & Mahindra" },
+  { symbol: "COALINDIA", name: "Coal India" },
+  { symbol: "BAJAJ-AUTO", name: "Bajaj Auto" },
+  { symbol: "GRASIM", name: "Grasim Industries" },
+  { symbol: "DIVISLAB", name: "Divi's Laboratories" },
+  { symbol: "BRITANNIA", name: "Britannia Industries" },
+  { symbol: "CIPLA", name: "Cipla" },
+  { symbol: "EICHERMOT", name: "Eicher Motors" },
+  { symbol: "HEROMOTOCO", name: "Hero MotoCorp" },
+  { symbol: "APOLLOHOSP", name: "Apollo Hospitals" },
+  { symbol: "HINDALCO", name: "Hindalco Industries" },
+  { symbol: "BPCL", name: "Bharat Petroleum" },
+  { symbol: "INDUSINDBK", name: "IndusInd Bank" },
+  { symbol: "TATACONSUM", name: "Tata Consumer Products" },
+  { symbol: "SBILIFE", name: "SBI Life Insurance" },
+  { symbol: "HDFCLIFE", name: "HDFC Life Insurance" },
+  { symbol: "ADANIPORTS", name: "Adani Ports" },
+  { symbol: "BANKBARODA", name: "Bank of Baroda" },
+  { symbol: "VEDL", name: "Vedanta" },
+  { symbol: "ZOMATO", name: "Zomato" },
+  { symbol: "DMART", name: "Avenue Supermarts" },
+  { symbol: "PIDILITIND", name: "Pidilite Industries" },
+  { symbol: "SIEMENS", name: "Siemens" },
+  { symbol: "HAVELLS", name: "Havells India" },
+  { symbol: "DLF", name: "DLF" },
+  { symbol: "GODREJCP", name: "Godrej Consumer Products" },
+  { symbol: "DABUR", name: "Dabur India" },
+  { symbol: "AMBUJACEM", name: "Ambuja Cements" },
+  { symbol: "IOC", name: "Indian Oil Corp" },
+  { symbol: "PNB", name: "Punjab National Bank" },
+  { symbol: "TRENT", name: "Trent" },
+  { symbol: "JIOFIN", name: "Jio Financial Services" },
+  { symbol: "HAL", name: "Hindustan Aeronautics" },
+  { symbol: "BEL", name: "Bharat Electronics" },
+  { symbol: "IRCTC", name: "IRCTC" },
+  { symbol: "PAYTM", name: "One 97 Communications" },
+  { symbol: "NYKAA", name: "FSN E-Commerce" },
+  { symbol: "PFC", name: "Power Finance Corp" },
+  { symbol: "RECLTD", name: "REC Limited" },
+  { symbol: "TATAPOWER", name: "Tata Power" },
 ];
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -93,6 +162,7 @@ const strategies = [
 
 function LiveTradingContent() {
   const searchParams = useSearchParams();
+  const orderFormRef = useRef<HTMLDivElement>(null);
 
   const [connected, setConnected] = useState(false);
   const [kiteUserId, setKiteUserId] = useState("");
@@ -100,6 +170,8 @@ function LiveTradingContent() {
   const [statusMessage, setStatusMessage] = useState("");
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [isCancellingOrder, setIsCancellingOrder] = useState<string | null>(null);
+  const [isSquaringOff, setIsSquaringOff] = useState(false);
 
   const [positions, setPositions] = useState<Position[]>([]);
   const [orders, setOrders] = useState<KiteOrder[]>([]);
@@ -119,10 +191,17 @@ function LiveTradingContent() {
 
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
+  const [quoteLastUpdated, setQuoteLastUpdated] = useState<Date | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const filteredStocks = symbol.length > 0
-    ? POPULAR_STOCKS.filter((s) => s.startsWith(symbol.toUpperCase()))
-    : POPULAR_STOCKS;
+  const [searchInput, setSearchInput] = useState("");
+
+  const filteredStocks = searchInput.length > 0
+    ? STOCK_LIST.filter(
+        (s) =>
+          s.symbol.startsWith(searchInput.toUpperCase()) ||
+          s.name.toLowerCase().includes(searchInput.toLowerCase())
+      ).slice(0, 15)
+    : STOCK_LIST.slice(0, 15);
 
   const [activeTab, setActiveTab] = useState<TabType>("positions");
 
@@ -200,6 +279,7 @@ function LiveTradingContent() {
       if (!res.ok) return;
       const data = await res.json();
       const mapped: KiteOrder[] = (data.orders || []).map((o: any) => ({
+        orderId: o.order_id || "",
         time: o.order_timestamp || o.exchange_timestamp || "",
         symbol: o.tradingsymbol,
         type: o.order_type,
@@ -240,6 +320,7 @@ function LiveTradingContent() {
       }
       const data = await res.json();
       setQuote(data);
+      setQuoteLastUpdated(new Date());
     } catch {
       setQuote(null);
     } finally {
@@ -247,11 +328,19 @@ function LiveTradingContent() {
     }
   }, [connected, exchange]);
 
+  // Debounced search (300ms) - fetch quote when symbol changes
   useEffect(() => {
     if (!symbol.trim() || !connected) return;
-    const timer = setTimeout(() => fetchQuote(symbol), 600);
+    const timer = setTimeout(() => fetchQuote(symbol), 300);
     return () => clearTimeout(timer);
   }, [symbol, exchange, connected, fetchQuote]);
+
+  // Periodic quote refresh every 10 seconds
+  useEffect(() => {
+    if (!symbol.trim() || !connected) return;
+    const interval = setInterval(() => fetchQuote(symbol), 10000);
+    return () => clearInterval(interval);
+  }, [symbol, connected, fetchQuote]);
 
   useEffect(() => {
     if (!connected) return;
@@ -334,6 +423,84 @@ function LiveTradingContent() {
     setPositions([]);
     setOrders([]);
     setHoldings([]);
+  };
+
+  const handleExitPosition = (pos: Position) => {
+    setSymbol(pos.symbol);
+    setSearchInput(pos.symbol);
+    setTransactionType(pos.qty > 0 ? "SELL" : "BUY");
+    setQuantity(Math.abs(pos.qty).toString());
+    setProductType(pos.product as ProductType);
+    setOrderType("MARKET");
+    setPrice("");
+    setTriggerPrice("");
+    orderFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleSquareOffAll = async () => {
+    if (!connected || positions.length === 0) return;
+    if (!window.confirm(`Square off all ${positions.length} position(s)? This will place MARKET orders to close each position.`)) return;
+
+    setIsSquaringOff(true);
+    setErrorMessage("");
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const pos of positions) {
+      try {
+        const body = {
+          symbol: pos.symbol,
+          exchange: "NSE",
+          side: pos.qty > 0 ? "SELL" : "BUY",
+          orderType: "MARKET",
+          quantity: Math.abs(pos.qty),
+          product: pos.product,
+        };
+        const res = await fetch("/api/zerodha/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        if (res.ok) successCount++;
+        else failCount++;
+      } catch {
+        failCount++;
+      }
+    }
+
+    setIsSquaringOff(false);
+    if (failCount === 0) {
+      setStatusMessage(`All ${successCount} position(s) squared off successfully.`);
+    } else {
+      setErrorMessage(`Squared off ${successCount} position(s), ${failCount} failed.`);
+    }
+    setTimeout(() => { fetchOrders(); fetchPositions(); }, 2000);
+  };
+
+  const handleCancelOrder = async (order: KiteOrder) => {
+    if (!order.orderId) return;
+    if (!window.confirm(`Cancel order for ${order.symbol} (${order.side} ${order.qty})?`)) return;
+
+    setIsCancellingOrder(order.orderId);
+    setErrorMessage("");
+    try {
+      const res = await fetch("/api/zerodha/orders/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.orderId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMessage(data.error || "Failed to cancel order.");
+      } else {
+        setStatusMessage(`Order ${order.orderId} cancelled successfully.`);
+        setTimeout(() => fetchOrders(), 1500);
+      }
+    } catch {
+      setErrorMessage("Network error cancelling order.");
+    } finally {
+      setIsCancellingOrder(null);
+    }
   };
 
   return (
@@ -440,7 +607,7 @@ function LiveTradingContent() {
         {/* Main Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Order Placement */}
-          <div className="lg:col-span-1">
+          <div className="lg:col-span-1" ref={orderFormRef}>
             <div className="bg-[#111827] border border-gray-800 rounded-lg p-5">
               <div className="flex items-center gap-2 mb-5">
                 <Zap className="h-5 w-5 text-yellow-400" />
@@ -463,11 +630,16 @@ function LiveTradingContent() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
                     <input
                       type="text"
-                      value={symbol}
-                      onChange={(e) => { setSymbol(e.target.value.toUpperCase()); setShowSuggestions(true); }}
+                      value={searchInput}
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setSearchInput(val);
+                        setSymbol(val);
+                        setShowSuggestions(true);
+                      }}
                       onFocus={() => setShowSuggestions(true)}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                      placeholder="e.g. RELIANCE"
+                      placeholder="Search symbol or company..."
                       className="w-full bg-[#0a0f1a] border border-gray-700 rounded-md py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                     {isLoadingQuote && (
@@ -478,12 +650,13 @@ function LiveTradingContent() {
                     <div className="absolute z-50 w-full mt-1 bg-[#1a2035] border border-gray-700 rounded-md shadow-xl max-h-48 overflow-y-auto">
                       {filteredStocks.map((s) => (
                         <button
-                          key={s}
+                          key={s.symbol}
                           onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => { setSymbol(s); setShowSuggestions(false); }}
-                          className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-600/20 hover:text-white transition-colors"
+                          onClick={() => { setSymbol(s.symbol); setSearchInput(s.symbol); setShowSuggestions(false); }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-600/20 hover:text-white transition-colors flex items-center justify-between"
                         >
-                          {s}
+                          <span className="font-medium">{s.symbol}</span>
+                          <span className="text-xs text-gray-500 ml-2 truncate">{s.name}</span>
                         </button>
                       ))}
                     </div>
@@ -499,10 +672,15 @@ function LiveTradingContent() {
                         {formatCurrency(quote.lastPrice)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center justify-between gap-2">
                       <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", quote.changePercent >= 0 ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400")}>
                         {quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)} ({formatPercent(quote.changePercent)})
                       </span>
+                      {quoteLastUpdated && (
+                        <span className="text-[10px] text-gray-500">
+                          Updated {quoteLastUpdated.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}
+                        </span>
+                      )}
                     </div>
                     <div className="grid grid-cols-4 gap-2 text-xs">
                       <div><span className="text-gray-500">Open</span><p className="text-gray-300">{formatCurrency(quote.open)}</p></div>
@@ -758,6 +936,16 @@ function LiveTradingContent() {
                       </div>
                     ) : (
                       <>
+                        <div className="flex items-center justify-end mb-3">
+                          <button
+                            onClick={handleSquareOffAll}
+                            disabled={isSquaringOff}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600/20 text-red-400 border border-red-700/50 rounded-md hover:bg-red-600/30 transition-colors disabled:opacity-50"
+                          >
+                            {isSquaringOff ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
+                            Square Off All
+                          </button>
+                        </div>
                         <div className="overflow-x-auto">
                           <table className="w-full text-sm">
                             <thead>
@@ -768,6 +956,7 @@ function LiveTradingContent() {
                                 <th className="text-right py-2 px-3 font-medium">LTP</th>
                                 <th className="text-right py-2 px-3 font-medium">P&L</th>
                                 <th className="text-right py-2 px-3 font-medium">Product</th>
+                                <th className="text-right py-2 px-3 font-medium"></th>
                               </tr>
                             </thead>
                             <tbody>
@@ -784,6 +973,14 @@ function LiveTradingContent() {
                                   </td>
                                   <td className="text-right py-2.5 px-3">
                                     <span className="text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-300">{pos.product}</span>
+                                  </td>
+                                  <td className="text-right py-2.5 px-3">
+                                    <button
+                                      onClick={() => handleExitPosition(pos)}
+                                      className="text-xs font-semibold text-orange-400 hover:text-orange-300 bg-orange-900/20 hover:bg-orange-900/40 px-2.5 py-1 rounded transition-colors"
+                                    >
+                                      Exit
+                                    </button>
                                   </td>
                                 </tr>
                               ))}
@@ -821,6 +1018,7 @@ function LiveTradingContent() {
                               <th className="text-right py-2 px-3 font-medium">Qty</th>
                               <th className="text-right py-2 px-3 font-medium">Price</th>
                               <th className="text-right py-2 px-3 font-medium">Status</th>
+                              <th className="text-right py-2 px-3 font-medium"></th>
                             </tr>
                           </thead>
                           <tbody>
@@ -849,6 +1047,22 @@ function LiveTradingContent() {
                                   >
                                     {order.status}
                                   </span>
+                                </td>
+                                <td className="text-right py-2.5 px-3">
+                                  {(order.status === "PENDING" || order.status === "OPEN") && (
+                                    <button
+                                      onClick={() => handleCancelOrder(order)}
+                                      disabled={isCancellingOrder === order.orderId}
+                                      className="flex items-center gap-1 text-xs font-semibold text-red-400 hover:text-red-300 bg-red-900/20 hover:bg-red-900/40 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                                    >
+                                      {isCancellingOrder === order.orderId ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                      ) : (
+                                        <XCircle className="h-3 w-3" />
+                                      )}
+                                      Cancel
+                                    </button>
+                                  )}
                                 </td>
                               </tr>
                             ))}

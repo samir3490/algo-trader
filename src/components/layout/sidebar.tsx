@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { isMarketOpen } from "@/lib/utils";
+import { useAppStore } from "@/lib/store";
 import {
   LayoutDashboard,
   FlaskConical,
@@ -28,7 +28,9 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(false);
+  const sidebarOpen = useAppStore((s) => s.sidebarOpen);
+  const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
+  const collapsed = !sidebarOpen;
   const marketOpen = isMarketOpen();
 
   return (
@@ -118,7 +120,7 @@ export default function Sidebar() {
       {/* Collapse Toggle */}
       <div className="border-t border-border px-3 py-3">
         <button
-          onClick={() => setCollapsed(!collapsed)}
+          onClick={() => setSidebarOpen(collapsed)}
           className="flex w-full items-center justify-center rounded-lg py-2 text-text-tertiary transition-colors hover:bg-bg-hover hover:text-text-secondary"
         >
           {collapsed ? (

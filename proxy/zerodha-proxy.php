@@ -1,16 +1,9 @@
 <?php
-/**
- * Zerodha Kite Connect Order Proxy
- * 
- * Upload this file to your BigRock hosting server.
- * It forwards order placement requests to Zerodha's API
- * so the request comes from BigRock's static IP.
- * 
- * IMPORTANT: Set your own secret key below to prevent unauthorized access.
- */
+error_reporting(E_ALL);
+ini_set('display_errors', '1');
 
 // ===== CONFIGURATION =====
-$PROXY_SECRET = getenv('ZERODHA_PROXY_SECRET') ?: 'CHANGE_THIS_TO_A_STRONG_SECRET_KEY';
+$PROXY_SECRET = 'xK9m$2pLq!7nRv4W';
 // ==========================
 
 header('Content-Type: application/json');
