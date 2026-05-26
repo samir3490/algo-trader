@@ -19,6 +19,7 @@ interface OrderEmailParams {
   product: string;
   orderId?: string;
   status?: string;
+  accountId?: string;
 }
 
 export async function sendOrderEmail(params: OrderEmailParams) {
@@ -40,6 +41,7 @@ export async function sendOrderEmail(params: OrderEmailParams) {
     product,
     orderId,
     status,
+    accountId,
   } = params;
 
   const total = quantity * price;
@@ -87,6 +89,7 @@ export async function sendOrderEmail(params: OrderEmailParams) {
           </tr>
           ${orderId ? `<tr><td style="padding: 8px 0; color: #8b949e; font-size: 14px;">Order ID</td><td style="padding: 8px 0; color: #e6edf3; font-size: 14px; text-align: right;">${orderId}</td></tr>` : ""}
           ${status ? `<tr><td style="padding: 8px 0; color: #8b949e; font-size: 14px;">Status</td><td style="padding: 8px 0; color: #e6edf3; font-size: 14px; text-align: right;">${status}</td></tr>` : ""}
+          ${accountId ? `<tr><td style="padding: 8px 0; color: #8b949e; font-size: 14px;">Account</td><td style="padding: 8px 0; color: #e6edf3; font-size: 14px; text-align: right;">${accountId}</td></tr>` : ""}
         </table>
         <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #30363d; color: #8b949e; font-size: 12px;">
           ${now} IST • AlgoTrader

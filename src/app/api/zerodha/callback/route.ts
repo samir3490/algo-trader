@@ -14,20 +14,26 @@ export async function GET(request: NextRequest) {
     const kite = new KiteConnect({ api_key: process.env.KITE_API_KEY! });
     const session = await kite.generateSession(requestToken, process.env.KITE_API_SECRET!);
 
-    // In production, save this to the user's session/database
-    const response = NextResponse.redirect(new URL("/live-trading?connected=true", request.url));
-    response.cookies.set("kite_access_token", session.access_token, {
+    const userId = session.user_id;
+    const accessToken = session.access_token;
+
+    const cookieOptions = {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24, // 24 hours
-    });
-    response.cookies.set("kite_user_id", session.user_id, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "lax" as const,
       maxAge: 60 * 60 * 24,
-    });
+    };
+
+    const response = NextResponse.redirect(
+      new URL(`/settings?account_added=${userId}`, request.url)
+    );
+
+    // Per-account token cookie
+    response.cookies.set(`kite_token_${userId}`, accessToken, cookieOptions);
+
+    // Also set legacy cookies for backward compatibility
+    response.cookies.set("kite_access_token", accessToken, cookieOptions);
+    response.cookies.set("kite_user_id", userId, cookieOptions);
 
     return response;
   } catch (error) {

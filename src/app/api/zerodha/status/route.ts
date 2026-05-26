@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { KiteConnect } from "kiteconnect";
+import { getAccountToken } from "@/lib/zerodha/account-token";
 
 export async function GET(request: NextRequest) {
-  const accessToken = request.cookies.get("kite_access_token")?.value;
-  const userId = request.cookies.get("kite_user_id")?.value;
+  const accountId = request.nextUrl.searchParams.get("accountId");
+  const accessToken = getAccountToken(request, accountId);
+  const userId = accountId || request.cookies.get("kite_user_id")?.value;
 
   if (!accessToken || !userId) {
     return NextResponse.json({ connected: false });

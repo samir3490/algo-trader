@@ -240,6 +240,55 @@ export async function saveActiveStrategies(strategies: ActiveStrategy[]): Promis
   }
 }
 
+// ==================== ZERODHA ACCOUNTS ====================
+
+export interface ZerodhaAccount {
+  kiteUserId: string;
+  userName: string;
+  email: string;
+  broker: string;
+  connectedAt: string;
+  label?: string;
+}
+
+export async function getZerodhaAccounts(): Promise<ZerodhaAccount[]> {
+  try {
+    const ref = collection(db, "users", getUserId(), "zerodha_accounts");
+    const snap = await getDocs(ref);
+    return snap.docs.map((d) => d.data() as ZerodhaAccount);
+  } catch (e) {
+    console.error("Error loading Zerodha accounts:", e);
+    return [];
+  }
+}
+
+export async function saveZerodhaAccount(account: ZerodhaAccount): Promise<void> {
+  try {
+    const ref = doc(db, "users", getUserId(), "zerodha_accounts", account.kiteUserId);
+    await setDoc(ref, { ...account, updatedAt: serverTimestamp() }, { merge: true });
+  } catch (e) {
+    console.error("Error saving Zerodha account:", e);
+  }
+}
+
+export async function removeZerodhaAccount(kiteUserId: string): Promise<void> {
+  try {
+    const ref = doc(db, "users", getUserId(), "zerodha_accounts", kiteUserId);
+    await deleteDoc(ref);
+  } catch (e) {
+    console.error("Error removing Zerodha account:", e);
+  }
+}
+
+export async function updateZerodhaAccountLabel(kiteUserId: string, label: string): Promise<void> {
+  try {
+    const ref = doc(db, "users", getUserId(), "zerodha_accounts", kiteUserId);
+    await updateDoc(ref, { label, updatedAt: serverTimestamp() });
+  } catch (e) {
+    console.error("Error updating account label:", e);
+  }
+}
+
 // ==================== ORDER HISTORY ====================
 
 export interface OrderRecord {

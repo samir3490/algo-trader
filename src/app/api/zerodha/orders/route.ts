@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { KiteConnect } from "kiteconnect";
 import { sendOrderEmail } from "@/lib/email";
+import { getAccountToken } from "@/lib/zerodha/account-token";
 
 export async function GET(request: NextRequest) {
-  const accessToken = request.cookies.get("kite_access_token")?.value;
+  const accountId = request.nextUrl.searchParams.get("accountId");
+  const accessToken = getAccountToken(request, accountId);
   if (!accessToken) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
@@ -67,13 +69,14 @@ async function placeOrderViaProxy(
 }
 
 export async function POST(request: NextRequest) {
-  const accessToken = request.cookies.get("kite_access_token")?.value;
+  const body = await request.json();
+  const accountId = body.accountId as string | undefined;
+  const accessToken = getAccountToken(request, accountId);
   if (!accessToken) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   try {
-    const body = await request.json();
     const apiKey = process.env.KITE_API_KEY!;
 
     const orderParams = {
@@ -111,6 +114,7 @@ export async function POST(request: NextRequest) {
       product: orderParams.product,
       orderId,
       status: "PLACED",
+      accountId: accountId || undefined,
     }).catch(() => {});
 
     return NextResponse.json({ orderId, status: "success" });

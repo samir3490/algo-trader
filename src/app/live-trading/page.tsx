@@ -15,8 +15,12 @@ import {
   ShieldAlert,
   XCircle,
   Zap,
+  ChevronDown,
+  Users,
+  RefreshCw,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent, isMarketOpen, getMarketStatus } from "@/lib/utils";
+import { getZerodhaAccounts, type ZerodhaAccount } from "@/lib/firebase";
 
 type TransactionType = "BUY" | "SELL";
 type ProductType = "MIS" | "CNC" | "NRML";
@@ -72,6 +76,10 @@ interface StockQuote {
   totalSellQty: number;
 }
 
+interface ConnectedAccount extends ZerodhaAccount {
+  connected: boolean;
+}
+
 const STOCK_LIST: { symbol: string; name: string }[] = [
   { symbol: "RELIANCE", name: "Reliance Industries" },
   { symbol: "TCS", name: "Tata Consultancy Services" },
@@ -93,57 +101,6 @@ const STOCK_LIST: { symbol: string; name: string }[] = [
   { symbol: "HCLTECH", name: "HCL Technologies" },
   { symbol: "TATAMOTORS", name: "Tata Motors" },
   { symbol: "TATASTEEL", name: "Tata Steel" },
-  { symbol: "POWERGRID", name: "Power Grid Corp" },
-  { symbol: "NTPC", name: "NTPC Limited" },
-  { symbol: "ONGC", name: "Oil & Natural Gas Corp" },
-  { symbol: "ADANIENT", name: "Adani Enterprises" },
-  { symbol: "TECHM", name: "Tech Mahindra" },
-  { symbol: "ASIANPAINT", name: "Asian Paints" },
-  { symbol: "BAJAJFINSV", name: "Bajaj Finserv" },
-  { symbol: "DRREDDY", name: "Dr. Reddy's Laboratories" },
-  { symbol: "NESTLEIND", name: "Nestle India" },
-  { symbol: "ULTRACEMCO", name: "UltraTech Cement" },
-  { symbol: "JSWSTEEL", name: "JSW Steel" },
-  { symbol: "M&M", name: "Mahindra & Mahindra" },
-  { symbol: "COALINDIA", name: "Coal India" },
-  { symbol: "BAJAJ-AUTO", name: "Bajaj Auto" },
-  { symbol: "GRASIM", name: "Grasim Industries" },
-  { symbol: "DIVISLAB", name: "Divi's Laboratories" },
-  { symbol: "BRITANNIA", name: "Britannia Industries" },
-  { symbol: "CIPLA", name: "Cipla" },
-  { symbol: "EICHERMOT", name: "Eicher Motors" },
-  { symbol: "HEROMOTOCO", name: "Hero MotoCorp" },
-  { symbol: "APOLLOHOSP", name: "Apollo Hospitals" },
-  { symbol: "HINDALCO", name: "Hindalco Industries" },
-  { symbol: "BPCL", name: "Bharat Petroleum" },
-  { symbol: "INDUSINDBK", name: "IndusInd Bank" },
-  { symbol: "TATACONSUM", name: "Tata Consumer Products" },
-  { symbol: "SBILIFE", name: "SBI Life Insurance" },
-  { symbol: "HDFCLIFE", name: "HDFC Life Insurance" },
-  { symbol: "ADANIPORTS", name: "Adani Ports" },
-  { symbol: "BANKBARODA", name: "Bank of Baroda" },
-  { symbol: "VEDL", name: "Vedanta" },
-  { symbol: "ZOMATO", name: "Zomato" },
-  { symbol: "DMART", name: "Avenue Supermarts" },
-  { symbol: "PIDILITIND", name: "Pidilite Industries" },
-  { symbol: "SIEMENS", name: "Siemens" },
-  { symbol: "HAVELLS", name: "Havells India" },
-  { symbol: "DLF", name: "DLF" },
-  { symbol: "GODREJCP", name: "Godrej Consumer Products" },
-  { symbol: "DABUR", name: "Dabur India" },
-  { symbol: "AMBUJACEM", name: "Ambuja Cements" },
-  { symbol: "IOC", name: "Indian Oil Corp" },
-  { symbol: "PNB", name: "Punjab National Bank" },
-  { symbol: "TRENT", name: "Trent" },
-  { symbol: "JIOFIN", name: "Jio Financial Services" },
-  { symbol: "HAL", name: "Hindustan Aeronautics" },
-  { symbol: "BEL", name: "Bharat Electronics" },
-  { symbol: "IRCTC", name: "IRCTC" },
-  { symbol: "PAYTM", name: "One 97 Communications" },
-  { symbol: "NYKAA", name: "FSN E-Commerce" },
-  { symbol: "PFC", name: "Power Finance Corp" },
-  { symbol: "RECLTD", name: "REC Limited" },
-  { symbol: "TATAPOWER", name: "Tata Power" },
 ];
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -164,8 +121,13 @@ function LiveTradingContent() {
   const searchParams = useSearchParams();
   const orderFormRef = useRef<HTMLDivElement>(null);
 
-  const [connected, setConnected] = useState(false);
-  const [kiteUserId, setKiteUserId] = useState("");
+  // Multi-account state
+  const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
+  const [selectedAccountId, setSelectedAccountId] = useState<string>("");
+  const [showAccountDropdown, setShowAccountDropdown] = useState(false);
+  const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const accountDropdownRef = useRef<HTMLDivElement>(null);
+
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -216,6 +178,21 @@ function LiveTradingContent() {
   const [maxOrdersPerDay, setMaxOrdersPerDay] = useState("20");
   const [maxLossLimit, setMaxLossLimit] = useState("5000");
 
+  const connected = accounts.some((a) => a.kiteUserId === selectedAccountId && a.connected);
+  const selectedAccount = accounts.find((a) => a.kiteUserId === selectedAccountId);
+  const connectedAccounts = accounts.filter((a) => a.connected);
+
+  // Close account dropdown on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (accountDropdownRef.current && !accountDropdownRef.current.contains(e.target as Node)) {
+        setShowAccountDropdown(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
+
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
@@ -235,35 +212,69 @@ function LiveTradingContent() {
     return () => clearInterval(interval);
   }, []);
 
-  const checkAuthStatus = useCallback(async () => {
+  // Load accounts on mount
+  useEffect(() => {
+    loadAccounts();
+  }, []);
+
+  async function loadAccounts() {
+    setLoadingAccounts(true);
     try {
-      const res = await fetch("/api/zerodha/status");
+      const firestoreAccounts = await getZerodhaAccounts();
+      const res = await fetch("/api/zerodha/accounts");
       const data = await res.json();
-      if (data.connected) {
-        setConnected(true);
-        setKiteUserId(data.userId || "");
+      const serverAccounts: { kiteUserId: string; userName?: string; email?: string; broker?: string; connected: boolean }[] = data.accounts || [];
+      const serverMap = new Map(serverAccounts.map((a) => [a.kiteUserId, a]));
+
+      const merged: ConnectedAccount[] = firestoreAccounts.map((fa) => ({
+        ...fa,
+        connected: serverMap.has(fa.kiteUserId),
+        userName: serverMap.get(fa.kiteUserId)?.userName || fa.userName,
+      }));
+
+      // Add server-only accounts
+      for (const sa of serverAccounts) {
+        if (!firestoreAccounts.find((fa) => fa.kiteUserId === sa.kiteUserId)) {
+          merged.push({
+            kiteUserId: sa.kiteUserId,
+            userName: sa.userName || "",
+            email: sa.email || "",
+            broker: sa.broker || "",
+            connectedAt: new Date().toISOString(),
+            connected: true,
+          });
+        }
       }
-    } catch {
-      // Not connected
+
+      setAccounts(merged);
+
+      // Auto-select first connected account
+      const firstConnected = merged.find((a) => a.connected);
+      if (firstConnected && !selectedAccountId) {
+        setSelectedAccountId(firstConnected.kiteUserId);
+      }
+    } catch (e) {
+      console.error("Error loading accounts:", e);
     } finally {
+      setLoadingAccounts(false);
       setIsCheckingAuth(false);
     }
-  }, []);
+  }
 
   useEffect(() => {
     const error = searchParams.get("error");
     if (error && ERROR_MESSAGES[error]) {
       setErrorMessage(ERROR_MESSAGES[error]);
       setIsCheckingAuth(false);
-      return;
     }
+  }, [searchParams]);
 
-    checkAuthStatus();
-  }, [searchParams, checkAuthStatus]);
+  const apiQuery = selectedAccountId ? `accountId=${selectedAccountId}` : "";
 
   const fetchPositions = useCallback(async () => {
+    if (!selectedAccountId) return;
     try {
-      const res = await fetch("/api/zerodha/positions");
+      const res = await fetch(`/api/zerodha/positions?${apiQuery}`);
       if (!res.ok) return;
       const data = await res.json();
       const mapped: Position[] = (data.positions?.net || []).map((p: any) => ({
@@ -276,11 +287,12 @@ function LiveTradingContent() {
       }));
       setPositions(mapped.filter((p) => p.qty !== 0));
     } catch { /* ignore */ }
-  }, []);
+  }, [selectedAccountId, apiQuery]);
 
   const fetchOrders = useCallback(async () => {
+    if (!selectedAccountId) return;
     try {
-      const res = await fetch("/api/zerodha/orders");
+      const res = await fetch(`/api/zerodha/orders?${apiQuery}`);
       if (!res.ok) return;
       const data = await res.json();
       const mapped: KiteOrder[] = (data.orders || []).map((o: any) => ({
@@ -295,11 +307,12 @@ function LiveTradingContent() {
       }));
       setOrders(mapped);
     } catch { /* ignore */ }
-  }, []);
+  }, [selectedAccountId, apiQuery]);
 
   const fetchHoldings = useCallback(async () => {
+    if (!selectedAccountId) return;
     try {
-      const res = await fetch("/api/zerodha/holdings");
+      const res = await fetch(`/api/zerodha/holdings?${apiQuery}`);
       if (!res.ok) return;
       const data = await res.json();
       const mapped: Holding[] = (data.holdings || []).map((h: any) => ({
@@ -312,13 +325,13 @@ function LiveTradingContent() {
       }));
       setHoldings(mapped);
     } catch { /* ignore */ }
-  }, []);
+  }, [selectedAccountId, apiQuery]);
 
   const fetchQuote = useCallback(async (sym: string) => {
     if (!sym.trim() || !connected) return;
     setIsLoadingQuote(true);
     try {
-      const res = await fetch(`/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${exchange}`);
+      const res = await fetch(`/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${exchange}&${apiQuery}`);
       if (!res.ok) {
         setQuote(null);
         return;
@@ -331,7 +344,7 @@ function LiveTradingContent() {
     } finally {
       setIsLoadingQuote(false);
     }
-  }, [connected, exchange]);
+  }, [connected, exchange, apiQuery]);
 
   const searchInstruments = useCallback(async (query: string) => {
     if (!query.trim() || query.trim().length < 1) {
@@ -363,22 +376,26 @@ function LiveTradingContent() {
     searchTimeoutRef.current = setTimeout(() => searchInstruments(value), 300);
   };
 
-  // Debounced quote fetch when symbol changes
   useEffect(() => {
     if (!symbol.trim() || !connected) return;
     const timer = setTimeout(() => fetchQuote(symbol), 300);
     return () => clearTimeout(timer);
   }, [symbol, exchange, connected, fetchQuote]);
 
-  // Periodic quote refresh every 10 seconds
   useEffect(() => {
     if (!symbol.trim() || !connected) return;
     const interval = setInterval(() => fetchQuote(symbol), 10000);
     return () => clearInterval(interval);
   }, [symbol, connected, fetchQuote]);
 
+  // Reload data when selected account changes
   useEffect(() => {
-    if (!connected) return;
+    if (!connected) {
+      setPositions([]);
+      setOrders([]);
+      setHoldings([]);
+      return;
+    }
     fetchPositions();
     fetchOrders();
     fetchHoldings();
@@ -388,7 +405,7 @@ function LiveTradingContent() {
       fetchOrders();
     }, 30000);
     return () => clearInterval(interval);
-  }, [connected, fetchPositions, fetchOrders, fetchHoldings]);
+  }, [connected, selectedAccountId, fetchPositions, fetchOrders, fetchHoldings]);
 
   const netPnl = positions.reduce((sum, p) => sum + p.pnl, 0);
 
@@ -412,6 +429,7 @@ function LiveTradingContent() {
         orderType: orderType,
         quantity: parseInt(quantity),
         product: productType,
+        accountId: selectedAccountId,
       };
 
       if (orderType === "LIMIT" || orderType === "SL") {
@@ -434,11 +452,13 @@ function LiveTradingContent() {
         return;
       }
 
-      setStatusMessage(`Order placed successfully! Order ID: ${data.orderId}`);
+      const accountLabel = selectedAccount?.label || selectedAccount?.userName || selectedAccountId;
+      setStatusMessage(`Order placed on ${accountLabel}! Order ID: ${data.orderId}`);
       setSymbol("");
       setQuantity("");
       setPrice("");
       setTriggerPrice("");
+      setSearchInput("");
 
       setTimeout(() => {
         fetchOrders();
@@ -449,15 +469,6 @@ function LiveTradingContent() {
     } finally {
       setIsPlacingOrder(false);
     }
-  };
-
-  const handleDisconnect = async () => {
-    await fetch("/api/zerodha/logout", { method: "POST" }).catch(() => {});
-    setConnected(false);
-    setKiteUserId("");
-    setPositions([]);
-    setOrders([]);
-    setHoldings([]);
   };
 
   const handleExitPosition = (pos: Position) => {
@@ -474,7 +485,8 @@ function LiveTradingContent() {
 
   const handleSquareOffAll = async () => {
     if (!connected || positions.length === 0) return;
-    if (!window.confirm(`Square off all ${positions.length} position(s)? This will place MARKET orders to close each position.`)) return;
+    const accountLabel = selectedAccount?.label || selectedAccount?.userName || selectedAccountId;
+    if (!window.confirm(`Square off all ${positions.length} position(s) on ${accountLabel}?`)) return;
 
     setIsSquaringOff(true);
     setErrorMessage("");
@@ -490,6 +502,7 @@ function LiveTradingContent() {
           orderType: "MARKET",
           quantity: Math.abs(pos.qty),
           product: pos.product,
+          accountId: selectedAccountId,
         };
         const res = await fetch("/api/zerodha/orders", {
           method: "POST",
@@ -522,7 +535,7 @@ function LiveTradingContent() {
       const res = await fetch("/api/zerodha/orders/cancel", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.orderId }),
+        body: JSON.stringify({ orderId: order.orderId, accountId: selectedAccountId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -540,46 +553,125 @@ function LiveTradingContent() {
 
   return (
     <div className="min-h-screen bg-[#0a0f1a] text-white">
-      {/* Connection Status Banner */}
-      {isCheckingAuth ? (
-        <div className="bg-gray-900/40 border-b border-gray-700/50 px-6 py-3 flex items-center gap-3">
-          <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
-          <span className="text-gray-300 text-sm font-medium">Checking Zerodha connection...</span>
-        </div>
-      ) : !connected ? (
-        <div className="bg-amber-900/40 border-b border-amber-700/50 px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-amber-400" />
-            <span className="text-amber-200 text-sm font-medium">
-              Zerodha not connected. Connect to place live orders.
-            </span>
+      {/* Account Selector Banner */}
+      <div className="bg-[#111827] border-b border-gray-800 px-6 py-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-gray-400" />
+              <span className="text-sm text-gray-400">Trading Account:</span>
+            </div>
+
+            {loadingAccounts ? (
+              <div className="flex items-center gap-2 text-gray-400 text-sm">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading accounts...
+              </div>
+            ) : connectedAccounts.length === 0 ? (
+              <a
+                href="/api/zerodha/login"
+                className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm rounded transition-colors"
+              >
+                Connect Zerodha Account
+              </a>
+            ) : (
+              <div className="relative" ref={accountDropdownRef}>
+                <button
+                  onClick={() => setShowAccountDropdown(!showAccountDropdown)}
+                  className={cn(
+                    "flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors",
+                    connected
+                      ? "border-emerald-700 bg-emerald-900/30 text-emerald-300 hover:bg-emerald-900/50"
+                      : "border-amber-700 bg-amber-900/30 text-amber-300 hover:bg-amber-900/50"
+                  )}
+                >
+                  <span className={cn("h-2 w-2 rounded-full", connected ? "bg-emerald-400" : "bg-amber-400")} />
+                  <span>
+                    {selectedAccount?.label || selectedAccount?.userName || selectedAccountId || "Select Account"}
+                  </span>
+                  <span className="text-xs opacity-60">({selectedAccountId})</span>
+                  <ChevronDown className="h-3.5 w-3.5 opacity-60" />
+                </button>
+
+                {showAccountDropdown && (
+                  <div className="absolute z-50 top-full left-0 mt-1 w-72 bg-[#1a2035] border border-gray-700 rounded-lg shadow-2xl overflow-hidden">
+                    <div className="p-2 border-b border-gray-700/50">
+                      <p className="text-xs text-gray-500 px-2 py-1">
+                        {connectedAccounts.length} of {accounts.length} account{accounts.length !== 1 ? "s" : ""} connected
+                      </p>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto">
+                      {accounts.map((account) => (
+                        <button
+                          key={account.kiteUserId}
+                          onClick={() => {
+                            setSelectedAccountId(account.kiteUserId);
+                            setShowAccountDropdown(false);
+                            setPositions([]);
+                            setOrders([]);
+                            setHoldings([]);
+                          }}
+                          disabled={!account.connected}
+                          className={cn(
+                            "w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors",
+                            account.kiteUserId === selectedAccountId
+                              ? "bg-blue-600/20"
+                              : "hover:bg-gray-800/50",
+                            !account.connected && "opacity-50 cursor-not-allowed"
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "h-2 w-2 rounded-full shrink-0",
+                              account.connected ? "bg-emerald-400" : "bg-gray-600"
+                            )}
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-200 truncate">
+                              {account.label || account.userName || account.kiteUserId}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {account.kiteUserId}
+                              {!account.connected && " · Session expired"}
+                            </p>
+                          </div>
+                          {account.kiteUserId === selectedAccountId && (
+                            <CheckCircle2 className="h-4 w-4 text-blue-400 shrink-0" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="p-2 border-t border-gray-700/50">
+                      <a
+                        href="/api/zerodha/login"
+                        className="flex items-center gap-2 w-full px-3 py-2 text-sm text-blue-400 hover:bg-blue-600/10 rounded transition-colors"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Add Another Account
+                      </a>
+                      <a
+                        href="/settings"
+                        className="flex items-center gap-2 w-full px-3 py-2 text-sm text-gray-400 hover:bg-gray-800/50 rounded transition-colors"
+                      >
+                        <SettingsIcon className="h-3.5 w-3.5" />
+                        Manage Accounts
+                      </a>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-          <a
-            href="/api/zerodha/login"
-            className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm rounded transition-colors"
-          >
-            Connect to Zerodha
-          </a>
+
+          {connected && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">
+                {connectedAccounts.length > 1 && `${connectedAccounts.length} accounts active`}
+              </span>
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="bg-emerald-900/40 border-b border-emerald-700/50 px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-            <span className="text-emerald-200 text-sm font-medium">
-              Connected to Zerodha
-            </span>
-            <span className="text-emerald-400/70 text-xs bg-emerald-900/50 px-2 py-0.5 rounded">
-              User ID: {kiteUserId}
-            </span>
-          </div>
-          <button
-            onClick={handleDisconnect}
-            className="px-4 py-1.5 bg-emerald-700/50 hover:bg-emerald-700 text-emerald-200 text-sm rounded transition-colors"
-          >
-            Disconnect
-          </button>
-        </div>
-      )}
+      </div>
 
       {/* Market Status Bar */}
       <div className="bg-[#111827] border-b border-gray-800 px-6 py-2.5 flex items-center justify-between">
@@ -612,7 +704,7 @@ function LiveTradingContent() {
         </div>
       </div>
 
-      {/* Error Banner */}
+      {/* Error/Success Banners */}
       {errorMessage && (
         <div className="bg-red-900/40 border-b border-red-700/50 px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -625,7 +717,6 @@ function LiveTradingContent() {
         </div>
       )}
 
-      {/* Success Banner */}
       {statusMessage && (
         <div className="bg-emerald-900/40 border-b border-emerald-700/50 px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -639,6 +730,24 @@ function LiveTradingContent() {
       )}
 
       <div className="p-6 space-y-6">
+        {/* No Account Warning */}
+        {!isCheckingAuth && connectedAccounts.length === 0 && (
+          <div className="bg-amber-900/40 border border-amber-700/50 rounded-lg px-6 py-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-amber-400" />
+              <span className="text-amber-200 text-sm font-medium">
+                No Zerodha accounts connected. Connect an account to start live trading.
+              </span>
+            </div>
+            <a
+              href="/api/zerodha/login"
+              className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm rounded transition-colors"
+            >
+              Connect to Zerodha
+            </a>
+          </div>
+        )}
+
         {/* Main Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Order Placement */}
@@ -647,9 +756,14 @@ function LiveTradingContent() {
               <div className="flex items-center gap-2 mb-5">
                 <Zap className="h-5 w-5 text-yellow-400" />
                 <h2 className="text-lg font-semibold">Place Order</h2>
+                {selectedAccount && (
+                  <span className="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded ml-auto">
+                    {selectedAccount.label || selectedAccount.userName || selectedAccountId}
+                  </span>
+                )}
               </div>
 
-              {/* Warning Banner */}
+              {/* Warning */}
               <div className="bg-red-900/30 border border-red-800/50 rounded-md p-3 mb-5 flex items-start gap-2">
                 <ShieldAlert className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
                 <p className="text-red-300 text-xs leading-relaxed">
@@ -658,7 +772,7 @@ function LiveTradingContent() {
               </div>
 
               <div className="space-y-4">
-                {/* Symbol with search suggestions */}
+                {/* Symbol search */}
                 <div className="relative">
                   <label className="text-xs text-gray-400 mb-1 block">Symbol</label>
                   <div className="relative">
@@ -698,7 +812,7 @@ function LiveTradingContent() {
                   )}
                 </div>
 
-                {/* Stock Quote Panel */}
+                {/* Quote Panel */}
                 {quote && (
                   <div className="bg-[#0a0f1a] border border-gray-700 rounded-md p-3 space-y-3">
                     <div className="flex items-center justify-between">
@@ -728,7 +842,6 @@ function LiveTradingContent() {
                       <div><span className="text-gray-500">Circuit</span><p className="text-gray-300">{formatCurrency(quote.lowerCircuit)} - {formatCurrency(quote.upperCircuit)}</p></div>
                     </div>
 
-                    {/* Market Depth */}
                     {(quote.buyDepth.length > 0 || quote.sellDepth.length > 0) && (
                       <div>
                         <p className="text-xs text-gray-500 mb-1.5 font-medium">Market Depth</p>
@@ -899,10 +1012,10 @@ function LiveTradingContent() {
                   </div>
                 )}
 
-                {/* Place Order Button */}
+                {/* Place Order */}
                 <button
                   onClick={handlePlaceOrder}
-                  disabled={isPlacingOrder || !symbol.trim() || !quantity}
+                  disabled={isPlacingOrder || !symbol.trim() || !quantity || !connected}
                   className={cn(
                     "w-full py-2.5 rounded-md font-semibold text-sm transition-colors mt-2 flex items-center justify-center gap-2",
                     "disabled:opacity-50 disabled:cursor-not-allowed",
@@ -966,7 +1079,7 @@ function LiveTradingContent() {
                         <Inbox className="h-10 w-10 mb-3 text-gray-600" />
                         <p className="text-sm">No open positions.</p>
                         <p className="text-xs text-gray-600 mt-1">
-                          {connected ? "Place an order to see positions here." : "Connect to Zerodha to view positions."}
+                          {connected ? "Place an order to see positions here." : "Connect a Zerodha account to view positions."}
                         </p>
                       </div>
                     ) : (
@@ -1116,7 +1229,7 @@ function LiveTradingContent() {
                         <Link2 className="h-10 w-10 mb-3 text-gray-600" />
                         <p className="text-sm">No holdings found.</p>
                         <p className="text-xs text-gray-600 mt-1">
-                          {connected ? "You don't have any holdings in your Zerodha account." : "Connect to Zerodha to view your holdings."}
+                          {connected ? "You don't have any holdings in this account." : "Connect a Zerodha account to view holdings."}
                         </p>
                       </div>
                     ) : (
@@ -1241,6 +1354,23 @@ function LiveTradingContent() {
         </div>
       </div>
     </div>
+  );
+}
+
+function Plus({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M5 12h14" /><path d="M12 5v14" />
+    </svg>
+  );
+}
+
+function SettingsIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { formatCurrency } from "@/lib/utils";
-import { getOrders as getFirestoreOrders, type OrderRecord } from "@/lib/firebase";
+import { getOrders as getFirestoreOrders, getZerodhaAccounts, type OrderRecord, type ZerodhaAccount } from "@/lib/firebase";
 import {
   ClipboardList,
   Search,
@@ -15,6 +15,7 @@ import {
   AlertCircle,
   RefreshCw,
   Loader2,
+  Users,
 } from "lucide-react";
 
 type OrderStatus = "EXECUTED" | "PENDING" | "REJECTED" | "CANCELLED" | "OPEN" | "COMPLETE";
@@ -34,6 +35,7 @@ interface Order {
   price: number;
   status: OrderStatus;
   mode: OrderMode;
+  accountId?: string;
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
@@ -117,24 +119,33 @@ export default function OrdersPage() {
     setIsLoading(true);
     const allOrders: Order[] = [];
 
-    // Fetch live Zerodha orders
+    // Fetch live Zerodha orders from all connected accounts
     try {
-      const res = await fetch("/api/zerodha/orders");
-      if (res.ok) {
-        const data = await res.json();
-        const liveOrders: Order[] = (data.orders || []).map((o: any, idx: number) => ({
-          id: o.order_id || `live-${idx}`,
-          time: o.order_timestamp || o.exchange_timestamp || "",
-          symbol: o.tradingsymbol || "",
-          exchange: o.exchange || "NSE",
-          side: (o.transaction_type || "BUY") as OrderSide,
-          type: (o.order_type || "MARKET") as OrderType,
-          quantity: o.quantity || 0,
-          price: o.average_price || o.price || 0,
-          status: (o.status === "COMPLETE" ? "EXECUTED" : o.status || "PENDING") as OrderStatus,
-          mode: "LIVE" as OrderMode,
-        }));
-        allOrders.push(...liveOrders);
+      const accountsRes = await fetch("/api/zerodha/accounts");
+      const accountsData = await accountsRes.json();
+      const connectedAccounts = (accountsData.accounts || []).filter((a: any) => a.connected);
+
+      for (const account of connectedAccounts) {
+        try {
+          const res = await fetch(`/api/zerodha/orders?accountId=${account.kiteUserId}`);
+          if (res.ok) {
+            const data = await res.json();
+            const liveOrders: Order[] = (data.orders || []).map((o: any, idx: number) => ({
+              id: o.order_id || `live-${account.kiteUserId}-${idx}`,
+              time: o.order_timestamp || o.exchange_timestamp || "",
+              symbol: o.tradingsymbol || "",
+              exchange: o.exchange || "NSE",
+              side: (o.transaction_type || "BUY") as OrderSide,
+              type: (o.order_type || "MARKET") as OrderType,
+              quantity: o.quantity || 0,
+              price: o.average_price || o.price || 0,
+              status: (o.status === "COMPLETE" ? "EXECUTED" : o.status || "PENDING") as OrderStatus,
+              mode: "LIVE" as OrderMode,
+              accountId: account.kiteUserId,
+            }));
+            allOrders.push(...liveOrders);
+          }
+        } catch { /* account may have expired token */ }
       }
     } catch { /* Zerodha may not be connected */ }
 
@@ -284,12 +295,13 @@ export default function OrdersPage() {
               <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">Price</th>
               <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-tertiary">Status</th>
               <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-tertiary">Mode</th>
+              <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-tertiary">Account</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {isLoading ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-text-tertiary">
+                <td colSpan={9} className="px-4 py-12 text-center text-text-tertiary">
                   <div className="flex items-center justify-center gap-2">
                     <Loader2 className="h-5 w-5 animate-spin" />
                     Loading orders...
@@ -298,7 +310,7 @@ export default function OrdersPage() {
               </tr>
             ) : filtered.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-text-tertiary">
+                <td colSpan={9} className="px-4 py-12 text-center text-text-tertiary">
                   No orders found matching your filters.
                 </td>
               </tr>
@@ -348,6 +360,15 @@ export default function OrdersPage() {
                       }`}>
                         {order.mode}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {order.accountId ? (
+                        <span className="inline-block rounded-md bg-bg-tertiary px-2 py-0.5 text-xs font-medium text-text-secondary">
+                          {order.accountId}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-text-tertiary">—</span>
+                      )}
                     </td>
                   </tr>
                 );

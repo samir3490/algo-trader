@@ -244,9 +244,10 @@ export default function DashboardPage() {
 
     async function checkZerodha() {
       try {
-        const res = await fetch("/api/zerodha/status");
+        const res = await fetch("/api/zerodha/accounts");
         const data = await res.json();
-        setZerodhaConnected(data.connected === true);
+        const hasConnected = (data.accounts || []).some((a: any) => a.connected);
+        setZerodhaConnected(hasConnected);
       } catch {
         setZerodhaConnected(false);
       }
