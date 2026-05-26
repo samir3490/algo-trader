@@ -17,6 +17,11 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  getSettings as getFirestoreSettings,
+  saveSettings as saveFirestoreSettings,
+  type AppSettings as FirestoreAppSettings,
+} from "@/lib/firebase";
 
 interface ZerodhaStatus {
   connected: boolean;
@@ -77,13 +82,59 @@ const defaultSettings: AppSettings = {
   },
 };
 
-function loadSettings(): AppSettings {
+function loadSettingsFromCache(): AppSettings {
   if (typeof window === "undefined") return defaultSettings;
   try {
     const saved = localStorage.getItem("algotrader_settings");
     if (saved) return { ...defaultSettings, ...JSON.parse(saved) };
   } catch {}
   return defaultSettings;
+}
+
+function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
+  return {
+    paperTrading: {
+      startingBalance: fs.paperStartingBalance,
+      simulateBrokerage: fs.simulateBrokerage,
+    },
+    tradingPreferences: {
+      defaultExchange: fs.defaultExchange as "NSE" | "BSE",
+      defaultProductType: fs.defaultProduct as "MIS" | "CNC" | "NRML",
+      defaultOrderType: fs.defaultOrderType as "MARKET" | "LIMIT",
+      maxOrderValue: fs.maxOrderValue,
+      maxDailyLoss: fs.maxDailyLoss,
+    },
+    notifications: {
+      orderExecution: fs.notifyOrders,
+      strategySignals: fs.notifySignals,
+      pnlAlerts: fs.notifyPnl,
+    },
+    riskManagement: {
+      stopLossPercent: fs.stopLossPercent,
+      takeProfitPercent: fs.takeProfitPercent,
+      maxPositions: fs.maxPositions,
+      squareOffTime: fs.squareOffTime,
+    },
+  };
+}
+
+function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
+  return {
+    defaultExchange: s.tradingPreferences.defaultExchange,
+    defaultProduct: s.tradingPreferences.defaultProductType,
+    defaultOrderType: s.tradingPreferences.defaultOrderType,
+    maxOrderValue: s.tradingPreferences.maxOrderValue,
+    maxDailyLoss: s.tradingPreferences.maxDailyLoss,
+    paperStartingBalance: s.paperTrading.startingBalance,
+    simulateBrokerage: s.paperTrading.simulateBrokerage,
+    stopLossPercent: s.riskManagement.stopLossPercent,
+    takeProfitPercent: s.riskManagement.takeProfitPercent,
+    maxPositions: s.riskManagement.maxPositions,
+    squareOffTime: s.riskManagement.squareOffTime,
+    notifyOrders: s.notifications.orderExecution,
+    notifySignals: s.notifications.strategySignals,
+    notifyPnl: s.notifications.pnlAlerts,
+  };
 }
 
 export default function SettingsPage() {
@@ -94,7 +145,20 @@ export default function SettingsPage() {
   const [resetConfirm, setResetConfirm] = useState(false);
 
   useEffect(() => {
-    setSettings(loadSettings());
+    setSettings(loadSettingsFromCache());
+
+    async function loadFromFirestore() {
+      try {
+        const fs = await getFirestoreSettings();
+        const mapped = firestoreToLocal(fs);
+        setSettings(mapped);
+        localStorage.setItem("algotrader_settings", JSON.stringify(mapped));
+      } catch (e) {
+        console.error("Failed to load settings from Firestore, using cache:", e);
+      }
+    }
+
+    loadFromFirestore();
     fetchZerodhaStatus();
   }, []);
 
@@ -117,9 +181,15 @@ export default function SettingsPage() {
     }
   }
 
-  function saveSettings() {
+  async function handleSave() {
     localStorage.setItem("algotrader_settings", JSON.stringify(settings));
-    setToast("Settings saved successfully!");
+    try {
+      await saveFirestoreSettings(localToFirestore(settings));
+      setToast("Settings saved successfully!");
+    } catch (e) {
+      console.error("Failed to save settings to Firestore:", e);
+      setToast("Settings saved locally (cloud sync failed).");
+    }
   }
 
   function resetPaperPortfolio() {
@@ -165,7 +235,7 @@ export default function SettingsPage() {
           </p>
         </div>
         <button
-          onClick={saveSettings}
+          onClick={handleSave}
           className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
         >
           <Save className="h-4 w-4" />

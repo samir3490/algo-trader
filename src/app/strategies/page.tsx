@@ -22,6 +22,11 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { NSE_INSTRUMENTS } from "@/lib/instruments";
+import {
+  getActiveStrategies as getFirestoreStrategies,
+  saveActiveStrategies as saveFirestoreStrategies,
+  type ActiveStrategy as FirestoreStrategy,
+} from "@/lib/firebase";
 
 type StrategyType = "sma" | "ema" | "rsi" | "macd" | "bollinger";
 type Timeframe = "1min" | "5min" | "15min" | "30min" | "1hr" | "Day";
@@ -136,7 +141,7 @@ function getStrategyDef(type: StrategyType): StrategyDefinition {
 
 // ── Persistence ──────────────────────────────────────────────────────────
 
-function loadActiveStrategies(): ActiveStrategy[] {
+function loadActiveStrategiesFromCache(): ActiveStrategy[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(ACTIVE_STRATEGIES_KEY);
@@ -145,10 +150,53 @@ function loadActiveStrategies(): ActiveStrategy[] {
   return [];
 }
 
-function saveActiveStrategies(strategies: ActiveStrategy[]) {
+function saveActiveStrategiesToCache(strategies: ActiveStrategy[]) {
   try {
     localStorage.setItem(ACTIVE_STRATEGIES_KEY, JSON.stringify(strategies));
   } catch {}
+}
+
+function localToFirestore(strategies: ActiveStrategy[]): FirestoreStrategy[] {
+  return strategies.map((s) => ({
+    id: s.id,
+    name: s.name,
+    symbol: s.symbol,
+    exchange: s.exchange,
+    timeframe: s.timeframe,
+    mode: s.mode,
+    params: s.params,
+    status: s.status,
+    createdAt: s.createdAt,
+    signals: s.signals,
+    pnl: s.pnl,
+  }));
+}
+
+function firestoreToLocal(strategies: FirestoreStrategy[]): ActiveStrategy[] {
+  return strategies.map((s) => ({
+    id: s.id,
+    name: s.name,
+    type: (s.name.toLowerCase().includes("sma") ? "sma"
+      : s.name.toLowerCase().includes("ema") ? "ema"
+      : s.name.toLowerCase().includes("rsi") ? "rsi"
+      : s.name.toLowerCase().includes("macd") ? "macd"
+      : s.name.toLowerCase().includes("bollinger") ? "bollinger"
+      : "sma") as StrategyType,
+    symbol: s.symbol,
+    exchange: s.exchange,
+    mode: s.mode,
+    status: s.status,
+    signals: s.signals,
+    pnl: s.pnl,
+    params: s.params,
+    timeframe: s.timeframe as Timeframe,
+    createdAt: s.createdAt,
+  }));
+}
+
+function persistStrategies(strategies: ActiveStrategy[]) {
+  saveActiveStrategiesToCache(strategies);
+  saveFirestoreStrategies(localToFirestore(strategies));
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────
@@ -199,19 +247,39 @@ export default function StrategiesPage() {
 
   // Load persisted strategies on mount
   useEffect(() => {
-    const loaded = loadActiveStrategies();
-    setActiveStrategies(loaded);
+    const cached = loadActiveStrategiesFromCache();
+    setActiveStrategies(cached);
 
-    const newCardState = { ...cardState };
-    for (const strat of loaded) {
-      if (newCardState[strat.type]) {
-        newCardState[strat.type] = {
-          ...newCardState[strat.type],
-          active: strat.status === "running" || strat.status === "paused",
-        };
+    function applyToCards(loaded: ActiveStrategy[]) {
+      setCardState((prev) => {
+        const next = { ...prev };
+        for (const strat of loaded) {
+          if (next[strat.type]) {
+            next[strat.type] = {
+              ...next[strat.type],
+              active: strat.status === "running" || strat.status === "paused",
+            };
+          }
+        }
+        return next;
+      });
+    }
+
+    applyToCards(cached);
+
+    async function loadFromFirestore() {
+      try {
+        const fsStrategies = await getFirestoreStrategies();
+        const mapped = firestoreToLocal(fsStrategies);
+        setActiveStrategies(mapped);
+        saveActiveStrategiesToCache(mapped);
+        applyToCards(mapped);
+      } catch (e) {
+        console.error("Failed to load strategies from Firestore, using cache:", e);
       }
     }
-    setCardState(newCardState);
+
+    loadFromFirestore();
     setMounted(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -219,7 +287,7 @@ export default function StrategiesPage() {
   // Persist strategies whenever they change
   useEffect(() => {
     if (!mounted) return;
-    saveActiveStrategies(activeStrategies);
+    persistStrategies(activeStrategies);
   }, [activeStrategies, mounted]);
 
   const openModal = useCallback(() => {

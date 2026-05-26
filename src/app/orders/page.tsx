@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { formatCurrency } from "@/lib/utils";
+import { getOrders as getFirestoreOrders, type OrderRecord } from "@/lib/firebase";
 import {
   ClipboardList,
   Search,
@@ -97,6 +98,21 @@ export default function OrdersPage() {
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
+  function mapFirestoreOrder(o: OrderRecord): Order {
+    return {
+      id: o.id,
+      time: o.time,
+      symbol: o.symbol,
+      exchange: o.exchange || "NSE",
+      side: o.side as OrderSide,
+      type: (o.orderType || "MARKET") as OrderType,
+      quantity: o.qty,
+      price: o.price,
+      status: (o.status === "COMPLETE" ? "EXECUTED" : o.status || "EXECUTED") as OrderStatus,
+      mode: (o.mode || "PAPER") as OrderMode,
+    };
+  }
+
   const fetchAllOrders = useCallback(async () => {
     setIsLoading(true);
     const allOrders: Order[] = [];
@@ -122,16 +138,31 @@ export default function OrdersPage() {
       }
     } catch { /* Zerodha may not be connected */ }
 
-    // Load paper trades from localStorage
+    // Load orders from Firestore (with localStorage fallback)
     try {
-      const raw = localStorage.getItem("paperTrades");
-      if (raw) {
-        const parsed: PaperTrade[] = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          allOrders.push(...parsed.map(mapPaperTrade));
+      const fsOrders = await getFirestoreOrders(100);
+      if (fsOrders.length > 0) {
+        allOrders.push(...fsOrders.map(mapFirestoreOrder));
+      } else {
+        const raw = localStorage.getItem("paperTrades");
+        if (raw) {
+          const parsed: PaperTrade[] = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            allOrders.push(...parsed.map(mapPaperTrade));
+          }
         }
       }
-    } catch { /* invalid localStorage data */ }
+    } catch {
+      try {
+        const raw = localStorage.getItem("paperTrades");
+        if (raw) {
+          const parsed: PaperTrade[] = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            allOrders.push(...parsed.map(mapPaperTrade));
+          }
+        }
+      } catch { /* invalid localStorage data */ }
+    }
 
     allOrders.sort((a, b) => {
       if (!a.time && !b.time) return 0;

@@ -30,6 +30,15 @@ import {
   Tooltip,
 } from "recharts";
 import { cn, formatCurrency, formatPercent, getMarketStatus, isMarketOpen } from "@/lib/utils";
+import {
+  getPaperTradingState,
+  getWatchlist,
+  saveWatchlist,
+  getActiveStrategies,
+  type PaperTradingState,
+  type WatchlistItem,
+  type ActiveStrategy,
+} from "@/lib/firebase";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -57,30 +66,10 @@ interface PaperState {
   trades: Trade[];
 }
 
-interface WatchlistItem {
-  symbol: string;
-  exchange: string;
-}
-
 interface WatchlistQuote extends WatchlistItem {
   ltp: number | null;
   change: number | null;
   changePercent: number | null;
-}
-
-interface ActiveStrategyEntry {
-  id: string;
-  name: string;
-  type: string;
-  symbol: string;
-  exchange?: string;
-  timeframe: string;
-  mode: "paper" | "live";
-  params: Record<string, number>;
-  status: "running" | "paused" | "stopped";
-  createdAt: string;
-  signals: number;
-  pnl: number;
 }
 
 interface InstrumentResult {
@@ -98,23 +87,15 @@ const ACTIVE_STRATEGIES_KEY = "activeStrategies";
 const INITIAL_BALANCE = 1000000;
 const REFRESH_INTERVAL = 15_000;
 
-const DEFAULT_WATCHLIST: WatchlistItem[] = [
-  { symbol: "RELIANCE", exchange: "NSE" },
-  { symbol: "TCS", exchange: "NSE" },
-  { symbol: "HDFCBANK", exchange: "NSE" },
-  { symbol: "INFY", exchange: "NSE" },
-  { symbol: "SBIN", exchange: "NSE" },
-];
-
 const POPULAR_STOCKS = [
   "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
   "HINDUNILVR", "ITC", "SBIN", "BHARTIARTL", "KOTAKBANK",
   "LT", "AXISBANK", "MARUTI", "BAJFINANCE", "TITAN",
 ];
 
-// ── Helpers ──────────────────────────────────────────────────────────────
+// ── Helpers (localStorage fallbacks) ─────────────────────────────────────
 
-function loadPaperState(): PaperState {
+function loadPaperStateFromCache(): PaperState {
   if (typeof window === "undefined") return { balance: INITIAL_BALANCE, holdings: [], trades: [] };
   try {
     const raw = localStorage.getItem(PAPER_STORAGE_KEY);
@@ -130,8 +111,8 @@ function loadPaperState(): PaperState {
   return { balance: INITIAL_BALANCE, holdings: [], trades: [] };
 }
 
-function loadWatchlist(): WatchlistItem[] {
-  if (typeof window === "undefined") return DEFAULT_WATCHLIST;
+function loadWatchlistFromCache(): WatchlistItem[] {
+  if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(WATCHLIST_KEY);
     if (raw) {
@@ -139,10 +120,10 @@ function loadWatchlist(): WatchlistItem[] {
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch {}
-  return DEFAULT_WATCHLIST;
+  return [];
 }
 
-function loadActiveStrategies(): ActiveStrategyEntry[] {
+function loadActiveStrategiesFromCache(): ActiveStrategy[] {
   if (typeof window === "undefined") return [];
   try {
     const raw = localStorage.getItem(ACTIVE_STRATEGIES_KEY);
@@ -231,14 +212,35 @@ export default function DashboardPage() {
   const [zerodhaConnected, setZerodhaConnected] = useState(false);
 
   // Active strategies
-  const [activeStrategies, setActiveStrategies] = useState<ActiveStrategyEntry[]>([]);
+  const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([]);
 
   // Load everything on mount
   useEffect(() => {
-    const state = loadPaperState();
-    setPaperState(state);
-    setWatchlist(loadWatchlist());
-    setActiveStrategies(loadActiveStrategies());
+    // Instant load from localStorage cache
+    setPaperState(loadPaperStateFromCache());
+    setWatchlist(loadWatchlistFromCache());
+    setActiveStrategies(loadActiveStrategiesFromCache());
+
+    async function loadFromFirestore() {
+      try {
+        const [fsState, fsWatchlist, fsStrategies] = await Promise.all([
+          getPaperTradingState(),
+          getWatchlist(),
+          getActiveStrategies(),
+        ]);
+
+        setPaperState(fsState);
+        localStorage.setItem(PAPER_STORAGE_KEY, JSON.stringify(fsState));
+
+        setWatchlist(fsWatchlist);
+        localStorage.setItem(WATCHLIST_KEY, JSON.stringify(fsWatchlist));
+
+        setActiveStrategies(fsStrategies);
+        localStorage.setItem(ACTIVE_STRATEGIES_KEY, JSON.stringify(fsStrategies));
+      } catch (e) {
+        console.error("Failed to load from Firestore, using localStorage cache:", e);
+      }
+    }
 
     async function checkZerodha() {
       try {
@@ -249,6 +251,8 @@ export default function DashboardPage() {
         setZerodhaConnected(false);
       }
     }
+
+    loadFromFirestore();
     checkZerodha();
     setMounted(true);
   }, []);
@@ -333,6 +337,7 @@ export default function DashboardPage() {
     const updated = [...watchlist, newItem];
     setWatchlist(updated);
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify(updated));
+    saveWatchlist(updated);
     setWatchlistSearch("");
     setShowSearchResults(false);
     setSearchResults([]);
@@ -346,6 +351,7 @@ export default function DashboardPage() {
     const updated = watchlist.filter((w) => w.symbol !== symbol);
     setWatchlist(updated);
     localStorage.setItem(WATCHLIST_KEY, JSON.stringify(updated));
+    saveWatchlist(updated);
   };
 
   // Computed values
@@ -794,7 +800,7 @@ export default function DashboardPage() {
                       s.status === "running" ? "text-accent" : "text-text-tertiary"
                     )} />
                     <span className="text-sm font-semibold text-text-primary">
-                      {s.name || s.type}
+                      {s.name}
                     </span>
                   </div>
                   <span className={cn(

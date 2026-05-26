@@ -17,6 +17,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
+import { getPaperTradingState, savePaperTradingState, resetPaperTrading, saveOrder } from "@/lib/firebase";
 
 type OrderSide = "BUY" | "SELL";
 type OrderType = "MARKET" | "LIMIT";
@@ -75,15 +76,7 @@ interface PaperState {
 const INITIAL_BALANCE = 1000000;
 const STORAGE_KEY = "paper_trading_state";
 
-const POPULAR_STOCKS = [
-  "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
-  "HINDUNILVR", "ITC", "SBIN", "BHARTIARTL", "KOTAKBANK",
-  "LT", "AXISBANK", "MARUTI", "BAJFINANCE", "TITAN",
-  "SUNPHARMA", "WIPRO", "HCLTECH", "TATAMOTORS", "TATASTEEL",
-  "POWERGRID", "NTPC", "ONGC", "ADANIENT", "TECHM",
-];
-
-function loadState(): PaperState {
+function loadStateFromLocalStorage(): PaperState {
   if (typeof window === "undefined") {
     return { balance: INITIAL_BALANCE, holdings: [], trades: [] };
   }
@@ -101,11 +94,19 @@ function loadState(): PaperState {
   return { balance: INITIAL_BALANCE, holdings: [], trades: [] };
 }
 
-function saveState(state: PaperState) {
+function saveStateToLocalStorage(state: PaperState) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {}
 }
+
+const POPULAR_STOCKS = [
+  "RELIANCE", "TCS", "HDFCBANK", "INFY", "ICICIBANK",
+  "HINDUNILVR", "ITC", "SBIN", "BHARTIARTL", "KOTAKBANK",
+  "LT", "AXISBANK", "MARUTI", "BAJFINANCE", "TITAN",
+  "SUNPHARMA", "WIPRO", "HCLTECH", "TATAMOTORS", "TATASTEEL",
+  "POWERGRID", "NTPC", "ONGC", "ADANIENT", "TECHM",
+];
 
 function computePortfolio(holdings: Holding[], balance: number) {
   const invested = holdings.reduce((sum, h) => sum + h.qty * h.avgPrice, 0);
@@ -142,16 +143,37 @@ export default function PaperTradingPage() {
   const [validationError, setValidationError] = useState("");
 
   useEffect(() => {
-    const state = loadState();
-    setBalance(state.balance);
-    setHoldings(state.holdings);
-    setTrades(state.trades);
-    setMounted(true);
+    async function init() {
+      const cached = loadStateFromLocalStorage();
+      setBalance(cached.balance);
+      setHoldings(cached.holdings);
+      setTrades(cached.trades);
+      setMounted(true);
+
+      try {
+        const state = await getPaperTradingState();
+        setBalance(state.balance);
+        setHoldings(state.holdings as Holding[]);
+        setTrades(state.trades as Trade[]);
+        saveStateToLocalStorage({
+          balance: state.balance,
+          holdings: state.holdings as Holding[],
+          trades: state.trades as Trade[],
+        });
+      } catch (e) {
+        console.error("Firestore load failed, using localStorage cache:", e);
+      }
+    }
+    init();
   }, []);
 
   useEffect(() => {
     if (!mounted) return;
-    saveState({ balance, holdings, trades });
+    saveStateToLocalStorage({ balance, holdings, trades });
+    const timer = setTimeout(() => {
+      savePaperTradingState({ balance, holdings, trades }).catch(() => {});
+    }, 1000);
+    return () => clearTimeout(timer);
   }, [balance, holdings, trades, mounted]);
 
   useEffect(() => {
@@ -371,6 +393,21 @@ export default function PaperTradingPage() {
         orderType,
       }),
     }).catch(() => {});
+
+    saveOrder({
+      id: newTrade.id,
+      time: newTrade.time,
+      symbol: sym,
+      exchange,
+      side: orderSide,
+      qty: qtyNum,
+      price,
+      orderType,
+      product: "CNC",
+      mode: "PAPER",
+      status: "EXECUTED",
+      date: new Date().toISOString().split("T")[0],
+    }).catch(() => {});
   }
 
   function handleExit(holding: Holding) {
@@ -415,6 +452,21 @@ export default function PaperTradingPage() {
     setTrades((prev) => [newTrade, ...prev]);
     setBalance((prev) => prev + totalValue);
     setHoldings((prev) => prev.filter((h) => !(h.symbol === sym && h.exchange === holding.exchange)));
+
+    saveOrder({
+      id: newTrade.id,
+      time: newTrade.time,
+      symbol: sym,
+      exchange: holding.exchange,
+      side: "SELL",
+      qty: holding.qty,
+      price,
+      orderType: "MARKET",
+      product: "CNC",
+      mode: "PAPER",
+      status: "EXECUTED",
+      date: new Date().toISOString().split("T")[0],
+    }).catch(() => {});
   }
 
   function handleReset() {
@@ -432,6 +484,7 @@ export default function PaperTradingPage() {
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {}
+    resetPaperTrading().catch(() => {});
   }
 
   const portfolio = computePortfolio(holdings, balance);
