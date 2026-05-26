@@ -36,21 +36,9 @@ interface Trade {
 
 const INITIAL_BALANCE = 1000000;
 
-const initialHoldings: Holding[] = [
-  { symbol: "RELIANCE", qty: 10, avgPrice: 2450, ltp: 2520 },
-  { symbol: "TCS", qty: 5, avgPrice: 3800, ltp: 3750 },
-  { symbol: "INFY", qty: 20, avgPrice: 1550, ltp: 1620 },
-  { symbol: "HDFCBANK", qty: 8, avgPrice: 1680, ltp: 1710 },
-];
+const initialHoldings: Holding[] = [];
 
-const initialTrades: Trade[] = [
-  { id: "t1", time: "14:32:15", symbol: "RELIANCE", side: "BUY", qty: 10, price: 2450 },
-  { id: "t2", time: "13:45:02", symbol: "TCS", side: "BUY", qty: 5, price: 3800 },
-  { id: "t3", time: "12:18:44", symbol: "HDFCBANK", side: "BUY", qty: 8, price: 1680 },
-  { id: "t4", time: "11:55:30", symbol: "SBIN", side: "SELL", qty: 15, price: 625 },
-  { id: "t5", time: "11:02:11", symbol: "INFY", side: "BUY", qty: 20, price: 1550 },
-  { id: "t6", time: "10:30:45", symbol: "TATAMOTORS", side: "SELL", qty: 12, price: 980 },
-];
+const initialTrades: Trade[] = [];
 
 function computePortfolio(holdings: Holding[], baseBalance: number) {
   const invested = holdings.reduce((sum, h) => sum + h.qty * h.avgPrice, 0);
@@ -133,8 +121,8 @@ export default function PaperTradingPage() {
   }
 
   function handleReset() {
-    setHoldings(initialHoldings);
-    setTrades(initialTrades);
+    setHoldings([]);
+    setTrades([]);
     setBaseBalance(INITIAL_BALANCE);
     setSymbol("");
     setQty("");

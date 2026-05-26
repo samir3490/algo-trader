@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowDownCircle,
@@ -8,6 +9,7 @@ import {
   CheckCircle2,
   Circle,
   Clock,
+  Inbox,
   Link2,
   Power,
   Search,
@@ -50,32 +52,11 @@ interface Holding {
   dayChange: number;
 }
 
-const mockPositions: Position[] = [
-  { symbol: "RELIANCE", qty: 50, avgPrice: 2485.6, ltp: 2512.35, pnl: 1337.5, product: "MIS" },
-  { symbol: "HDFCBANK", qty: -25, avgPrice: 1642.0, ltp: 1658.75, pnl: -418.75, product: "MIS" },
-  { symbol: "INFY", qty: 100, avgPrice: 1485.2, ltp: 1492.8, pnl: 760.0, product: "MIS" },
-  { symbol: "TCS", qty: 30, avgPrice: 3650.0, ltp: 3628.45, pnl: -646.5, product: "NRML" },
-  { symbol: "ICICIBANK", qty: 75, avgPrice: 1125.5, ltp: 1138.9, pnl: 1005.0, product: "MIS" },
-];
-
-const mockOrders: Order[] = [
-  { time: "09:16:32", symbol: "RELIANCE", type: "MARKET", side: "BUY", qty: 50, price: 2485.6, status: "COMPLETE" },
-  { time: "09:18:45", symbol: "HDFCBANK", type: "LIMIT", side: "SELL", qty: 25, price: 1642.0, status: "COMPLETE" },
-  { time: "09:22:10", symbol: "INFY", type: "MARKET", side: "BUY", qty: 100, price: 1485.2, status: "COMPLETE" },
-  { time: "09:45:30", symbol: "TATAMOTORS", type: "SL", side: "BUY", qty: 200, price: 685.0, status: "PENDING" },
-  { time: "10:05:12", symbol: "SBIN", type: "LIMIT", side: "BUY", qty: 150, price: 780.0, status: "REJECTED" },
-  { time: "10:30:00", symbol: "TCS", type: "MARKET", side: "BUY", qty: 30, price: 3650.0, status: "COMPLETE" },
-  { time: "11:15:22", symbol: "ICICIBANK", type: "MARKET", side: "BUY", qty: 75, price: 1125.5, status: "COMPLETE" },
-];
-
-const mockHoldings: Holding[] = [
-  { symbol: "RELIANCE", qty: 100, avgPrice: 2320.5, ltp: 2512.35, pnl: 19185.0, dayChange: 1.25 },
-  { symbol: "TCS", qty: 50, avgPrice: 3420.0, ltp: 3628.45, pnl: 10422.5, dayChange: -0.58 },
-  { symbol: "INFY", qty: 200, avgPrice: 1380.0, ltp: 1492.8, pnl: 22560.0, dayChange: 0.82 },
-  { symbol: "HDFCBANK", qty: 75, avgPrice: 1520.0, ltp: 1658.75, pnl: 10406.25, dayChange: 0.45 },
-  { symbol: "WIPRO", qty: 300, avgPrice: 425.6, ltp: 448.9, pnl: 6990.0, dayChange: -0.32 },
-  { symbol: "BAJFINANCE", qty: 20, avgPrice: 6850.0, ltp: 7245.6, pnl: 7912.0, dayChange: 1.85 },
-];
+const ERROR_MESSAGES: Record<string, string> = {
+  api_key_missing: "Zerodha API key is not configured. Please add KITE_API_KEY to your environment variables.",
+  auth_failed: "Zerodha authentication failed. Please try connecting again.",
+  session_failed: "Failed to create Zerodha session. Your request token may have expired. Please reconnect.",
+};
 
 const strategies = [
   "Moving Average Crossover",
@@ -86,8 +67,14 @@ const strategies = [
   "Momentum Strategy",
 ];
 
-export default function LiveTradingPage() {
+function LiveTradingContent() {
+  const searchParams = useSearchParams();
+
   const [connected, setConnected] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [holdings, setHoldings] = useState<Holding[]>([]);
   const [currentTime, setCurrentTime] = useState("");
   const [marketOpen, setMarketOpen] = useState(false);
   const [marketStatus, setMarketStatus] = useState("");
@@ -132,7 +119,17 @@ export default function LiveTradingPage() {
     return () => clearInterval(interval);
   }, []);
 
-  const netPnl = mockPositions.reduce((sum, p) => sum + p.pnl, 0);
+  useEffect(() => {
+    if (searchParams.get("connected") === "true") {
+      setConnected(true);
+    }
+    const error = searchParams.get("error");
+    if (error && ERROR_MESSAGES[error]) {
+      setErrorMessage(ERROR_MESSAGES[error]);
+    }
+  }, [searchParams]);
+
+  const netPnl = positions.reduce((sum, p) => sum + p.pnl, 0);
 
   const handlePlaceOrder = () => {
     alert(
@@ -209,17 +206,15 @@ export default function LiveTradingPage() {
         </div>
       </div>
 
-      <div className="p-6 space-y-6">
-        {/* Demo toggle for connection */}
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <button
-            onClick={() => setConnected(!connected)}
-            className="text-blue-400 hover:text-blue-300 underline"
-          >
-            [Demo: Toggle Connection]
-          </button>
+      {/* Error Banner */}
+      {errorMessage && (
+        <div className="bg-red-900/40 border-b border-red-700/50 px-6 py-3 flex items-center gap-3">
+          <ShieldAlert className="h-5 w-5 text-red-400 shrink-0" />
+          <span className="text-red-200 text-sm font-medium">{errorMessage}</span>
         </div>
+      )}
 
+      <div className="p-6 space-y-6">
         {/* Main Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left Column - Order Placement */}
@@ -431,128 +426,157 @@ export default function LiveTradingPage() {
                 {/* Positions Tab */}
                 {activeTab === "positions" && (
                   <div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="text-gray-400 text-xs border-b border-gray-800">
-                            <th className="text-left py-2 px-3 font-medium">Symbol</th>
-                            <th className="text-right py-2 px-3 font-medium">Qty</th>
-                            <th className="text-right py-2 px-3 font-medium">Avg Price</th>
-                            <th className="text-right py-2 px-3 font-medium">LTP</th>
-                            <th className="text-right py-2 px-3 font-medium">P&L</th>
-                            <th className="text-right py-2 px-3 font-medium">Product</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {mockPositions.map((pos, i) => (
-                            <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                              <td className="py-2.5 px-3 font-medium">{pos.symbol}</td>
-                              <td className={cn("text-right py-2.5 px-3", pos.qty > 0 ? "text-green-400" : "text-red-400")}>
-                                {pos.qty}
-                              </td>
-                              <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(pos.avgPrice)}</td>
-                              <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(pos.ltp)}</td>
-                              <td className={cn("text-right py-2.5 px-3 font-medium", pos.pnl >= 0 ? "text-green-400" : "text-red-400")}>
-                                {formatCurrency(pos.pnl)}
-                              </td>
-                              <td className="text-right py-2.5 px-3">
-                                <span className="text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-300">{pos.product}</span>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                    <div className="mt-4 pt-3 border-t border-gray-800 flex items-center justify-between">
-                      <span className="text-sm text-gray-400">Net P&L</span>
-                      <span className={cn("text-lg font-bold", netPnl >= 0 ? "text-green-400" : "text-red-400")}>
-                        {formatCurrency(netPnl)}
-                      </span>
-                    </div>
+                    {positions.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                        <Inbox className="h-10 w-10 mb-3 text-gray-600" />
+                        <p className="text-sm">No open positions.</p>
+                        <p className="text-xs text-gray-600 mt-1">Place an order to see positions here.</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-gray-400 text-xs border-b border-gray-800">
+                                <th className="text-left py-2 px-3 font-medium">Symbol</th>
+                                <th className="text-right py-2 px-3 font-medium">Qty</th>
+                                <th className="text-right py-2 px-3 font-medium">Avg Price</th>
+                                <th className="text-right py-2 px-3 font-medium">LTP</th>
+                                <th className="text-right py-2 px-3 font-medium">P&L</th>
+                                <th className="text-right py-2 px-3 font-medium">Product</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {positions.map((pos, i) => (
+                                <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                  <td className="py-2.5 px-3 font-medium">{pos.symbol}</td>
+                                  <td className={cn("text-right py-2.5 px-3", pos.qty > 0 ? "text-green-400" : "text-red-400")}>
+                                    {pos.qty}
+                                  </td>
+                                  <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(pos.avgPrice)}</td>
+                                  <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(pos.ltp)}</td>
+                                  <td className={cn("text-right py-2.5 px-3 font-medium", pos.pnl >= 0 ? "text-green-400" : "text-red-400")}>
+                                    {formatCurrency(pos.pnl)}
+                                  </td>
+                                  <td className="text-right py-2.5 px-3">
+                                    <span className="text-xs bg-gray-800 px-2 py-0.5 rounded text-gray-300">{pos.product}</span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-gray-800 flex items-center justify-between">
+                          <span className="text-sm text-gray-400">Net P&L</span>
+                          <span className={cn("text-lg font-bold", netPnl >= 0 ? "text-green-400" : "text-red-400")}>
+                            {formatCurrency(netPnl)}
+                          </span>
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
 
                 {/* Orders Tab */}
                 {activeTab === "orders" && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-gray-400 text-xs border-b border-gray-800">
-                          <th className="text-left py-2 px-3 font-medium">Time</th>
-                          <th className="text-left py-2 px-3 font-medium">Symbol</th>
-                          <th className="text-left py-2 px-3 font-medium">Type</th>
-                          <th className="text-left py-2 px-3 font-medium">Side</th>
-                          <th className="text-right py-2 px-3 font-medium">Qty</th>
-                          <th className="text-right py-2 px-3 font-medium">Price</th>
-                          <th className="text-right py-2 px-3 font-medium">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mockOrders.map((order, i) => (
-                          <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                            <td className="py-2.5 px-3 text-gray-400 font-mono text-xs">{order.time}</td>
-                            <td className="py-2.5 px-3 font-medium">{order.symbol}</td>
-                            <td className="py-2.5 px-3 text-gray-300 text-xs">{order.type}</td>
-                            <td className="py-2.5 px-3">
-                              <span className={cn("text-xs font-semibold", order.side === "BUY" ? "text-green-400" : "text-red-400")}>
-                                {order.side}
-                              </span>
-                            </td>
-                            <td className="text-right py-2.5 px-3 text-gray-300">{order.qty}</td>
-                            <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(order.price)}</td>
-                            <td className="text-right py-2.5 px-3">
-                              <span
-                                className={cn(
-                                  "text-xs px-2 py-0.5 rounded-full font-medium",
-                                  order.status === "COMPLETE" && "bg-green-900/50 text-green-400",
-                                  order.status === "PENDING" && "bg-yellow-900/50 text-yellow-400",
-                                  order.status === "REJECTED" && "bg-red-900/50 text-red-400",
-                                  order.status === "CANCELLED" && "bg-gray-800 text-gray-400"
-                                )}
-                              >
-                                {order.status}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div>
+                    {orders.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                        <Clock className="h-10 w-10 mb-3 text-gray-600" />
+                        <p className="text-sm">No orders placed today.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-gray-400 text-xs border-b border-gray-800">
+                              <th className="text-left py-2 px-3 font-medium">Time</th>
+                              <th className="text-left py-2 px-3 font-medium">Symbol</th>
+                              <th className="text-left py-2 px-3 font-medium">Type</th>
+                              <th className="text-left py-2 px-3 font-medium">Side</th>
+                              <th className="text-right py-2 px-3 font-medium">Qty</th>
+                              <th className="text-right py-2 px-3 font-medium">Price</th>
+                              <th className="text-right py-2 px-3 font-medium">Status</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {orders.map((order, i) => (
+                              <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                <td className="py-2.5 px-3 text-gray-400 font-mono text-xs">{order.time}</td>
+                                <td className="py-2.5 px-3 font-medium">{order.symbol}</td>
+                                <td className="py-2.5 px-3 text-gray-300 text-xs">{order.type}</td>
+                                <td className="py-2.5 px-3">
+                                  <span className={cn("text-xs font-semibold", order.side === "BUY" ? "text-green-400" : "text-red-400")}>
+                                    {order.side}
+                                  </span>
+                                </td>
+                                <td className="text-right py-2.5 px-3 text-gray-300">{order.qty}</td>
+                                <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(order.price)}</td>
+                                <td className="text-right py-2.5 px-3">
+                                  <span
+                                    className={cn(
+                                      "text-xs px-2 py-0.5 rounded-full font-medium",
+                                      order.status === "COMPLETE" && "bg-green-900/50 text-green-400",
+                                      order.status === "PENDING" && "bg-yellow-900/50 text-yellow-400",
+                                      order.status === "REJECTED" && "bg-red-900/50 text-red-400",
+                                      order.status === "CANCELLED" && "bg-gray-800 text-gray-400"
+                                    )}
+                                  >
+                                    {order.status}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {/* Holdings Tab */}
                 {activeTab === "holdings" && (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-gray-400 text-xs border-b border-gray-800">
-                          <th className="text-left py-2 px-3 font-medium">Symbol</th>
-                          <th className="text-right py-2 px-3 font-medium">Qty</th>
-                          <th className="text-right py-2 px-3 font-medium">Avg Price</th>
-                          <th className="text-right py-2 px-3 font-medium">LTP</th>
-                          <th className="text-right py-2 px-3 font-medium">P&L</th>
-                          <th className="text-right py-2 px-3 font-medium">Day Change</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {mockHoldings.map((holding, i) => (
-                          <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                            <td className="py-2.5 px-3 font-medium">{holding.symbol}</td>
-                            <td className="text-right py-2.5 px-3 text-gray-300">{holding.qty}</td>
-                            <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(holding.avgPrice)}</td>
-                            <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(holding.ltp)}</td>
-                            <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnl >= 0 ? "text-green-400" : "text-red-400")}>
-                              {formatCurrency(holding.pnl)}
-                            </td>
-                            <td className="text-right py-2.5 px-3">
-                              <span className={cn("text-xs font-medium", holding.dayChange >= 0 ? "text-green-400" : "text-red-400")}>
-                                {formatPercent(holding.dayChange)}
-                              </span>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                  <div>
+                    {holdings.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+                        <Link2 className="h-10 w-10 mb-3 text-gray-600" />
+                        <p className="text-sm">No holdings found.</p>
+                        <p className="text-xs text-gray-600 mt-1">Connect to Zerodha to view your holdings.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-gray-400 text-xs border-b border-gray-800">
+                              <th className="text-left py-2 px-3 font-medium">Symbol</th>
+                              <th className="text-right py-2 px-3 font-medium">Qty</th>
+                              <th className="text-right py-2 px-3 font-medium">Avg Price</th>
+                              <th className="text-right py-2 px-3 font-medium">LTP</th>
+                              <th className="text-right py-2 px-3 font-medium">P&L</th>
+                              <th className="text-right py-2 px-3 font-medium">Day Change</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {holdings.map((holding, i) => (
+                              <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                <td className="py-2.5 px-3 font-medium">{holding.symbol}</td>
+                                <td className="text-right py-2.5 px-3 text-gray-300">{holding.qty}</td>
+                                <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(holding.avgPrice)}</td>
+                                <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(holding.ltp)}</td>
+                                <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnl >= 0 ? "text-green-400" : "text-red-400")}>
+                                  {formatCurrency(holding.pnl)}
+                                </td>
+                                <td className="text-right py-2.5 px-3">
+                                  <span className={cn("text-xs font-medium", holding.dayChange >= 0 ? "text-green-400" : "text-red-400")}>
+                                    {formatPercent(holding.dayChange)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -652,5 +676,13 @@ export default function LiveTradingPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LiveTradingPage() {
+  return (
+    <Suspense>
+      <LiveTradingContent />
+    </Suspense>
   );
 }

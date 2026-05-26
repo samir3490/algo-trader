@@ -34,21 +34,8 @@ interface Order {
   mode: OrderMode;
 }
 
-const mockOrders: Order[] = [
-  { id: "ORD001", time: "2026-05-26T09:15:32", symbol: "RELIANCE", exchange: "NSE", side: "BUY", type: "MARKET", quantity: 50, price: 2487.35, status: "EXECUTED", mode: "LIVE" },
-  { id: "ORD002", time: "2026-05-26T09:18:45", symbol: "TCS", exchange: "NSE", side: "BUY", type: "LIMIT", quantity: 25, price: 3654.00, status: "PENDING", mode: "LIVE" },
-  { id: "ORD003", time: "2026-05-26T09:22:10", symbol: "INFY", exchange: "NSE", side: "SELL", type: "MARKET", quantity: 100, price: 1478.90, status: "EXECUTED", mode: "PAPER" },
-  { id: "ORD004", time: "2026-05-26T09:30:00", symbol: "HDFCBANK", exchange: "NSE", side: "BUY", type: "SL", quantity: 75, price: 1623.50, status: "OPEN", mode: "LIVE" },
-  { id: "ORD005", time: "2026-05-26T09:35:22", symbol: "ICICIBANK", exchange: "NSE", side: "SELL", type: "LIMIT", quantity: 200, price: 945.75, status: "REJECTED", mode: "PAPER" },
-  { id: "ORD006", time: "2026-05-26T09:42:15", symbol: "SBIN", exchange: "NSE", side: "BUY", type: "MARKET", quantity: 150, price: 578.20, status: "EXECUTED", mode: "PAPER" },
-  { id: "ORD007", time: "2026-05-26T10:05:33", symbol: "WIPRO", exchange: "NSE", side: "BUY", type: "SL-M", quantity: 300, price: 412.60, status: "CANCELLED", mode: "LIVE" },
-  { id: "ORD008", time: "2026-05-26T10:12:48", symbol: "TATAMOTORS", exchange: "NSE", side: "SELL", type: "MARKET", quantity: 80, price: 652.30, status: "EXECUTED", mode: "PAPER" },
-  { id: "ORD009", time: "2026-05-26T10:25:10", symbol: "BAJFINANCE", exchange: "NSE", side: "BUY", type: "LIMIT", quantity: 30, price: 6780.00, status: "PENDING", mode: "LIVE" },
-  { id: "ORD010", time: "2026-05-26T10:30:55", symbol: "MARUTI", exchange: "NSE", side: "SELL", type: "MARKET", quantity: 10, price: 12345.50, status: "EXECUTED", mode: "PAPER" },
-  { id: "ORD011", time: "2026-05-26T10:45:20", symbol: "ADANIENT", exchange: "NSE", side: "BUY", type: "SL", quantity: 120, price: 2310.75, status: "OPEN", mode: "PAPER" },
-  { id: "ORD012", time: "2026-05-26T11:02:00", symbol: "AXISBANK", exchange: "NSE", side: "BUY", type: "MARKET", quantity: 60, price: 1085.40, status: "EXECUTED", mode: "LIVE" },
-  { id: "ORD013", time: "2026-05-26T11:15:30", symbol: "SUNPHARMA", exchange: "NSE", side: "SELL", type: "LIMIT", quantity: 90, price: 1125.00, status: "REJECTED", mode: "LIVE" },
-];
+
+
 
 const statusConfig: Record<OrderStatus, { label: string; color: string; bg: string; icon: React.ElementType }> = {
   EXECUTED: { label: "Executed", color: "text-profit", bg: "bg-profit/10", icon: CheckCircle2 },
@@ -70,11 +57,12 @@ function formatTime(iso: string): string {
 }
 
 export default function OrdersPage() {
+  const [orders] = useState<Order[]>([]);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filtered = mockOrders.filter((o) => {
+  const filtered = orders.filter((o) => {
     if (activeTab === "paper" && o.mode !== "PAPER") return false;
     if (activeTab === "live" && o.mode !== "LIVE") return false;
     if (statusFilter !== "ALL" && o.status !== statusFilter) return false;
@@ -83,9 +71,9 @@ export default function OrdersPage() {
   });
 
   const counts = {
-    all: mockOrders.length,
-    paper: mockOrders.filter((o) => o.mode === "PAPER").length,
-    live: mockOrders.filter((o) => o.mode === "LIVE").length,
+    all: orders.length,
+    paper: orders.filter((o) => o.mode === "PAPER").length,
+    live: orders.filter((o) => o.mode === "LIVE").length,
   };
 
   return (
@@ -241,7 +229,7 @@ export default function OrdersPage() {
 
       {/* Footer Summary */}
       <div className="flex items-center justify-between text-sm text-text-tertiary">
-        <span>Showing {filtered.length} of {mockOrders.length} orders</span>
+        <span>Showing {filtered.length} of {orders.length} orders</span>
         <span>
           Total value: {formatCurrency(
             filtered

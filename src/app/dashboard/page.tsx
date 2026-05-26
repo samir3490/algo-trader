@@ -12,6 +12,8 @@ import {
   Zap,
   Target,
   ShieldCheck,
+  Inbox,
+  PackageOpen,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -23,81 +25,16 @@ import {
 } from "recharts";
 import { formatCurrency, formatPercent, getMarketStatus, isMarketOpen } from "@/lib/utils";
 
-// ── Mock Data ──────────────────────────────────────────────────────────
+// ── Portfolio Chart Data (flat line at initial balance) ─────────────────
 
-function generatePortfolioData() {
-  const points = [];
-  let value = 950000;
-  const target = 1012450;
-  const step = (target - value) / 29;
-
-  for (let i = 0; i < 30; i++) {
-    const noise = (Math.random() - 0.45) * 8000;
-    value += step + noise;
-    const date = new Date();
-    date.setDate(date.getDate() - (29 - i));
-    points.push({
-      date: date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-      value: Math.round(value),
-    });
-  }
-  points[points.length - 1].value = 1012450;
-  return points;
-}
-
-const portfolioData = generatePortfolioData();
-
-const watchlist = [
-  { symbol: "RELIANCE", ltp: 2934.55, change: 42.3, changePct: 1.46 },
-  { symbol: "TCS", ltp: 3842.1, change: -28.65, changePct: -0.74 },
-  { symbol: "HDFCBANK", ltp: 1678.9, change: 15.4, changePct: 0.93 },
-  { symbol: "INFY", ltp: 1542.35, change: -12.8, changePct: -0.82 },
-  { symbol: "ICICIBANK", ltp: 1123.45, change: 8.75, changePct: 0.78 },
-  { symbol: "HINDUNILVR", ltp: 2456.7, change: -35.2, changePct: -1.41 },
-  { symbol: "SBIN", ltp: 834.15, change: 11.6, changePct: 1.41 },
-  { symbol: "BHARTIARTL", ltp: 1587.25, change: 23.45, changePct: 1.5 },
-  { symbol: "ITC", ltp: 468.3, change: 3.15, changePct: 0.68 },
-  { symbol: "KOTAKBANK", ltp: 1834.55, change: -18.9, changePct: -1.02 },
-];
-
-const recentTrades = [
-  { symbol: "RELIANCE", side: "BUY" as const, qty: 50, price: 2892.25, time: "14:32" },
-  { symbol: "TCS", side: "SELL" as const, qty: 25, price: 3870.75, time: "13:45" },
-  { symbol: "HDFCBANK", side: "BUY" as const, qty: 100, price: 1663.5, time: "11:20" },
-  { symbol: "INFY", side: "SELL" as const, qty: 75, price: 1555.15, time: "10:58" },
-  { symbol: "SBIN", side: "BUY" as const, qty: 200, price: 822.55, time: "10:15" },
-  { symbol: "ICICIBANK", side: "BUY" as const, qty: 60, price: 1114.7, time: "09:42" },
-];
-
-const activeStrategies = [
-  {
-    name: "NIFTY Mean Reversion",
-    type: "Mean Reversion",
-    symbol: "NIFTY 50",
-    status: "Running",
-    pnl: 8240,
-    pnlPct: 2.1,
-    trades: 47,
-  },
-  {
-    name: "BANKNIFTY Momentum",
-    type: "Momentum",
-    symbol: "BANKNIFTY",
-    status: "Running",
-    pnl: 3150,
-    pnlPct: 1.4,
-    trades: 23,
-  },
-  {
-    name: "RELIANCE Swing",
-    type: "Swing Trading",
-    symbol: "RELIANCE",
-    status: "Paused",
-    pnl: 1060,
-    pnlPct: 0.5,
-    trades: 12,
-  },
-];
+const portfolioData = Array.from({ length: 30 }, (_, i) => {
+  const date = new Date();
+  date.setDate(date.getDate() - (29 - i));
+  return {
+    date: date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+    value: 1000000,
+  };
+});
 
 // ── Custom Tooltip ─────────────────────────────────────────────────────
 
@@ -154,31 +91,26 @@ export default function DashboardPage() {
             {formatCurrency(1000000)}
           </p>
           <div className="flex items-center gap-1 mt-1">
-            <ArrowUpRight className="h-3.5 w-3.5 text-profit" />
-            <span className="text-sm font-medium text-profit">
-              {formatPercent(2.5)}
+            <span className="text-sm font-medium text-text-secondary">
+              {formatPercent(0)}
             </span>
             <span className="text-xs text-text-tertiary ml-1">all time</span>
           </div>
         </div>
 
         {/* Today's P&L */}
-        <div className="card glow-profit">
+        <div className="card">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-text-secondary">Today&apos;s P&amp;L</span>
-            <div className="rounded-lg bg-profit-muted p-2">
-              <TrendingUp className="h-4 w-4 text-profit" />
+            <div className="rounded-lg bg-bg-tertiary p-2">
+              <TrendingUp className="h-4 w-4 text-text-secondary" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-profit">
-            {formatCurrency(12450)}
+          <p className="text-2xl font-bold text-text-primary">
+            {formatCurrency(0)}
           </p>
           <div className="flex items-center gap-1 mt-1">
-            <ArrowUpRight className="h-3.5 w-3.5 text-profit" />
-            <span className="text-sm font-medium text-profit">
-              {formatPercent(1.25)}
-            </span>
-            <span className="text-xs text-text-tertiary ml-1">today</span>
+            <span className="text-sm text-text-secondary">No trades today</span>
           </div>
         </div>
 
@@ -190,10 +122,9 @@ export default function DashboardPage() {
               <Zap className="h-4 w-4 text-[#a78bfa]" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-text-primary">3</p>
+          <p className="text-2xl font-bold text-text-primary">0</p>
           <div className="flex items-center gap-1 mt-1">
-            <span className="text-sm text-text-secondary">2 running</span>
-            <span className="text-xs text-text-tertiary">· 1 paused</span>
+            <span className="text-sm text-text-secondary">No strategies active</span>
           </div>
         </div>
 
@@ -252,7 +183,7 @@ export default function DashboardPage() {
                 tickLine={false}
                 tick={{ fill: "#6b7280", fontSize: 11 }}
                 tickFormatter={(v: number) => `₹${(v / 100000).toFixed(1)}L`}
-                domain={["dataMin - 10000", "dataMax + 10000"]}
+                domain={[990000, 1010000]}
                 width={60}
               />
               <Tooltip content={<ChartTooltip />} />
@@ -276,56 +207,11 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold text-text-primary">Watchlist</h2>
             <span className="text-xs text-text-tertiary">NSE</span>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-text-tertiary text-xs">
-                  <th className="text-left font-medium px-5 py-2.5">Symbol</th>
-                  <th className="text-right font-medium px-5 py-2.5">LTP</th>
-                  <th className="text-right font-medium px-5 py-2.5">Change</th>
-                  <th className="text-right font-medium px-5 py-2.5">Change %</th>
-                </tr>
-              </thead>
-              <tbody>
-                {watchlist.map((stock) => {
-                  const positive = stock.change >= 0;
-                  return (
-                    <tr
-                      key={stock.symbol}
-                      className="border-b border-border/50 hover:bg-bg-hover cursor-pointer transition-colors"
-                    >
-                      <td className="px-5 py-3 font-medium text-text-primary">
-                        {stock.symbol}
-                      </td>
-                      <td className="px-5 py-3 text-right font-mono text-text-primary">
-                        {formatCurrency(stock.ltp)}
-                      </td>
-                      <td
-                        className={`px-5 py-3 text-right font-mono ${
-                          positive ? "text-profit" : "text-loss"
-                        }`}
-                      >
-                        <span className="inline-flex items-center gap-1">
-                          {positive ? (
-                            <ArrowUpRight className="h-3 w-3" />
-                          ) : (
-                            <ArrowDownRight className="h-3 w-3" />
-                          )}
-                          {formatCurrency(Math.abs(stock.change))}
-                        </span>
-                      </td>
-                      <td
-                        className={`px-5 py-3 text-right font-mono ${
-                          positive ? "text-profit" : "text-loss"
-                        }`}
-                      >
-                        {formatPercent(stock.changePct)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+          <div className="flex flex-col items-center justify-center py-12 px-5 text-center">
+            <Inbox className="h-10 w-10 text-text-tertiary mb-3" />
+            <p className="text-sm text-text-secondary">
+              Add stocks to your watchlist to track them here.
+            </p>
           </div>
         </div>
 
@@ -335,42 +221,11 @@ export default function DashboardPage() {
             <h2 className="text-lg font-semibold text-text-primary">Recent Trades</h2>
             <span className="text-xs text-text-tertiary">Paper Trading</span>
           </div>
-          <div className="divide-y divide-border/50">
-            {recentTrades.map((trade, i) => {
-              const isBuy = trade.side === "BUY";
-              return (
-                <div
-                  key={`${trade.symbol}-${i}`}
-                  className="flex items-center justify-between px-5 py-3.5 hover:bg-bg-hover transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={`rounded-md px-2 py-0.5 text-xs font-bold ${
-                        isBuy
-                          ? "bg-profit-muted text-profit"
-                          : "bg-loss-muted text-loss"
-                      }`}
-                    >
-                      {trade.side}
-                    </div>
-                    <div>
-                      <p className="font-medium text-text-primary text-sm">
-                        {trade.symbol}
-                      </p>
-                      <p className="text-xs text-text-tertiary">
-                        {trade.qty} shares @ {formatCurrency(trade.price)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-sm font-mono text-text-primary">
-                      {formatCurrency(trade.qty * trade.price)}
-                    </p>
-                    <p className="text-xs text-text-tertiary">{trade.time} IST</p>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="flex flex-col items-center justify-center py-12 px-5 text-center">
+            <PackageOpen className="h-10 w-10 text-text-tertiary mb-3" />
+            <p className="text-sm text-text-secondary">
+              No trades yet. Place your first order in Paper Trading.
+            </p>
           </div>
         </div>
       </div>
@@ -380,71 +235,11 @@ export default function DashboardPage() {
         <h2 className="text-lg font-semibold text-text-primary mb-4">
           Active Strategies
         </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {activeStrategies.map((strategy) => {
-            const profitable = strategy.pnl >= 0;
-            const running = strategy.status === "Running";
-            return (
-              <div key={strategy.name} className="card-hover">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    {strategy.type === "Mean Reversion" && (
-                      <Target className="h-4 w-4 text-accent" />
-                    )}
-                    {strategy.type === "Momentum" && (
-                      <TrendingUp className="h-4 w-4 text-warning" />
-                    )}
-                    {strategy.type === "Swing Trading" && (
-                      <ShieldCheck className="h-4 w-4 text-info" />
-                    )}
-                    <h3 className="font-semibold text-text-primary text-sm">
-                      {strategy.name}
-                    </h3>
-                  </div>
-                  <div
-                    className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      running
-                        ? "bg-profit-muted text-profit"
-                        : "bg-bg-tertiary text-text-tertiary"
-                    }`}
-                  >
-                    {running && <span className="pulse-dot bg-profit !h-1.5 !w-1.5" />}
-                    {strategy.status}
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 mb-4">
-                  <span className="rounded bg-bg-tertiary px-2 py-0.5 text-xs font-mono text-text-secondary">
-                    {strategy.symbol}
-                  </span>
-                  <span className="text-xs text-text-tertiary">{strategy.type}</span>
-                </div>
-
-                <div className="flex items-center justify-between pt-3 border-t border-border">
-                  <div>
-                    <p className="text-xs text-text-tertiary mb-0.5">P&amp;L</p>
-                    <p
-                      className={`text-sm font-bold font-mono ${
-                        profitable ? "text-profit" : "text-loss"
-                      }`}
-                    >
-                      {profitable ? "+" : ""}
-                      {formatCurrency(strategy.pnl)}{" "}
-                      <span className="text-xs font-normal">
-                        ({formatPercent(strategy.pnlPct)})
-                      </span>
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-xs text-text-tertiary mb-0.5">Trades</p>
-                    <p className="text-sm font-medium text-text-primary">
-                      {strategy.trades}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div className="card flex flex-col items-center justify-center py-12 text-center">
+          <Inbox className="h-10 w-10 text-text-tertiary mb-3" />
+          <p className="text-sm text-text-secondary">
+            No active strategies. Create one in the Strategies page.
+          </p>
         </div>
       </div>
     </div>

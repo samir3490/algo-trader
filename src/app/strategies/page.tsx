@@ -113,30 +113,7 @@ function getStrategyDef(type: StrategyType): StrategyDefinition {
 }
 
 export default function StrategiesPage() {
-  const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([
-    {
-      id: "active-1",
-      type: "sma",
-      symbol: "RELIANCE",
-      mode: "paper",
-      status: "running",
-      signalsToday: 3,
-      pnl: 2450.0,
-      params: { shortPeriod: 9, longPeriod: 21 },
-      timeframe: "15min",
-    },
-    {
-      id: "active-2",
-      type: "rsi",
-      symbol: "INFY",
-      mode: "live",
-      status: "running",
-      signalsToday: 1,
-      pnl: -860.5,
-      params: { period: 14, oversold: 30, overbought: 70 },
-      timeframe: "5min",
-    },
-  ]);
+  const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([]);
 
   const [cardState, setCardState] = useState<
     Record<
