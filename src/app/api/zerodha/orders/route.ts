@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { KiteConnect } from "kiteconnect";
+import { sendOrderEmail } from "@/lib/email";
 
 export async function GET(request: NextRequest) {
   const accessToken = request.cookies.get("kite_access_token")?.value;
@@ -87,20 +88,32 @@ export async function POST(request: NextRequest) {
       validity: body.validity || "DAY",
     };
 
-    // Use proxy if configured, otherwise fall back to direct API call
+    let orderId: string | undefined;
+
     if (process.env.ZERODHA_PROXY_URL) {
       const result = await placeOrderViaProxy(apiKey, accessToken, orderParams);
-      return NextResponse.json({
-        orderId: result?.data?.order_id,
-        status: "success",
-      });
+      orderId = result?.data?.order_id;
+    } else {
+      const kite = new KiteConnect({ api_key: apiKey });
+      kite.setAccessToken(accessToken);
+      const result = await kite.placeOrder("regular", orderParams as any);
+      orderId = result.order_id;
     }
 
-    // Direct call (works only if Vercel has a whitelisted static IP)
-    const kite = new KiteConnect({ api_key: apiKey });
-    kite.setAccessToken(accessToken);
-    const result = await kite.placeOrder("regular", orderParams as any);
-    return NextResponse.json({ orderId: result.order_id, status: "success" });
+    sendOrderEmail({
+      mode: "LIVE",
+      symbol: orderParams.tradingsymbol,
+      exchange: orderParams.exchange,
+      side: orderParams.transaction_type as "BUY" | "SELL",
+      quantity: Number(orderParams.quantity),
+      price: Number(orderParams.price) || 0,
+      orderType: orderParams.order_type,
+      product: orderParams.product,
+      orderId,
+      status: "PLACED",
+    }).catch(() => {});
+
+    return NextResponse.json({ orderId, status: "success" });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

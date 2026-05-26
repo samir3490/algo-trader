@@ -360,6 +360,20 @@ export default function PaperTradingPage() {
     setManualPrice("");
     setQuote(null);
     setValidationError("");
+
+    fetch("/api/notify/order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "PAPER",
+        symbol: sym,
+        exchange,
+        side: orderSide,
+        quantity: qtyNum,
+        price,
+        orderType,
+      }),
+    }).catch(() => {});
   }
 
   function handleExit(holding: Holding) {
