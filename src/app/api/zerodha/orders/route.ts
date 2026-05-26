@@ -46,7 +46,17 @@ async function placeOrderViaProxy(
     }),
   });
 
-  const data = await res.json();
+  const responseText = await res.text();
+
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch {
+    throw new Error(
+      `Proxy returned invalid response (HTTP ${res.status}). ` +
+      `URL: ${proxyUrl} — Response: ${responseText.substring(0, 200)}`
+    );
+  }
 
   if (!res.ok) {
     throw new Error(data?.message || data?.error || `Proxy error (${res.status})`);
