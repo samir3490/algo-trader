@@ -1,16 +1,14 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useCallback, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
-  ArrowDownCircle,
-  ArrowUpCircle,
   CheckCircle2,
-  Circle,
   Clock,
   Inbox,
   Link2,
+  Loader2,
   Power,
   Search,
   ShieldAlert,
@@ -30,17 +28,17 @@ interface Position {
   avgPrice: number;
   ltp: number;
   pnl: number;
-  product: ProductType;
+  product: string;
 }
 
-interface Order {
+interface KiteOrder {
   time: string;
   symbol: string;
-  type: OrderType;
-  side: TransactionType;
+  type: string;
+  side: string;
   qty: number;
   price: number;
-  status: "COMPLETE" | "PENDING" | "REJECTED" | "CANCELLED";
+  status: string;
 }
 
 interface Holding {
@@ -59,27 +57,30 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 const strategies = [
-  "Moving Average Crossover",
-  "RSI Mean Reversion",
-  "VWAP Scalping",
-  "Bollinger Band Breakout",
-  "Opening Range Breakout",
-  "Momentum Strategy",
+  "SMA Crossover",
+  "EMA Crossover",
+  "RSI Strategy",
+  "MACD Crossover",
+  "Bollinger Bands",
 ];
 
 function LiveTradingContent() {
   const searchParams = useSearchParams();
 
   const [connected, setConnected] = useState(false);
+  const [kiteUserId, setKiteUserId] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+
   const [positions, setPositions] = useState<Position[]>([]);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [orders, setOrders] = useState<KiteOrder[]>([]);
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [currentTime, setCurrentTime] = useState("");
   const [marketOpen, setMarketOpen] = useState(false);
   const [marketStatus, setMarketStatus] = useState("");
 
-  // Order form state
   const [symbol, setSymbol] = useState("");
   const [exchange, setExchange] = useState<Exchange>("NSE");
   const [transactionType, setTransactionType] = useState<TransactionType>("BUY");
@@ -89,13 +90,11 @@ function LiveTradingContent() {
   const [price, setPrice] = useState("");
   const [triggerPrice, setTriggerPrice] = useState("");
 
-  // Right panel tabs
   const [activeTab, setActiveTab] = useState<TabType>("positions");
 
-  // Auto-trading state
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(false);
   const [selectedStrategy, setSelectedStrategy] = useState(strategies[0]);
-  const [tradingSymbols, setTradingSymbols] = useState("RELIANCE, HDFCBANK, INFY");
+  const [tradingSymbols, setTradingSymbols] = useState("");
   const [maxOrdersPerDay, setMaxOrdersPerDay] = useState("20");
   const [maxLossLimit, setMaxLossLimit] = useState("5000");
 
@@ -113,34 +112,181 @@ function LiveTradingContent() {
       setMarketOpen(isMarketOpen());
       setMarketStatus(getMarketStatus());
     };
-
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (searchParams.get("connected") === "true") {
-      setConnected(true);
+  const checkAuthStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/zerodha/status");
+      const data = await res.json();
+      if (data.connected) {
+        setConnected(true);
+        setKiteUserId(data.userId || "");
+      }
+    } catch {
+      // Not connected
+    } finally {
+      setIsCheckingAuth(false);
     }
+  }, []);
+
+  useEffect(() => {
     const error = searchParams.get("error");
     if (error && ERROR_MESSAGES[error]) {
       setErrorMessage(ERROR_MESSAGES[error]);
+      setIsCheckingAuth(false);
+      return;
     }
-  }, [searchParams]);
+
+    checkAuthStatus();
+  }, [searchParams, checkAuthStatus]);
+
+  const fetchPositions = useCallback(async () => {
+    try {
+      const res = await fetch("/api/zerodha/positions");
+      if (!res.ok) return;
+      const data = await res.json();
+      const mapped: Position[] = (data.positions?.net || []).map((p: any) => ({
+        symbol: p.tradingsymbol,
+        qty: p.quantity,
+        avgPrice: p.average_price,
+        ltp: p.last_price,
+        pnl: p.pnl,
+        product: p.product,
+      }));
+      setPositions(mapped.filter((p) => p.qty !== 0));
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchOrders = useCallback(async () => {
+    try {
+      const res = await fetch("/api/zerodha/orders");
+      if (!res.ok) return;
+      const data = await res.json();
+      const mapped: KiteOrder[] = (data.orders || []).map((o: any) => ({
+        time: o.order_timestamp || o.exchange_timestamp || "",
+        symbol: o.tradingsymbol,
+        type: o.order_type,
+        side: o.transaction_type,
+        qty: o.quantity,
+        price: o.average_price || o.price || 0,
+        status: o.status,
+      }));
+      setOrders(mapped);
+    } catch { /* ignore */ }
+  }, []);
+
+  const fetchHoldings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/zerodha/holdings");
+      if (!res.ok) return;
+      const data = await res.json();
+      const mapped: Holding[] = (data.holdings || []).map((h: any) => ({
+        symbol: h.tradingsymbol,
+        qty: h.quantity,
+        avgPrice: h.average_price,
+        ltp: h.last_price,
+        pnl: h.pnl,
+        dayChange: h.day_change_percentage || 0,
+      }));
+      setHoldings(mapped);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
+    if (!connected) return;
+    fetchPositions();
+    fetchOrders();
+    fetchHoldings();
+
+    const interval = setInterval(() => {
+      fetchPositions();
+      fetchOrders();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [connected, fetchPositions, fetchOrders, fetchHoldings]);
 
   const netPnl = positions.reduce((sum, p) => sum + p.pnl, 0);
 
-  const handlePlaceOrder = () => {
-    alert(
-      `Order placed:\n${transactionType} ${quantity} ${symbol} @ ${orderType === "MARKET" ? "MARKET" : price}\nExchange: ${exchange} | Product: ${productType}`
-    );
+  const handlePlaceOrder = async () => {
+    if (!symbol.trim() || !quantity) return;
+
+    if (!connected) {
+      setErrorMessage("Please connect to Zerodha first before placing live orders.");
+      return;
+    }
+
+    setIsPlacingOrder(true);
+    setStatusMessage("");
+    setErrorMessage("");
+
+    try {
+      const body: Record<string, any> = {
+        symbol: symbol.trim().toUpperCase(),
+        exchange,
+        side: transactionType,
+        orderType: orderType,
+        quantity: parseInt(quantity),
+        product: productType,
+      };
+
+      if (orderType === "LIMIT" || orderType === "SL") {
+        body.price = parseFloat(price);
+      }
+      if (orderType === "SL" || orderType === "SL-M") {
+        body.triggerPrice = parseFloat(triggerPrice);
+      }
+
+      const res = await fetch("/api/zerodha/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMessage(data.error || "Failed to place order. Please try again.");
+        return;
+      }
+
+      setStatusMessage(`Order placed successfully! Order ID: ${data.orderId}`);
+      setSymbol("");
+      setQuantity("");
+      setPrice("");
+      setTriggerPrice("");
+
+      setTimeout(() => {
+        fetchOrders();
+        fetchPositions();
+      }, 2000);
+    } catch (err: any) {
+      setErrorMessage(err.message || "Network error. Please check your connection.");
+    } finally {
+      setIsPlacingOrder(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    await fetch("/api/zerodha/logout", { method: "POST" }).catch(() => {});
+    setConnected(false);
+    setKiteUserId("");
+    setPositions([]);
+    setOrders([]);
+    setHoldings([]);
   };
 
   return (
     <div className="min-h-screen bg-[#0a0f1a] text-white">
       {/* Connection Status Banner */}
-      {!connected ? (
+      {isCheckingAuth ? (
+        <div className="bg-gray-900/40 border-b border-gray-700/50 px-6 py-3 flex items-center gap-3">
+          <Loader2 className="h-5 w-5 text-gray-400 animate-spin" />
+          <span className="text-gray-300 text-sm font-medium">Checking Zerodha connection...</span>
+        </div>
+      ) : !connected ? (
         <div className="bg-amber-900/40 border-b border-amber-700/50 px-6 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <AlertTriangle className="h-5 w-5 text-amber-400" />
@@ -163,11 +309,11 @@ function LiveTradingContent() {
               Connected to Zerodha
             </span>
             <span className="text-emerald-400/70 text-xs bg-emerald-900/50 px-2 py-0.5 rounded">
-              User ID: AB1234
+              User ID: {kiteUserId}
             </span>
           </div>
           <button
-            onClick={() => setConnected(false)}
+            onClick={handleDisconnect}
             className="px-4 py-1.5 bg-emerald-700/50 hover:bg-emerald-700 text-emerald-200 text-sm rounded transition-colors"
           >
             Disconnect
@@ -208,9 +354,27 @@ function LiveTradingContent() {
 
       {/* Error Banner */}
       {errorMessage && (
-        <div className="bg-red-900/40 border-b border-red-700/50 px-6 py-3 flex items-center gap-3">
-          <ShieldAlert className="h-5 w-5 text-red-400 shrink-0" />
-          <span className="text-red-200 text-sm font-medium">{errorMessage}</span>
+        <div className="bg-red-900/40 border-b border-red-700/50 px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <ShieldAlert className="h-5 w-5 text-red-400 shrink-0" />
+            <span className="text-red-200 text-sm font-medium">{errorMessage}</span>
+          </div>
+          <button onClick={() => setErrorMessage("")} className="text-red-400 hover:text-red-300 text-sm">
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* Success Banner */}
+      {statusMessage && (
+        <div className="bg-emerald-900/40 border-b border-emerald-700/50 px-6 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
+            <span className="text-emerald-200 text-sm font-medium">{statusMessage}</span>
+          </div>
+          <button onClick={() => setStatusMessage("")} className="text-emerald-400 hover:text-emerald-300 text-sm">
+            Dismiss
+          </button>
         </div>
       )}
 
@@ -243,7 +407,7 @@ function LiveTradingContent() {
                       type="text"
                       value={symbol}
                       onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-                      placeholder="Search symbol..."
+                      placeholder="e.g. RELIANCE"
                       className="w-full bg-[#0a0f1a] border border-gray-700 rounded-md py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
                     />
                   </div>
@@ -386,14 +550,23 @@ function LiveTradingContent() {
                 {/* Place Order Button */}
                 <button
                   onClick={handlePlaceOrder}
+                  disabled={isPlacingOrder || !symbol.trim() || !quantity}
                   className={cn(
-                    "w-full py-2.5 rounded-md font-semibold text-sm transition-colors mt-2",
+                    "w-full py-2.5 rounded-md font-semibold text-sm transition-colors mt-2 flex items-center justify-center gap-2",
+                    "disabled:opacity-50 disabled:cursor-not-allowed",
                     transactionType === "BUY"
                       ? "bg-green-600 hover:bg-green-500 text-white"
                       : "bg-red-600 hover:bg-red-500 text-white"
                   )}
                 >
-                  Place {transactionType} Order
+                  {isPlacingOrder ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Placing Order...
+                    </>
+                  ) : (
+                    `Place ${transactionType} Order`
+                  )}
                 </button>
               </div>
             </div>
@@ -417,6 +590,16 @@ function LiveTradingContent() {
                       )}
                     >
                       {tab}
+                      {tab === "positions" && positions.length > 0 && (
+                        <span className="ml-2 text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full">
+                          {positions.length}
+                        </span>
+                      )}
+                      {tab === "orders" && orders.length > 0 && (
+                        <span className="ml-2 text-xs bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full">
+                          {orders.length}
+                        </span>
+                      )}
                     </button>
                   ))}
                 </div>
@@ -430,7 +613,9 @@ function LiveTradingContent() {
                       <div className="flex flex-col items-center justify-center py-16 text-gray-500">
                         <Inbox className="h-10 w-10 mb-3 text-gray-600" />
                         <p className="text-sm">No open positions.</p>
-                        <p className="text-xs text-gray-600 mt-1">Place an order to see positions here.</p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          {connected ? "Place an order to see positions here." : "Connect to Zerodha to view positions."}
+                        </p>
                       </div>
                     ) : (
                       <>
@@ -519,7 +704,8 @@ function LiveTradingContent() {
                                       order.status === "COMPLETE" && "bg-green-900/50 text-green-400",
                                       order.status === "PENDING" && "bg-yellow-900/50 text-yellow-400",
                                       order.status === "REJECTED" && "bg-red-900/50 text-red-400",
-                                      order.status === "CANCELLED" && "bg-gray-800 text-gray-400"
+                                      order.status === "CANCELLED" && "bg-gray-800 text-gray-400",
+                                      order.status === "OPEN" && "bg-blue-900/50 text-blue-400"
                                     )}
                                   >
                                     {order.status}
@@ -541,7 +727,9 @@ function LiveTradingContent() {
                       <div className="flex flex-col items-center justify-center py-16 text-gray-500">
                         <Link2 className="h-10 w-10 mb-3 text-gray-600" />
                         <p className="text-sm">No holdings found.</p>
-                        <p className="text-xs text-gray-600 mt-1">Connect to Zerodha to view your holdings.</p>
+                        <p className="text-xs text-gray-600 mt-1">
+                          {connected ? "You don't have any holdings in your Zerodha account." : "Connect to Zerodha to view your holdings."}
+                        </p>
                       </div>
                     ) : (
                       <div className="overflow-x-auto">
@@ -613,7 +801,6 @@ function LiveTradingContent() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {/* Strategy */}
             <div>
               <label className="text-xs text-gray-400 mb-1 block">Strategy</label>
               <select
@@ -622,14 +809,10 @@ function LiveTradingContent() {
                 className="w-full bg-[#0a0f1a] border border-gray-700 rounded-md py-2 px-3 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
               >
                 {strategies.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
+                  <option key={s} value={s}>{s}</option>
                 ))}
               </select>
             </div>
-
-            {/* Symbols */}
             <div>
               <label className="text-xs text-gray-400 mb-1 block">Symbols to Trade</label>
               <input
@@ -640,8 +823,6 @@ function LiveTradingContent() {
                 className="w-full bg-[#0a0f1a] border border-gray-700 rounded-md py-2 px-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
-
-            {/* Max Orders */}
             <div>
               <label className="text-xs text-gray-400 mb-1 block">Max Orders / Day</label>
               <input
@@ -651,8 +832,6 @@ function LiveTradingContent() {
                 className="w-full bg-[#0a0f1a] border border-gray-700 rounded-md py-2 px-3 text-sm text-white focus:outline-none focus:border-blue-500 transition-colors"
               />
             </div>
-
-            {/* Max Loss */}
             <div>
               <label className="text-xs text-gray-400 mb-1 block">Max Loss Limit (₹)</label>
               <input
@@ -664,13 +843,11 @@ function LiveTradingContent() {
             </div>
           </div>
 
-          {/* Auto-trading warning */}
           <div className="mt-5 bg-red-900/20 border border-red-800/40 rounded-md p-3 flex items-start gap-2">
             <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
             <p className="text-red-300 text-xs leading-relaxed">
               Auto-trading will place orders automatically based on strategy signals. Ensure proper risk management
-              parameters are set. You are solely responsible for any losses incurred. Past strategy performance does
-              not guarantee future results.
+              parameters are set. You are solely responsible for any losses incurred.
             </p>
           </div>
         </div>
