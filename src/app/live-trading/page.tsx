@@ -194,14 +194,19 @@ function LiveTradingContent() {
   const [quoteLastUpdated, setQuoteLastUpdated] = useState<Date | null>(null);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [searchInput, setSearchInput] = useState("");
+  const [instrumentResults, setInstrumentResults] = useState<{ symbol: string; name: string }[]>([]);
+  const [isSearchingInstruments, setIsSearchingInstruments] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  const filteredStocks = searchInput.length > 0
-    ? STOCK_LIST.filter(
-        (s) =>
-          s.symbol.startsWith(searchInput.toUpperCase()) ||
-          s.name.toLowerCase().includes(searchInput.toLowerCase())
-      ).slice(0, 15)
-    : STOCK_LIST.slice(0, 15);
+  const filteredStocks = instrumentResults.length > 0
+    ? instrumentResults
+    : searchInput.length > 0
+      ? STOCK_LIST.filter(
+          (s) =>
+            s.symbol.startsWith(searchInput.toUpperCase()) ||
+            s.name.toLowerCase().includes(searchInput.toLowerCase())
+        ).slice(0, 15)
+      : STOCK_LIST.slice(0, 15);
 
   const [activeTab, setActiveTab] = useState<TabType>("positions");
 
@@ -328,7 +333,37 @@ function LiveTradingContent() {
     }
   }, [connected, exchange]);
 
-  // Debounced search (300ms) - fetch quote when symbol changes
+  const searchInstruments = useCallback(async (query: string) => {
+    if (!query.trim() || query.trim().length < 1) {
+      setInstrumentResults([]);
+      return;
+    }
+    setIsSearchingInstruments(true);
+    try {
+      const res = await fetch(`/api/zerodha/instruments?search=${encodeURIComponent(query)}&exchange=${exchange}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setInstrumentResults(data.map((d: any) => ({ symbol: d.tradingsymbol, name: d.name })));
+        } else {
+          setInstrumentResults([]);
+        }
+      }
+    } catch {
+      setInstrumentResults([]);
+    } finally {
+      setIsSearchingInstruments(false);
+    }
+  }, [exchange]);
+
+  const handleSearchInputChange = (value: string) => {
+    setSearchInput(value);
+    setShowSuggestions(true);
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
+    searchTimeoutRef.current = setTimeout(() => searchInstruments(value), 300);
+  };
+
+  // Debounced quote fetch when symbol changes
   useEffect(() => {
     if (!symbol.trim() || !connected) return;
     const timer = setTimeout(() => fetchQuote(symbol), 300);
@@ -635,14 +670,14 @@ function LiveTradingContent() {
                         const val = e.target.value.toUpperCase();
                         setSearchInput(val);
                         setSymbol(val);
-                        setShowSuggestions(true);
+                        handleSearchInputChange(val);
                       }}
                       onFocus={() => setShowSuggestions(true)}
                       onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
                       placeholder="Search symbol or company..."
                       className="w-full bg-[#0a0f1a] border border-gray-700 rounded-md py-2 pl-9 pr-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-colors"
                     />
-                    {isLoadingQuote && (
+                    {(isLoadingQuote || isSearchingInstruments) && (
                       <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-400 animate-spin" />
                     )}
                   </div>

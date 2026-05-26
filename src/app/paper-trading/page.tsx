@@ -235,17 +235,14 @@ export default function PaperTradingPage() {
     setSymbol(instrument.tradingsymbol);
     setShowSuggestions(false);
     setSearchResults([]);
-
-    if (zerodhaConnected) {
-      fetchQuote(instrument.tradingsymbol, exchange);
-    }
+    fetchQuote(instrument.tradingsymbol, exchange);
   };
 
   useEffect(() => {
-    if (!symbol.trim() || !zerodhaConnected) return;
+    if (!symbol.trim()) return;
     const timer = setTimeout(() => fetchQuote(symbol.trim(), exchange), 800);
     return () => clearTimeout(timer);
-  }, [exchange, zerodhaConnected, fetchQuote, symbol]);
+  }, [exchange, fetchQuote, symbol]);
 
   const getOrderPrice = (): number | null => {
     if (orderType === "LIMIT") {
@@ -765,7 +762,7 @@ export default function PaperTradingPage() {
           </div>
 
           {/* Quote Panel */}
-          {quote && zerodhaConnected && (
+          {quote && (
             <div className="card">
               <div className="flex items-center justify-between mb-3">
                 <div>

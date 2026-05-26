@@ -48,5 +48,12 @@ export async function GET(request: NextRequest) {
 
   const results = [...exactSymbol, ...startsWithSymbol, ...containsInName].slice(0, MAX_RESULTS);
 
-  return NextResponse.json(results);
+  const mapped = results.map((inst) => ({
+    tradingsymbol: inst.symbol,
+    name: inst.name,
+    exchange: inst.exchange,
+    instrument_type: "EQ",
+  }));
+
+  return NextResponse.json(mapped);
 }
