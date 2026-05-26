@@ -17,6 +17,44 @@ export async function GET(request: NextRequest) {
   }
 }
 
+async function placeOrderViaProxy(
+  apiKey: string,
+  accessToken: string,
+  params: Record<string, any>
+): Promise<any> {
+  const proxyUrl = process.env.ZERODHA_PROXY_URL;
+  const proxySecret = process.env.ZERODHA_PROXY_SECRET;
+
+  if (!proxyUrl || !proxySecret) {
+    throw new Error(
+      "Order proxy not configured. Set ZERODHA_PROXY_URL and ZERODHA_PROXY_SECRET environment variables."
+    );
+  }
+
+  const res = await fetch(proxyUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Proxy-Secret": proxySecret,
+    },
+    body: JSON.stringify({
+      action: "place_order",
+      api_key: apiKey,
+      access_token: accessToken,
+      variety: "regular",
+      params,
+    }),
+  });
+
+  const data = await res.json();
+
+  if (!res.ok) {
+    throw new Error(data?.message || data?.error || `Proxy error (${res.status})`);
+  }
+
+  return data;
+}
+
 export async function POST(request: NextRequest) {
   const accessToken = request.cookies.get("kite_access_token")?.value;
   if (!accessToken) {
@@ -25,10 +63,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const kite = new KiteConnect({ api_key: process.env.KITE_API_KEY! });
-    kite.setAccessToken(accessToken);
+    const apiKey = process.env.KITE_API_KEY!;
 
-    const result = await kite.placeOrder("regular", {
+    const orderParams = {
       tradingsymbol: body.symbol,
       exchange: body.exchange || "NSE",
       transaction_type: body.side,
@@ -38,8 +75,21 @@ export async function POST(request: NextRequest) {
       trigger_price: body.triggerPrice,
       product: body.product || "MIS",
       validity: body.validity || "DAY",
-    });
+    };
 
+    // Use proxy if configured, otherwise fall back to direct API call
+    if (process.env.ZERODHA_PROXY_URL) {
+      const result = await placeOrderViaProxy(apiKey, accessToken, orderParams);
+      return NextResponse.json({
+        orderId: result?.data?.order_id,
+        status: "success",
+      });
+    }
+
+    // Direct call (works only if Vercel has a whitelisted static IP)
+    const kite = new KiteConnect({ api_key: apiKey });
+    kite.setAccessToken(accessToken);
+    const result = await kite.placeOrder("regular", orderParams as any);
     return NextResponse.json({ orderId: result.order_id, status: "success" });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
