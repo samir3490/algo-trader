@@ -7,9 +7,17 @@ export function getAccountToken(
   accountId?: string | null
 ): string | null {
   if (accountId) {
-    return request.cookies.get(`${COOKIE_PREFIX}${accountId}`)?.value || null;
+    const perAccountToken = request.cookies.get(`${COOKIE_PREFIX}${accountId}`)?.value;
+    if (perAccountToken) return perAccountToken;
+
+    // Fallback: if the requested accountId matches the legacy cookie's user,
+    // return the legacy token (pre-multi-account connections)
+    const legacyUserId = request.cookies.get("kite_user_id")?.value;
+    if (legacyUserId === accountId) {
+      return request.cookies.get("kite_access_token")?.value || null;
+    }
+    return null;
   }
-  // Fallback: try legacy single-account cookie
   return request.cookies.get("kite_access_token")?.value || null;
 }
 
