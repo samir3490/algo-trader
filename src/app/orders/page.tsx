@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { formatCurrency } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import { getOrders as getFirestoreOrders, getZerodhaAccounts, type OrderRecord, type ZerodhaAccount } from "@/lib/firebase";
 import {
   ClipboardList,
@@ -94,6 +95,7 @@ function mapPaperTrade(t: PaperTrade, idx: number): Order {
 }
 
 export default function OrdersPage() {
+  const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
@@ -184,11 +186,12 @@ export default function OrdersPage() {
 
     setOrders(allOrders);
     setIsLoading(false);
-  }, []);
+  }, [user]);
 
   useEffect(() => {
+    if (!user) return;
     fetchAllOrders();
-  }, [fetchAllOrders]);
+  }, [fetchAllOrders, user]);
 
   const filtered = orders.filter((o) => {
     if (activeTab === "paper" && o.mode !== "PAPER") return false;

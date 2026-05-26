@@ -28,7 +28,14 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const db = getFirestore(app);
 
+let _overrideUid: string | null = null;
+
+export function setFirebaseUid(uid: string | null) {
+  _overrideUid = uid;
+}
+
 function getUserId(): string {
+  if (_overrideUid) return _overrideUid;
   const auth = getAuth(app);
   return auth.currentUser?.uid || "default_user";
 }

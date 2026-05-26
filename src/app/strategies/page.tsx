@@ -21,6 +21,7 @@ import {
   Hash,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import { NSE_INSTRUMENTS } from "@/lib/instruments";
 import {
   getActiveStrategies as getFirestoreStrategies,
@@ -202,6 +203,7 @@ function persistStrategies(strategies: ActiveStrategy[]) {
 // ── Page ──────────────────────────────────────────────────────────────────
 
 export default function StrategiesPage() {
+  const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([]);
 
@@ -266,6 +268,9 @@ export default function StrategiesPage() {
     }
 
     applyToCards(cached);
+    setMounted(true);
+
+    if (!user) return;
 
     async function loadFromFirestore() {
       try {
@@ -280,9 +285,8 @@ export default function StrategiesPage() {
     }
 
     loadFromFirestore();
-    setMounted(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user]);
 
   // Persist strategies whenever they change
   useEffect(() => {

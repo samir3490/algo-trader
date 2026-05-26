@@ -24,6 +24,7 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import {
   getSettings as getFirestoreSettings,
   saveSettings as saveFirestoreSettings,
@@ -151,6 +152,7 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
 
 function SettingsContent() {
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
@@ -164,6 +166,8 @@ function SettingsContent() {
   const [disconnectingAccount, setDisconnectingAccount] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!user) return;
+
     setSettings(loadSettingsFromCache());
 
     async function loadFromFirestore() {
@@ -179,7 +183,7 @@ function SettingsContent() {
 
     loadFromFirestore();
     loadAccounts();
-  }, []);
+  }, [user]);
 
   // Handle new account added via OAuth redirect
   useEffect(() => {

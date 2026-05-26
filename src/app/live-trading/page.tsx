@@ -20,6 +20,7 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent, isMarketOpen, getMarketStatus } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import { getZerodhaAccounts, type ZerodhaAccount } from "@/lib/firebase";
 
 type TransactionType = "BUY" | "SELL";
@@ -119,6 +120,7 @@ const strategies = [
 
 function LiveTradingContent() {
   const searchParams = useSearchParams();
+  const { user } = useAuth();
   const orderFormRef = useRef<HTMLDivElement>(null);
 
   // Multi-account state
@@ -212,10 +214,11 @@ function LiveTradingContent() {
     return () => clearInterval(interval);
   }, []);
 
-  // Load accounts on mount
+  // Load accounts when auth is ready
   useEffect(() => {
+    if (!user) return;
     loadAccounts();
-  }, []);
+  }, [user]);
 
   async function loadAccounts() {
     setLoadingAccounts(true);

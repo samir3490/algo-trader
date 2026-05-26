@@ -9,7 +9,7 @@ import {
   GoogleAuthProvider,
   User,
 } from "firebase/auth";
-import { app } from "@/lib/firebase";
+import { app, setFirebaseUid } from "@/lib/firebase";
 
 interface AuthContextType {
   user: User | null;
@@ -32,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const auth = getAuth(app);
     const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setFirebaseUid(user?.uid || null);
       setUser(user);
       setLoading(false);
     });

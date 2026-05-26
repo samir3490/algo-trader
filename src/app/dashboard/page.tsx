@@ -30,6 +30,7 @@ import {
   Tooltip,
 } from "recharts";
 import { cn, formatCurrency, formatPercent, getMarketStatus, isMarketOpen } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import {
   getPaperTradingState,
   getWatchlist,
@@ -192,6 +193,7 @@ function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: 
 // ── Page ──────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const marketOpen = isMarketOpen();
   const marketStatus = getMarketStatus();
@@ -214,8 +216,10 @@ export default function DashboardPage() {
   // Active strategies
   const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([]);
 
-  // Load everything on mount
+  // Load everything on mount (after auth is ready)
   useEffect(() => {
+    if (!user) return;
+
     // Instant load from localStorage cache
     setPaperState(loadPaperStateFromCache());
     setWatchlist(loadWatchlistFromCache());
@@ -256,7 +260,7 @@ export default function DashboardPage() {
     loadFromFirestore();
     checkZerodha();
     setMounted(true);
-  }, []);
+  }, [user]);
 
   // Fetch watchlist quotes
   const fetchWatchlistQuotes = useCallback(async (items: WatchlistItem[]) => {

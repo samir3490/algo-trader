@@ -17,6 +17,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
+import { useAuth } from "@/lib/auth-context";
 import { getPaperTradingState, savePaperTradingState, resetPaperTrading, saveOrder } from "@/lib/firebase";
 
 type OrderSide = "BUY" | "SELL";
@@ -117,6 +118,7 @@ function computePortfolio(holdings: Holding[], balance: number) {
 }
 
 export default function PaperTradingPage() {
+  const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
   const [balance, setBalance] = useState(INITIAL_BALANCE);
   const [holdings, setHoldings] = useState<Holding[]>([]);
@@ -143,13 +145,15 @@ export default function PaperTradingPage() {
   const [validationError, setValidationError] = useState("");
 
   useEffect(() => {
-    async function init() {
-      const cached = loadStateFromLocalStorage();
-      setBalance(cached.balance);
-      setHoldings(cached.holdings);
-      setTrades(cached.trades);
-      setMounted(true);
+    const cached = loadStateFromLocalStorage();
+    setBalance(cached.balance);
+    setHoldings(cached.holdings);
+    setTrades(cached.trades);
+    setMounted(true);
 
+    if (!user) return;
+
+    async function loadFirestore() {
       try {
         const state = await getPaperTradingState();
         setBalance(state.balance);
@@ -164,8 +168,8 @@ export default function PaperTradingPage() {
         console.error("Firestore load failed, using localStorage cache:", e);
       }
     }
-    init();
-  }, []);
+    loadFirestore();
+  }, [user]);
 
   useEffect(() => {
     if (!mounted) return;
