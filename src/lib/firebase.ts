@@ -1,4 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
+import { getAuth } from "firebase/auth";
 import {
   getFirestore,
   doc,
@@ -27,7 +28,10 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 const db = getFirestore(app);
 
-const USER_ID = "default_user";
+function getUserId(): string {
+  const auth = getAuth(app);
+  return auth.currentUser?.uid || "default_user";
+}
 
 // ==================== PAPER TRADING ====================
 
@@ -61,7 +65,7 @@ const INITIAL_BALANCE = 1000000;
 
 export async function getPaperTradingState(): Promise<PaperTradingState> {
   try {
-    const ref = doc(db, "users", USER_ID, "data", "paperTrading");
+    const ref = doc(db, "users", getUserId(), "data", "paperTrading");
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const data = snap.data();
@@ -79,7 +83,7 @@ export async function getPaperTradingState(): Promise<PaperTradingState> {
 
 export async function savePaperTradingState(state: PaperTradingState): Promise<void> {
   try {
-    const ref = doc(db, "users", USER_ID, "data", "paperTrading");
+    const ref = doc(db, "users", getUserId(), "data", "paperTrading");
     await setDoc(ref, {
       balance: state.balance,
       holdings: state.holdings,
@@ -93,7 +97,7 @@ export async function savePaperTradingState(state: PaperTradingState): Promise<v
 
 export async function resetPaperTrading(): Promise<void> {
   try {
-    const ref = doc(db, "users", USER_ID, "data", "paperTrading");
+    const ref = doc(db, "users", getUserId(), "data", "paperTrading");
     await setDoc(ref, {
       balance: INITIAL_BALANCE,
       holdings: [],
@@ -114,7 +118,7 @@ export interface WatchlistItem {
 
 export async function getWatchlist(): Promise<WatchlistItem[]> {
   try {
-    const ref = doc(db, "users", USER_ID, "data", "watchlist");
+    const ref = doc(db, "users", getUserId(), "data", "watchlist");
     const snap = await getDoc(ref);
     if (snap.exists()) {
       return snap.data().items ?? [];
@@ -133,7 +137,7 @@ export async function getWatchlist(): Promise<WatchlistItem[]> {
 
 export async function saveWatchlist(items: WatchlistItem[]): Promise<void> {
   try {
-    const ref = doc(db, "users", USER_ID, "data", "watchlist");
+    const ref = doc(db, "users", getUserId(), "data", "watchlist");
     await setDoc(ref, { items, updatedAt: serverTimestamp() });
   } catch (e) {
     console.error("Error saving watchlist:", e);
@@ -178,7 +182,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 export async function getSettings(): Promise<AppSettings> {
   try {
-    const ref = doc(db, "users", USER_ID, "data", "settings");
+    const ref = doc(db, "users", getUserId(), "data", "settings");
     const snap = await getDoc(ref);
     if (snap.exists()) {
       return { ...DEFAULT_SETTINGS, ...snap.data() } as AppSettings;
@@ -191,7 +195,7 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function saveSettings(settings: Partial<AppSettings>): Promise<void> {
   try {
-    const ref = doc(db, "users", USER_ID, "data", "settings");
+    const ref = doc(db, "users", getUserId(), "data", "settings");
     await setDoc(ref, { ...settings, updatedAt: serverTimestamp() }, { merge: true });
   } catch (e) {
     console.error("Error saving settings:", e);
@@ -216,7 +220,7 @@ export interface ActiveStrategy {
 
 export async function getActiveStrategies(): Promise<ActiveStrategy[]> {
   try {
-    const ref = doc(db, "users", USER_ID, "data", "strategies");
+    const ref = doc(db, "users", getUserId(), "data", "strategies");
     const snap = await getDoc(ref);
     if (snap.exists()) {
       return snap.data().items ?? [];
@@ -229,7 +233,7 @@ export async function getActiveStrategies(): Promise<ActiveStrategy[]> {
 
 export async function saveActiveStrategies(strategies: ActiveStrategy[]): Promise<void> {
   try {
-    const ref = doc(db, "users", USER_ID, "data", "strategies");
+    const ref = doc(db, "users", getUserId(), "data", "strategies");
     await setDoc(ref, { items: strategies, updatedAt: serverTimestamp() });
   } catch (e) {
     console.error("Error saving strategies:", e);
@@ -256,7 +260,7 @@ export interface OrderRecord {
 
 export async function saveOrder(order: OrderRecord): Promise<void> {
   try {
-    const ref = doc(db, "users", USER_ID, "orders", order.id);
+    const ref = doc(db, "users", getUserId(), "orders", order.id);
     await setDoc(ref, { ...order, createdAt: serverTimestamp() });
   } catch (e) {
     console.error("Error saving order:", e);
@@ -265,7 +269,7 @@ export async function saveOrder(order: OrderRecord): Promise<void> {
 
 export async function getOrders(maxCount = 100): Promise<OrderRecord[]> {
   try {
-    const ref = collection(db, "users", USER_ID, "orders");
+    const ref = collection(db, "users", getUserId(), "orders");
     const q = query(ref, orderBy("createdAt", "desc"), limit(maxCount));
     const snap = await getDocs(q);
     return snap.docs.map((d) => d.data() as OrderRecord);

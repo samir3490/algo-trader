@@ -15,7 +15,9 @@ import {
   TrendingUp,
   ChevronLeft,
   ChevronRight,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -32,6 +34,7 @@ export default function Sidebar() {
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
   const collapsed = !sidebarOpen;
   const marketOpen = isMarketOpen();
+  const { user, logout } = useAuth();
 
   return (
     <aside
@@ -117,11 +120,53 @@ export default function Sidebar() {
         })}
       </nav>
 
+      {/* User Profile & Logout */}
+      {user && (
+        <div className="border-t border-border px-3 py-3">
+          <div className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2",
+            collapsed ? "justify-center" : ""
+          )}>
+            {user.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt=""
+                className="h-7 w-7 shrink-0 rounded-full"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="h-7 w-7 shrink-0 rounded-full bg-accent/20 flex items-center justify-center text-accent text-xs font-bold">
+                {user.displayName?.[0] || user.email?.[0] || "U"}
+              </div>
+            )}
+            {!collapsed && (
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-text-primary truncate">
+                  {user.displayName || "User"}
+                </p>
+                <p className="text-[10px] text-text-tertiary truncate">
+                  {user.email}
+                </p>
+              </div>
+            )}
+            {!collapsed && (
+              <button
+                onClick={logout}
+                className="text-text-tertiary hover:text-loss transition-colors cursor-pointer"
+                title="Sign out"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Collapse Toggle */}
       <div className="border-t border-border px-3 py-3">
         <button
           onClick={() => setSidebarOpen(collapsed)}
-          className="flex w-full items-center justify-center rounded-lg py-2 text-text-tertiary transition-colors hover:bg-bg-hover hover:text-text-secondary"
+          className="flex w-full items-center justify-center rounded-lg py-2 text-text-tertiary transition-colors hover:bg-bg-hover hover:text-text-secondary cursor-pointer"
         >
           {collapsed ? (
             <ChevronRight className="h-4 w-4" />
