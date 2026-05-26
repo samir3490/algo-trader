@@ -16,8 +16,10 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
+  X,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useEffect } from "react";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -32,26 +34,46 @@ export default function Sidebar() {
   const pathname = usePathname();
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
   const setSidebarOpen = useAppStore((s) => s.setSidebarOpen);
+  const mobileMenuOpen = useAppStore((s) => s.mobileMenuOpen);
+  const setMobileMenuOpen = useAppStore((s) => s.setMobileMenuOpen);
   const collapsed = !sidebarOpen;
   const marketOpen = isMarketOpen();
   const { user, logout } = useAuth();
 
-  return (
-    <aside
-      className={cn(
-        "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-bg-secondary transition-all duration-300",
-        collapsed ? "w-[72px]" : "w-64"
-      )}
-    >
+  // Close mobile menu on route change
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname, setMobileMenuOpen]);
+
+  // Prevent body scroll when mobile menu is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [mobileMenuOpen]);
+
+  const sidebarContent = (isMobile: boolean) => (
+    <>
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 border-b border-border px-4">
         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg gradient-accent">
           <TrendingUp className="h-5 w-5 text-white" />
         </div>
-        {!collapsed && (
+        {(isMobile || !collapsed) && (
           <span className="text-lg font-bold tracking-tight text-text-primary">
             AlgoTrader
           </span>
+        )}
+        {isMobile && (
+          <button
+            onClick={() => setMobileMenuOpen(false)}
+            className="ml-auto p-1.5 rounded-lg text-text-tertiary hover:bg-bg-hover hover:text-text-primary transition-colors"
+          >
+            <X className="h-5 w-5" />
+          </button>
         )}
       </div>
 
@@ -68,7 +90,7 @@ export default function Sidebar() {
             marketOpen ? "bg-profit" : "bg-text-tertiary"
           )}
         />
-        {!collapsed && (
+        {(isMobile || !collapsed) && (
           <div className="min-w-0">
             <p
               className={cn(
@@ -111,8 +133,8 @@ export default function Sidebar() {
                     : "text-text-tertiary group-hover:text-text-secondary"
                 )}
               />
-              {!collapsed && <span>{item.label}</span>}
-              {isActive && !collapsed && (
+              {(isMobile || !collapsed) && <span>{item.label}</span>}
+              {isActive && (isMobile || !collapsed) && (
                 <div className="ml-auto h-1.5 w-1.5 rounded-full bg-accent" />
               )}
             </Link>
@@ -125,7 +147,7 @@ export default function Sidebar() {
         <div className="border-t border-border px-3 py-3">
           <div className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2",
-            collapsed ? "justify-center" : ""
+            !isMobile && collapsed ? "justify-center" : ""
           )}>
             {user.photoURL ? (
               <img
@@ -139,7 +161,7 @@ export default function Sidebar() {
                 {user.displayName?.[0] || user.email?.[0] || "U"}
               </div>
             )}
-            {!collapsed && (
+            {(isMobile || !collapsed) && (
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-medium text-text-primary truncate">
                   {user.displayName || "User"}
@@ -149,7 +171,7 @@ export default function Sidebar() {
                 </p>
               </div>
             )}
-            {!collapsed && (
+            {(isMobile || !collapsed) && (
               <button
                 onClick={logout}
                 className="text-text-tertiary hover:text-loss transition-colors cursor-pointer"
@@ -162,19 +184,53 @@ export default function Sidebar() {
         </div>
       )}
 
-      {/* Collapse Toggle */}
-      <div className="border-t border-border px-3 py-3">
-        <button
-          onClick={() => setSidebarOpen(collapsed)}
-          className="flex w-full items-center justify-center rounded-lg py-2 text-text-tertiary transition-colors hover:bg-bg-hover hover:text-text-secondary cursor-pointer"
-        >
-          {collapsed ? (
-            <ChevronRight className="h-4 w-4" />
-          ) : (
-            <ChevronLeft className="h-4 w-4" />
-          )}
-        </button>
-      </div>
-    </aside>
+      {/* Collapse Toggle (desktop only) */}
+      {!isMobile && (
+        <div className="border-t border-border px-3 py-3">
+          <button
+            onClick={() => setSidebarOpen(collapsed)}
+            className="flex w-full items-center justify-center rounded-lg py-2 text-text-tertiary transition-colors hover:bg-bg-hover hover:text-text-secondary cursor-pointer"
+          >
+            {collapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" />
+            )}
+          </button>
+        </div>
+      )}
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar */}
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-40 hidden md:flex h-screen flex-col border-r border-border bg-bg-secondary transition-all duration-300",
+          collapsed ? "w-[72px]" : "w-64"
+        )}
+      >
+        {sidebarContent(false)}
+      </aside>
+
+      {/* Mobile Overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Mobile Drawer */}
+      <aside
+        className={cn(
+          "fixed left-0 top-0 z-50 flex h-screen w-72 flex-col border-r border-border bg-bg-secondary transition-transform duration-300 md:hidden",
+          mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        {sidebarContent(true)}
+      </aside>
+    </>
   );
 }

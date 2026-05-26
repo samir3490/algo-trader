@@ -554,12 +554,12 @@ function LiveTradingContent() {
   return (
     <div className="min-h-screen bg-[#0a0f1a] text-white">
       {/* Account Selector Banner */}
-      <div className="bg-[#111827] border-b border-gray-800 px-6 py-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2">
-              <Users className="h-4 w-4 text-gray-400" />
-              <span className="text-sm text-gray-400">Trading Account:</span>
+      <div className="bg-[#111827] border-b border-gray-800 px-3 sm:px-6 py-3">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center gap-2 sm:gap-4">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Users className="h-4 w-4 text-gray-400 hidden sm:block" />
+              <span className="text-xs sm:text-sm text-gray-400">Account:</span>
             </div>
 
             {loadingAccounts ? (
@@ -674,7 +674,7 @@ function LiveTradingContent() {
       </div>
 
       {/* Market Status Bar */}
-      <div className="bg-[#111827] border-b border-gray-800 px-6 py-2.5 flex items-center justify-between">
+      <div className="bg-[#111827] border-b border-gray-800 px-3 sm:px-6 py-2.5 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
             <span className="relative flex h-2.5 w-2.5">
@@ -695,8 +695,8 @@ function LiveTradingContent() {
               NSE: {marketStatus}
             </span>
           </div>
-          <span className="text-gray-500 text-xs">|</span>
-          <span className="text-gray-400 text-xs">Trading Hours: 9:15 AM - 3:30 PM IST</span>
+          <span className="text-gray-500 text-xs hidden sm:inline">|</span>
+          <span className="text-gray-400 text-xs hidden sm:inline">Trading Hours: 9:15 AM - 3:30 PM IST</span>
         </div>
         <div className="flex items-center gap-2 text-gray-400 text-sm">
           <Clock className="h-4 w-4" />
@@ -706,7 +706,7 @@ function LiveTradingContent() {
 
       {/* Error/Success Banners */}
       {errorMessage && (
-        <div className="bg-red-900/40 border-b border-red-700/50 px-6 py-3 flex items-center justify-between">
+        <div className="bg-red-900/40 border-b border-red-700/50 px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <ShieldAlert className="h-5 w-5 text-red-400 shrink-0" />
             <span className="text-red-200 text-sm font-medium">{errorMessage}</span>
@@ -718,7 +718,7 @@ function LiveTradingContent() {
       )}
 
       {statusMessage && (
-        <div className="bg-emerald-900/40 border-b border-emerald-700/50 px-6 py-3 flex items-center justify-between">
+        <div className="bg-emerald-900/40 border-b border-emerald-700/50 px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
           <div className="flex items-center gap-3">
             <CheckCircle2 className="h-5 w-5 text-emerald-400 shrink-0" />
             <span className="text-emerald-200 text-sm font-medium">{statusMessage}</span>
@@ -729,10 +729,10 @@ function LiveTradingContent() {
         </div>
       )}
 
-      <div className="p-6 space-y-6">
+      <div className="p-3 sm:p-6 space-y-4 sm:space-y-6">
         {/* No Account Warning */}
         {!isCheckingAuth && connectedAccounts.length === 0 && (
-          <div className="bg-amber-900/40 border border-amber-700/50 rounded-lg px-6 py-4 flex items-center justify-between">
+          <div className="bg-amber-900/40 border border-amber-700/50 rounded-lg px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <AlertTriangle className="h-5 w-5 text-amber-400" />
               <span className="text-amber-200 text-sm font-medium">
@@ -749,7 +749,7 @@ function LiveTradingContent() {
         )}
 
         {/* Main Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Left Column - Order Placement */}
           <div className="lg:col-span-1" ref={orderFormRef}>
             <div className="bg-[#111827] border border-gray-800 rounded-lg p-5">
@@ -1274,7 +1274,7 @@ function LiveTradingContent() {
         </div>
 
         {/* Auto-Trading Section */}
-        <div className="bg-[#111827] border border-gray-800 rounded-lg p-6">
+        <div className="bg-[#111827] border border-gray-800 rounded-lg p-4 sm:p-6">
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <Power className="h-5 w-5 text-orange-400" />

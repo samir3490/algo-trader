@@ -19,6 +19,9 @@ interface AppState {
 
   sidebarOpen: boolean;
   setSidebarOpen: (open: boolean) => void;
+
+  mobileMenuOpen: boolean;
+  setMobileMenuOpen: (open: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set) => ({
@@ -39,4 +42,7 @@ export const useAppStore = create<AppState>((set) => ({
 
   sidebarOpen: true,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
+
+  mobileMenuOpen: false,
+  setMobileMenuOpen: (open) => set({ mobileMenuOpen: open }),
 }));

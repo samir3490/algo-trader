@@ -390,9 +390,9 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen p-4 md:p-6 lg:p-8 space-y-6">
+    <div className="min-h-screen p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Dashboard</h1>
           <p className="text-sm text-text-secondary mt-0.5">

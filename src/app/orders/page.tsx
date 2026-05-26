@@ -205,9 +205,9 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10">
             <ClipboardList className="h-5 w-5 text-accent" />
@@ -228,7 +228,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 rounded-xl bg-bg-secondary p-1 border border-border w-fit">
+      <div className="flex items-center gap-1 rounded-xl bg-bg-secondary p-1 border border-border w-full sm:w-fit overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.key}

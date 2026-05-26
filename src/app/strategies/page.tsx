@@ -409,7 +409,7 @@ export default function StrategiesPage() {
   const pausedCount = activeStrategies.filter((s) => s.status === "paused").length;
 
   return (
-    <div className="min-h-screen space-y-8">
+    <div className="min-h-screen p-3 sm:p-4 md:p-6 space-y-6 sm:space-y-8">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
