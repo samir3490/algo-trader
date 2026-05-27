@@ -19,6 +19,7 @@ import {
 import { cn, formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getPaperTradingState, savePaperTradingState, resetPaperTrading, saveOrder } from "@/lib/firebase";
+import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
 
 type OrderSide = "BUY" | "SELL";
 type OrderType = "MARKET" | "LIMIT";
@@ -236,18 +237,18 @@ export default function PaperTradingPage() {
       if (!sym.trim()) return;
       setIsLoadingQuote(true);
       try {
-        if (quoteAccountIds.length > 0) {
-          for (const accountId of quoteAccountIds) {
-            const res = await fetch(
-              `/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${ex}&accountId=${accountId}`
-            );
-            if (!res.ok) continue;
-            const data = await res.json();
-            if (data?.lastPrice > 0) {
-              setQuote(data);
-              return;
-            }
-          }
+        const data = await fetchMarketQuote(sym.trim(), ex);
+        if (data?.lastPrice && data.lastPrice > 0) {
+          setQuote({
+            ...data,
+            buyDepth: data.buyDepth ?? [],
+            sellDepth: data.sellDepth ?? [],
+            lowerCircuit: data.lowerCircuit ?? 0,
+            upperCircuit: data.upperCircuit ?? 0,
+            totalBuyQty: data.totalBuyQty ?? 0,
+            totalSellQty: data.totalSellQty ?? 0,
+          });
+          return;
         }
 
         const fallback = buildQuoteFromHolding(sym.trim(), ex);
@@ -260,7 +261,7 @@ export default function PaperTradingPage() {
         setIsLoadingQuote(false);
       }
     },
-    [quoteAccountIds, buildQuoteFromHolding]
+    [buildQuoteFromHolding]
   );
 
   const searchInstruments = useCallback(async (query: string) => {

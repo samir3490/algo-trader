@@ -264,13 +264,13 @@ export default function DashboardPage() {
 
   // Fetch watchlist quotes
   const fetchWatchlistQuotes = useCallback(async (items: WatchlistItem[]) => {
-    if (!zerodhaConnected || items.length === 0) return;
+    if (items.length === 0) return;
 
     const newQuotes = new Map<string, WatchlistQuote>();
     for (const item of items) {
       try {
         const res = await fetch(
-          `/api/zerodha/quote?symbol=${encodeURIComponent(item.symbol)}&exchange=${item.exchange}`
+          `/api/market/quote?symbol=${encodeURIComponent(item.symbol)}&exchange=${item.exchange}`
         );
         if (res.ok) {
           const data = await res.json();
@@ -288,20 +288,20 @@ export default function DashboardPage() {
       }
     }
     setWatchlistQuotes(newQuotes);
-  }, [zerodhaConnected]);
+  }, []);
 
   // Fetch quotes when watchlist changes or zerodha connects
   useEffect(() => {
     if (!mounted) return;
     fetchWatchlistQuotes(watchlist);
-  }, [watchlist, zerodhaConnected, mounted, fetchWatchlistQuotes]);
+  }, [watchlist, mounted, fetchWatchlistQuotes]);
 
   // Auto-refresh prices when market is open
   useEffect(() => {
-    if (!mounted || !zerodhaConnected || !marketOpen || watchlist.length === 0) return;
+    if (!mounted || !marketOpen || watchlist.length === 0) return;
     const interval = setInterval(() => fetchWatchlistQuotes(watchlist), REFRESH_INTERVAL);
     return () => clearInterval(interval);
-  }, [mounted, zerodhaConnected, marketOpen, watchlist, fetchWatchlistQuotes]);
+  }, [mounted, marketOpen, watchlist, fetchWatchlistQuotes]);
 
   // Watchlist search
   const handleSearchChange = (value: string) => {
@@ -576,10 +576,10 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h2 className="text-lg font-semibold text-text-primary">Watchlist</h2>
             <div className="flex items-center gap-2">
-              {zerodhaConnected && marketOpen && (
-                <span className="flex items-center gap-1.5 text-[10px] text-profit">
+              {marketOpen && (
+                <span className="flex items-center gap-1.5 text-[10px] text-profit" title="Prices via Yahoo Finance (~15 min delay)">
                   <span className="pulse-dot bg-profit" />
-                  Live
+                  Market prices
                 </span>
               )}
               <span className="text-xs text-text-tertiary">NSE</span>

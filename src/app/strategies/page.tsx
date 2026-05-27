@@ -1,12 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   TrendingUp,
-  Activity,
-  BarChart3,
-  LineChart,
-  Layers,
   Plus,
   Play,
   Pause,
@@ -19,6 +15,7 @@ import {
   Target,
   Signal,
   Hash,
+  Loader2,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -28,23 +25,15 @@ import {
   saveActiveStrategies as saveFirestoreStrategies,
   type ActiveStrategy as FirestoreStrategy,
 } from "@/lib/firebase";
-
-type StrategyType = "sma" | "ema" | "rsi" | "macd" | "bollinger";
-type Timeframe = "1min" | "5min" | "15min" | "30min" | "1hr" | "Day";
-
-interface StrategyParam {
-  label: string;
-  key: string;
-  defaultValue: number;
-}
-
-interface StrategyDefinition {
-  id: StrategyType;
-  name: string;
-  description: string;
-  icon: React.ElementType;
-  params: StrategyParam[];
-}
+import {
+  STRATEGY_DEFINITIONS,
+  TIMEFRAMES,
+  getDefaultParams,
+  getStrategyDef,
+  inferStrategyType,
+  type StrategyType,
+  type Timeframe,
+} from "@/lib/strategies/definitions";
 
 interface ActiveStrategy {
   id: string;
@@ -74,71 +63,6 @@ const BANK_NIFTY_SYMBOLS = [
 ];
 
 const TOP100_SYMBOLS = NSE_INSTRUMENTS.slice(0, 100).map((i) => i.symbol);
-
-const STRATEGY_DEFINITIONS: StrategyDefinition[] = [
-  {
-    id: "sma",
-    name: "SMA Crossover",
-    description: "Buy when short SMA crosses above long SMA",
-    icon: TrendingUp,
-    params: [
-      { label: "Short Period", key: "shortPeriod", defaultValue: 9 },
-      { label: "Long Period", key: "longPeriod", defaultValue: 21 },
-    ],
-  },
-  {
-    id: "ema",
-    name: "EMA Crossover",
-    description: "Faster response using exponential moving averages",
-    icon: Activity,
-    params: [
-      { label: "Short Period", key: "shortPeriod", defaultValue: 9 },
-      { label: "Long Period", key: "longPeriod", defaultValue: 21 },
-    ],
-  },
-  {
-    id: "rsi",
-    name: "RSI Strategy",
-    description: "Buy at oversold (30), sell at overbought (70)",
-    icon: BarChart3,
-    params: [
-      { label: "Period", key: "period", defaultValue: 14 },
-      { label: "Oversold", key: "oversold", defaultValue: 30 },
-      { label: "Overbought", key: "overbought", defaultValue: 70 },
-    ],
-  },
-  {
-    id: "macd",
-    name: "MACD Crossover",
-    description: "Signal line crossover for trend detection",
-    icon: LineChart,
-    params: [
-      { label: "Fast", key: "fast", defaultValue: 12 },
-      { label: "Slow", key: "slow", defaultValue: 26 },
-      { label: "Signal", key: "signal", defaultValue: 9 },
-    ],
-  },
-  {
-    id: "bollinger",
-    name: "Bollinger Bands",
-    description: "Trade at band touches for mean reversion",
-    icon: Layers,
-    params: [
-      { label: "Period", key: "period", defaultValue: 20 },
-      { label: "Multiplier", key: "multiplier", defaultValue: 2 },
-    ],
-  },
-];
-
-const TIMEFRAMES: Timeframe[] = ["1min", "5min", "15min", "30min", "1hr", "Day"];
-
-function getDefaultParams(def: StrategyDefinition): Record<string, number> {
-  return Object.fromEntries(def.params.map((p) => [p.key, p.defaultValue]));
-}
-
-function getStrategyDef(type: StrategyType): StrategyDefinition {
-  return STRATEGY_DEFINITIONS.find((d) => d.id === type)!;
-}
 
 // ── Persistence ──────────────────────────────────────────────────────────
 
@@ -177,12 +101,7 @@ function firestoreToLocal(strategies: FirestoreStrategy[]): ActiveStrategy[] {
   return strategies.map((s) => ({
     id: s.id,
     name: s.name,
-    type: (s.name.toLowerCase().includes("sma") ? "sma"
-      : s.name.toLowerCase().includes("ema") ? "ema"
-      : s.name.toLowerCase().includes("rsi") ? "rsi"
-      : s.name.toLowerCase().includes("macd") ? "macd"
-      : s.name.toLowerCase().includes("bollinger") ? "bollinger"
-      : "sma") as StrategyType,
+    type: inferStrategyType(s.name),
     symbol: s.symbol,
     exchange: s.exchange,
     mode: s.mode,
@@ -205,6 +124,8 @@ function persistStrategies(strategies: ActiveStrategy[]) {
 export default function StrategiesPage() {
   const { user } = useAuth();
   const [mounted, setMounted] = useState(false);
+  const hydratingRef = useRef(true);
+  const [categoryFilter, setCategoryFilter] = useState<"all" | "basic" | "advanced">("all");
   const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([]);
 
   const [cardState, setCardState] = useState<
@@ -247,10 +168,9 @@ export default function StrategiesPage() {
     getDefaultParams(STRATEGY_DEFINITIONS[0])
   );
 
-  // Load persisted strategies on mount
+  // Load persisted strategies on mount (avoid persisting empty state before hydration)
   useEffect(() => {
-    const cached = loadActiveStrategiesFromCache();
-    setActiveStrategies(cached);
+    let cancelled = false;
 
     function applyToCards(loaded: ActiveStrategy[]) {
       setCardState((prev) => {
@@ -267,30 +187,44 @@ export default function StrategiesPage() {
       });
     }
 
-    applyToCards(cached);
-    setMounted(true);
-
-    if (!user) return;
-
-    async function loadFromFirestore() {
-      try {
-        const fsStrategies = await getFirestoreStrategies();
-        const mapped = firestoreToLocal(fsStrategies);
-        setActiveStrategies(mapped);
-        saveActiveStrategiesToCache(mapped);
-        applyToCards(mapped);
-      } catch (e) {
-        console.error("Failed to load strategies from Firestore, using cache:", e);
-      }
+    async function finishHydration(loaded: ActiveStrategy[]) {
+      if (cancelled) return;
+      setActiveStrategies(loaded);
+      saveActiveStrategiesToCache(loaded);
+      applyToCards(loaded);
+      hydratingRef.current = false;
+      setMounted(true);
     }
 
-    loadFromFirestore();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const cached = loadActiveStrategiesFromCache();
+    applyToCards(cached);
+
+    if (!user) {
+      finishHydration(cached);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    getFirestoreStrategies()
+      .then((fsStrategies) => {
+        const mapped =
+          fsStrategies.length > 0 ? firestoreToLocal(fsStrategies) : cached;
+        finishHydration(mapped);
+      })
+      .catch((e) => {
+        console.error("Failed to load strategies from Firestore, using cache:", e);
+        finishHydration(cached);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
-  // Persist strategies whenever they change
+  // Persist strategies whenever they change (after hydration)
   useEffect(() => {
-    if (!mounted) return;
+    if (!mounted || hydratingRef.current) return;
     persistStrategies(activeStrategies);
   }, [activeStrategies, mounted]);
 
@@ -412,6 +346,19 @@ export default function StrategiesPage() {
   const runningCount = activeStrategies.filter((s) => s.status === "running").length;
   const pausedCount = activeStrategies.filter((s) => s.status === "paused").length;
 
+  const filteredDefinitions = STRATEGY_DEFINITIONS.filter((d) =>
+    categoryFilter === "all" ? true : d.category === categoryFilter
+  );
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-gray-400">
+        <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+        <p className="text-sm">Loading strategies…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen p-3 sm:p-4 md:p-6 space-y-6 sm:space-y-8">
       {/* Header */}
@@ -505,9 +452,30 @@ export default function StrategiesPage() {
         </div>
       )}
 
+      {/* Category filter */}
+      <div className="flex flex-wrap items-center gap-2">
+        {(["all", "basic", "advanced"] as const).map((cat) => (
+          <button
+            key={cat}
+            onClick={() => setCategoryFilter(cat)}
+            className={cn(
+              "rounded-lg px-4 py-2 text-xs font-medium transition-colors",
+              categoryFilter === cat
+                ? "bg-blue-600 text-white"
+                : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+            )}
+          >
+            {cat === "all" ? "All strategies" : cat === "basic" ? "Basic (5)" : "Advanced (7)"}
+          </button>
+        ))}
+        <p className="text-[10px] text-gray-600 ml-1 w-full sm:w-auto">
+          Win rates are historical backtest benchmarks — not guaranteed future performance.
+        </p>
+      </div>
+
       {/* Strategy Cards Grid */}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {STRATEGY_DEFINITIONS.map((def) => {
+        {filteredDefinitions.map((def) => {
           const state = cardState[def.id];
           const Icon = def.icon;
           return (
@@ -540,10 +508,47 @@ export default function StrategiesPage() {
                 >
                   <Icon className="h-5 w-5" />
                 </div>
-                <h3 className="text-base font-semibold text-white">{def.name}</h3>
+                <div>
+                  <h3 className="text-base font-semibold text-white">{def.name}</h3>
+                  <span
+                    className={cn(
+                      "text-[10px] font-medium uppercase tracking-wide",
+                      def.category === "advanced" ? "text-purple-400" : "text-gray-500"
+                    )}
+                  >
+                    {def.category}
+                  </span>
+                </div>
               </div>
 
-              <p className="mb-4 text-sm leading-relaxed text-gray-400">{def.description}</p>
+              <p className="mb-3 text-sm leading-relaxed text-gray-400">{def.description}</p>
+
+              <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-2.5 py-2">
+                  <span className="text-gray-500">Hist. win rate</span>
+                  <p className="font-semibold text-emerald-400">{def.winRate}%</p>
+                </div>
+                <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-2.5 py-2">
+                  <span className="text-gray-500">Risk</span>
+                  <p
+                    className={cn(
+                      "font-semibold",
+                      def.riskLevel === "Low"
+                        ? "text-green-400"
+                        : def.riskLevel === "Medium"
+                          ? "text-amber-400"
+                          : "text-red-400"
+                    )}
+                  >
+                    {def.riskLevel}
+                  </p>
+                </div>
+                <div className="col-span-2 rounded-lg border border-gray-800 bg-gray-900/50 px-2.5 py-2">
+                  <span className="text-gray-500">Best for</span>
+                  <p className="text-gray-300">{def.bestFor}</p>
+                </div>
+              </div>
+              <p className="mb-4 text-[11px] italic text-gray-500 leading-relaxed">{def.feedback}</p>
 
               {/* Parameter inputs */}
               <div className="mb-4 space-y-2">

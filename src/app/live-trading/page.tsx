@@ -23,6 +23,7 @@ import {
 import { cn, formatCurrency, formatPercent, isMarketOpen, getMarketStatus } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getZerodhaAccounts, type ZerodhaAccount } from "@/lib/firebase";
+import { fetchMarketQuote, fetchZerodhaQuoteDepth } from "@/lib/market-data/fetch-quote-client";
 
 type TransactionType = "BUY" | "SELL";
 type ProductType = "MIS" | "CNC" | "NRML";
@@ -80,6 +81,8 @@ interface StockQuote {
   upperCircuit: number;
   totalBuyQty: number;
   totalSellQty: number;
+  priceNote?: string;
+  source?: string;
 }
 
 interface ConnectedAccount extends ZerodhaAccount {
@@ -424,32 +427,31 @@ function LiveTradingContent() {
     async (sym: string) => {
       if (!sym.trim()) return;
 
-      const accountIdsToTry = [
-        ...(connected && selectedAccountId ? [selectedAccountId] : []),
-        ...connectedAccounts
-          .map((a) => a.kiteUserId)
-          .filter((id) => id !== selectedAccountId),
-      ];
-
-      if (accountIdsToTry.length === 0) {
-        const fallback = buildQuoteFromHolding(sym.trim(), exchange);
-        setQuote(fallback);
-        return;
-      }
-
       setIsLoadingQuote(true);
       try {
-        for (const id of accountIdsToTry) {
-          const res = await fetch(
-            `/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${exchange}&accountId=${id}`
-          );
-          if (!res.ok) continue;
-          const data = await res.json();
-          if (data?.lastPrice > 0) {
-            setQuote(data);
-            setQuoteLastUpdated(new Date());
-            return;
+        let data = await fetchMarketQuote(sym.trim(), exchange);
+
+        if (connected && selectedAccountId) {
+          const depth = await fetchZerodhaQuoteDepth(sym.trim(), exchange, selectedAccountId);
+          if (depth?.buyDepth?.length || depth?.sellDepth?.length) {
+            data = data
+              ? {
+                  ...data,
+                  buyDepth: depth.buyDepth,
+                  sellDepth: depth.sellDepth,
+                  lowerCircuit: depth.lowerCircuit,
+                  upperCircuit: depth.upperCircuit,
+                  totalBuyQty: depth.totalBuyQty,
+                  totalSellQty: depth.totalSellQty,
+                }
+              : depth;
           }
+        }
+
+        if (data?.lastPrice && data.lastPrice > 0) {
+          setQuote(data as StockQuote);
+          setQuoteLastUpdated(new Date());
+          return;
         }
 
         const fallback = buildQuoteFromHolding(sym.trim(), exchange);
@@ -462,7 +464,7 @@ function LiveTradingContent() {
         setIsLoadingQuote(false);
       }
     },
-    [connected, selectedAccountId, connectedAccounts, exchange, buildQuoteFromHolding]
+    [connected, selectedAccountId, exchange, buildQuoteFromHolding]
   );
 
   const searchInstruments = useCallback(async (query: string) => {
@@ -506,13 +508,13 @@ function LiveTradingContent() {
     if (!symbol.trim()) return;
     const timer = setTimeout(() => fetchQuote(symbol), 300);
     return () => clearTimeout(timer);
-  }, [symbol, exchange, connectedAccounts.length, fetchQuote]);
+  }, [symbol, exchange, fetchQuote]);
 
   useEffect(() => {
-    if (!symbol.trim() || connectedAccounts.length === 0) return;
-    const interval = setInterval(() => fetchQuote(symbol), 10000);
+    if (!symbol.trim()) return;
+    const interval = setInterval(() => fetchQuote(symbol), 15000);
     return () => clearInterval(interval);
-  }, [symbol, connectedAccounts.length, fetchQuote]);
+  }, [symbol, exchange, fetchQuote]);
 
   // Reload data when selected account changes
   useEffect(() => {
@@ -613,6 +615,19 @@ function LiveTradingContent() {
     setTransactionType(pos.qty > 0 ? "SELL" : "BUY");
     setQuantity(Math.abs(pos.qty).toString());
     setProductType(pos.product as ProductType);
+    setOrderType("MARKET");
+    setPrice("");
+    setTriggerPrice("");
+    orderFormRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const handleHoldingTrade = (holding: Holding, side: TransactionType) => {
+    setSymbol(holding.symbol);
+    setSearchInput(holding.symbol);
+    setExchange(holding.exchange as Exchange);
+    setTransactionType(side);
+    setQuantity(side === "SELL" ? String(holding.qty) : "1");
+    setProductType("CNC");
     setOrderType("MARKET");
     setPrice("");
     setTriggerPrice("");
@@ -971,7 +986,8 @@ function LiveTradingContent() {
 
                 {/* Selected symbol price (quick view) */}
                 {symbol.trim() && (
-                  <div className="rounded-md border border-gray-700 bg-[#0a0f1a] px-3 py-2 flex items-center justify-between">
+                  <div className="rounded-md border border-gray-700 bg-[#0a0f1a] px-3 py-2 space-y-1">
+                    <div className="flex items-center justify-between">
                     <span className="text-xs text-gray-400">{symbol} · {exchange}</span>
                     {isLoadingQuote ? (
                       <span className="text-xs text-gray-500 flex items-center gap-1.5">
@@ -987,10 +1003,12 @@ function LiveTradingContent() {
                           {quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)} ({formatPercent(quote.changePercent)})
                         </span>
                       </div>
-                    ) : connected ? (
-                      <span className="text-xs text-gray-500">Price unavailable</span>
                     ) : (
-                      <span className="text-xs text-amber-400/80">Connect Zerodha for live price</span>
+                      <span className="text-xs text-gray-500">Price unavailable</span>
+                    )}
+                    </div>
+                    {quote?.priceNote && (
+                      <p className="text-[10px] text-gray-500">{quote.priceNote}</p>
                     )}
                   </div>
                 )}
@@ -1008,6 +1026,9 @@ function LiveTradingContent() {
                       <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", quote.changePercent >= 0 ? "bg-green-900/50 text-green-400" : "bg-red-900/50 text-red-400")}>
                         {quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)} ({formatPercent(quote.changePercent)})
                       </span>
+                      {quote.priceNote && (
+                        <span className="text-[10px] text-gray-500">{quote.priceNote}</span>
+                      )}
                       {quoteLastUpdated && (
                         <span className="text-[10px] text-gray-500">
                           Updated {quoteLastUpdated.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}
@@ -1430,6 +1451,7 @@ function LiveTradingContent() {
                                 <th className="text-right py-2 px-3 font-medium">P&L</th>
                                 <th className="text-right py-2 px-3 font-medium">P&L %</th>
                                 <th className="text-right py-2 px-3 font-medium">Day %</th>
+                                <th className="text-right py-2 px-3 font-medium">Actions</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -1454,6 +1476,24 @@ function LiveTradingContent() {
                                     <span className={cn("text-xs font-medium", holding.dayChange >= 0 ? "text-green-400" : "text-red-400")}>
                                       {formatPercent(holding.dayChange)}
                                     </span>
+                                  </td>
+                                  <td className="text-right py-2.5 px-3">
+                                    <div className="flex items-center justify-end gap-1.5">
+                                      <button
+                                        type="button"
+                                        onClick={() => handleHoldingTrade(holding, "BUY")}
+                                        className="text-xs font-semibold text-blue-400 hover:text-blue-300 bg-blue-900/20 hover:bg-blue-900/40 px-2 py-1 rounded transition-colors"
+                                      >
+                                        Buy more
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleHoldingTrade(holding, "SELL")}
+                                        className="text-xs font-semibold text-orange-400 hover:text-orange-300 bg-orange-900/20 hover:bg-orange-900/40 px-2 py-1 rounded transition-colors"
+                                      >
+                                        Sell
+                                      </button>
+                                    </div>
                                   </td>
                                 </tr>
                               ))}

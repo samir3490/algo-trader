@@ -462,6 +462,22 @@ function SettingsContent() {
           )}
         </div>
 
+        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-3 mb-4">
+          <p className="text-xs text-amber-200/90">
+            <strong>Add funds:</strong> Zerodha does not allow adding money through third-party apps.
+            Deposit via{" "}
+            <a
+              href="https://kite.zerodha.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-amber-300 underline hover:text-amber-200"
+            >
+              Kite web
+            </a>{" "}
+            or the Zerodha mobile app (Funds → Add funds). Available balance shown here updates after you connect.
+          </p>
+        </div>
+
         <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 px-4 py-3 mb-4">
           <p className="text-xs text-blue-300">
             <strong>Adding a new account?</strong>
