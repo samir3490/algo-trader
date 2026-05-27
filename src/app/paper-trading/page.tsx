@@ -133,7 +133,7 @@ export default function PaperTradingPage() {
   const [manualPrice, setManualPrice] = useState("");
 
   const [zerodhaConnected, setZerodhaConnected] = useState(false);
-  const [quoteAccountId, setQuoteAccountId] = useState<string>("");
+  const [quoteAccountIds, setQuoteAccountIds] = useState<string[]>([]);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
@@ -186,17 +186,14 @@ export default function PaperTradingPage() {
       try {
         const res = await fetch("/api/zerodha/accounts");
         const data = await res.json();
-        const connected = (data.accounts || []).find((a: { connected: boolean }) => a.connected);
-        if (connected) {
-          setZerodhaConnected(true);
-          setQuoteAccountId(connected.kiteUserId);
-        } else {
-          setZerodhaConnected(false);
-          setQuoteAccountId("");
-        }
+        const connectedList = (data.accounts || [])
+          .filter((a: { connected: boolean }) => a.connected)
+          .map((a: { kiteUserId: string }) => a.kiteUserId);
+        setZerodhaConnected(connectedList.length > 0);
+        setQuoteAccountIds(connectedList);
       } catch {
         setZerodhaConnected(false);
-        setQuoteAccountId("");
+        setQuoteAccountIds([]);
       } finally {
         setIsCheckingAuth(false);
       }
@@ -204,26 +201,67 @@ export default function PaperTradingPage() {
     checkAuth();
   }, []);
 
-  const fetchQuote = useCallback(async (sym: string, ex: Exchange) => {
-    if (!sym.trim()) return;
-    setIsLoadingQuote(true);
-    try {
-      const accountQuery = quoteAccountId ? `&accountId=${quoteAccountId}` : "";
-      const res = await fetch(
-        `/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${ex}${accountQuery}`
+  const buildQuoteFromHolding = useCallback(
+    (sym: string, ex: Exchange): StockQuote | null => {
+      const holding = holdings.find(
+        (h) => h.symbol.toUpperCase() === sym.toUpperCase() && h.exchange === ex
       );
-      if (!res.ok) {
-        setQuote(null);
-        return;
+      if (!holding || !holding.ltp) return null;
+      const change = holding.ltp - holding.avgPrice;
+      const changePercent = holding.avgPrice > 0 ? (change / holding.avgPrice) * 100 : 0;
+      return {
+        symbol: holding.symbol,
+        exchange: holding.exchange,
+        lastPrice: holding.ltp,
+        open: holding.ltp,
+        high: holding.ltp,
+        low: holding.ltp,
+        close: holding.avgPrice,
+        volume: 0,
+        change,
+        changePercent,
+        buyDepth: [],
+        sellDepth: [],
+        lowerCircuit: 0,
+        upperCircuit: 0,
+        totalBuyQty: 0,
+        totalSellQty: 0,
+      };
+    },
+    [holdings]
+  );
+
+  const fetchQuote = useCallback(
+    async (sym: string, ex: Exchange) => {
+      if (!sym.trim()) return;
+      setIsLoadingQuote(true);
+      try {
+        if (quoteAccountIds.length > 0) {
+          for (const accountId of quoteAccountIds) {
+            const res = await fetch(
+              `/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${ex}&accountId=${accountId}`
+            );
+            if (!res.ok) continue;
+            const data = await res.json();
+            if (data?.lastPrice > 0) {
+              setQuote(data);
+              return;
+            }
+          }
+        }
+
+        const fallback = buildQuoteFromHolding(sym.trim(), ex);
+        setQuote(fallback);
+        if (!fallback) setQuote(null);
+      } catch {
+        const fallback = buildQuoteFromHolding(sym.trim(), ex);
+        setQuote(fallback);
+      } finally {
+        setIsLoadingQuote(false);
       }
-      const data = await res.json();
-      setQuote(data);
-    } catch {
-      setQuote(null);
-    } finally {
-      setIsLoadingQuote(false);
-    }
-  }, [quoteAccountId]);
+    },
+    [quoteAccountIds, buildQuoteFromHolding]
+  );
 
   const searchInstruments = useCallback(async (query: string) => {
     if (!query.trim() || query.trim().length < 2) {
@@ -985,21 +1023,26 @@ export default function PaperTradingPage() {
               )}
             </h2>
             {holdings.length > 0 && (
-              <div className="text-xs text-text-tertiary">
-                Invested: {formatCurrency(portfolio.invested)}
+              <div className="text-xs text-text-tertiary text-right">
+                <span>Invested: {formatCurrency(portfolio.invested)}</span>
+                <span className="mx-2">·</span>
+                <span className={portfolio.pnl >= 0 ? "text-profit" : "text-loss"}>
+                  P&L: {portfolio.pnl >= 0 ? "+" : ""}{formatCurrency(portfolio.pnl)} ({formatPercent(portfolio.pnlPercent)})
+                </span>
               </div>
             )}
           </div>
 
           <div className="overflow-x-auto -mx-5">
-            <table className="w-full text-sm min-w-[700px]">
+            <table className="w-full text-sm min-w-[800px]">
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Symbol</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Qty</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Avg Price</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">LTP</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Value</th>
+                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Invested</th>
+                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Current Value</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">P&L</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">P&L %</th>
                   <th className="text-center text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Action</th>
@@ -1030,6 +1073,9 @@ export default function PaperTradingPage() {
                       </td>
                       <td className="py-3 px-5 text-right text-text-primary font-medium">
                         {formatCurrency(h.ltp)}
+                      </td>
+                      <td className="py-3 px-5 text-right text-text-secondary">
+                        {formatCurrency(investedVal)}
                       </td>
                       <td className="py-3 px-5 text-right text-text-primary">
                         {formatCurrency(currentVal)}
@@ -1068,7 +1114,7 @@ export default function PaperTradingPage() {
                 })}
                 {holdings.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="py-12 text-center text-text-tertiary">
+                    <td colSpan={9} className="py-12 text-center text-text-tertiary">
                       No holdings yet. Place your first order!
                     </td>
                   </tr>

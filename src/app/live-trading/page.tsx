@@ -52,10 +52,14 @@ interface KiteOrder {
 
 interface Holding {
   symbol: string;
+  exchange: string;
   qty: number;
   avgPrice: number;
   ltp: number;
   pnl: number;
+  invested: number;
+  currentValue: number;
+  pnlPercent: number;
   dayChange: number;
 }
 
@@ -372,34 +376,94 @@ function LiveTradingContent() {
       const data = await res.json();
       const mapped: Holding[] = (data.holdings || []).map((h: any) => ({
         symbol: h.tradingsymbol,
-        qty: h.quantity,
-        avgPrice: h.average_price,
-        ltp: h.last_price,
-        pnl: h.pnl,
+        exchange: h.exchange || "NSE",
+        qty: h.quantity ?? 0,
+        avgPrice: h.average_price ?? 0,
+        ltp: h.last_price ?? 0,
+        pnl: h.pnl ?? 0,
+        invested: h.invested ?? (h.quantity ?? 0) * (h.average_price ?? 0),
+        currentValue: h.currentValue ?? (h.quantity ?? 0) * (h.last_price ?? 0),
+        pnlPercent: h.pnlPercent ?? 0,
         dayChange: h.day_change_percentage || 0,
       }));
       setHoldings(mapped);
     } catch { /* ignore */ }
   }, [selectedAccountId, apiQuery]);
 
-  const fetchQuote = useCallback(async (sym: string) => {
-    if (!sym.trim() || !connected) return;
-    setIsLoadingQuote(true);
-    try {
-      const res = await fetch(`/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${exchange}&${apiQuery}`);
-      if (!res.ok) {
-        setQuote(null);
+  const buildQuoteFromHolding = useCallback(
+    (sym: string, ex: Exchange): StockQuote | null => {
+      const holding = holdings.find(
+        (h) => h.symbol.toUpperCase() === sym.toUpperCase() && h.exchange === ex
+      );
+      if (!holding || !holding.ltp) return null;
+      const change = holding.ltp - holding.avgPrice;
+      const changePercent = holding.avgPrice > 0 ? (change / holding.avgPrice) * 100 : 0;
+      return {
+        symbol: holding.symbol,
+        exchange: holding.exchange,
+        lastPrice: holding.ltp,
+        open: holding.ltp,
+        high: holding.ltp,
+        low: holding.ltp,
+        close: holding.avgPrice,
+        volume: 0,
+        change,
+        changePercent,
+        buyDepth: [],
+        sellDepth: [],
+        lowerCircuit: 0,
+        upperCircuit: 0,
+        totalBuyQty: 0,
+        totalSellQty: 0,
+      };
+    },
+    [holdings]
+  );
+
+  const fetchQuote = useCallback(
+    async (sym: string) => {
+      if (!sym.trim()) return;
+
+      const accountIdsToTry = [
+        ...(connected && selectedAccountId ? [selectedAccountId] : []),
+        ...connectedAccounts
+          .map((a) => a.kiteUserId)
+          .filter((id) => id !== selectedAccountId),
+      ];
+
+      if (accountIdsToTry.length === 0) {
+        const fallback = buildQuoteFromHolding(sym.trim(), exchange);
+        setQuote(fallback);
         return;
       }
-      const data = await res.json();
-      setQuote(data);
-      setQuoteLastUpdated(new Date());
-    } catch {
-      setQuote(null);
-    } finally {
-      setIsLoadingQuote(false);
-    }
-  }, [connected, exchange, apiQuery]);
+
+      setIsLoadingQuote(true);
+      try {
+        for (const id of accountIdsToTry) {
+          const res = await fetch(
+            `/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${exchange}&accountId=${id}`
+          );
+          if (!res.ok) continue;
+          const data = await res.json();
+          if (data?.lastPrice > 0) {
+            setQuote(data);
+            setQuoteLastUpdated(new Date());
+            return;
+          }
+        }
+
+        const fallback = buildQuoteFromHolding(sym.trim(), exchange);
+        setQuote(fallback);
+        if (!fallback) setQuote(null);
+      } catch {
+        const fallback = buildQuoteFromHolding(sym.trim(), exchange);
+        setQuote(fallback);
+      } finally {
+        setIsLoadingQuote(false);
+      }
+    },
+    [connected, selectedAccountId, connectedAccounts, exchange, buildQuoteFromHolding]
+  );
 
   const searchInstruments = useCallback(async (query: string) => {
     if (!query.trim() || query.trim().length < 1) {
@@ -435,22 +499,20 @@ function LiveTradingContent() {
     setSymbol(sym);
     setSearchInput(sym);
     setShowSuggestions(false);
-    if (connected) {
-      fetchQuote(sym);
-    }
+    fetchQuote(sym);
   };
 
   useEffect(() => {
-    if (!symbol.trim() || !connected) return;
+    if (!symbol.trim()) return;
     const timer = setTimeout(() => fetchQuote(symbol), 300);
     return () => clearTimeout(timer);
-  }, [symbol, exchange, connected, fetchQuote]);
+  }, [symbol, exchange, connectedAccounts.length, fetchQuote]);
 
   useEffect(() => {
-    if (!symbol.trim() || !connected) return;
+    if (!symbol.trim() || connectedAccounts.length === 0) return;
     const interval = setInterval(() => fetchQuote(symbol), 10000);
     return () => clearInterval(interval);
-  }, [symbol, connected, fetchQuote]);
+  }, [symbol, connectedAccounts.length, fetchQuote]);
 
   // Reload data when selected account changes
   useEffect(() => {
@@ -472,6 +534,16 @@ function LiveTradingContent() {
   }, [connected, selectedAccountId, fetchPositions, fetchOrders, fetchHoldings]);
 
   const netPnl = positions.reduce((sum, p) => sum + p.pnl, 0);
+  const holdingsTotals = holdings.reduce(
+    (acc, h) => ({
+      invested: acc.invested + h.invested,
+      currentValue: acc.currentValue + h.currentValue,
+      pnl: acc.pnl + h.pnl,
+    }),
+    { invested: 0, currentValue: 0, pnl: 0 }
+  );
+  const holdingsPnlPercent =
+    holdingsTotals.invested > 0 ? (holdingsTotals.pnl / holdingsTotals.invested) * 100 : 0;
 
   const handlePlaceOrder = async () => {
     if (!symbol.trim() || !quantity) return;
@@ -1344,38 +1416,73 @@ function LiveTradingContent() {
                         </p>
                       </div>
                     ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="text-gray-400 text-xs border-b border-gray-800">
-                              <th className="text-left py-2 px-3 font-medium">Symbol</th>
-                              <th className="text-right py-2 px-3 font-medium">Qty</th>
-                              <th className="text-right py-2 px-3 font-medium">Avg Price</th>
-                              <th className="text-right py-2 px-3 font-medium">LTP</th>
-                              <th className="text-right py-2 px-3 font-medium">P&L</th>
-                              <th className="text-right py-2 px-3 font-medium">Day Change</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {holdings.map((holding, i) => (
-                              <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
-                                <td className="py-2.5 px-3 font-medium">{holding.symbol}</td>
-                                <td className="text-right py-2.5 px-3 text-gray-300">{holding.qty}</td>
-                                <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(holding.avgPrice)}</td>
-                                <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(holding.ltp)}</td>
-                                <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnl >= 0 ? "text-green-400" : "text-red-400")}>
-                                  {formatCurrency(holding.pnl)}
-                                </td>
-                                <td className="text-right py-2.5 px-3">
-                                  <span className={cn("text-xs font-medium", holding.dayChange >= 0 ? "text-green-400" : "text-red-400")}>
-                                    {formatPercent(holding.dayChange)}
-                                  </span>
-                                </td>
+                      <>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm min-w-[720px]">
+                            <thead>
+                              <tr className="text-gray-400 text-xs border-b border-gray-800">
+                                <th className="text-left py-2 px-3 font-medium">Symbol</th>
+                                <th className="text-right py-2 px-3 font-medium">Qty</th>
+                                <th className="text-right py-2 px-3 font-medium">Avg Price</th>
+                                <th className="text-right py-2 px-3 font-medium">LTP</th>
+                                <th className="text-right py-2 px-3 font-medium">Invested</th>
+                                <th className="text-right py-2 px-3 font-medium">Current Value</th>
+                                <th className="text-right py-2 px-3 font-medium">P&L</th>
+                                <th className="text-right py-2 px-3 font-medium">P&L %</th>
+                                <th className="text-right py-2 px-3 font-medium">Day %</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                            </thead>
+                            <tbody>
+                              {holdings.map((holding, i) => (
+                                <tr key={i} className="border-b border-gray-800/50 hover:bg-gray-800/30">
+                                  <td className="py-2.5 px-3 font-medium">
+                                    {holding.symbol}
+                                    <span className="text-xs text-gray-500 ml-1">{holding.exchange}</span>
+                                  </td>
+                                  <td className="text-right py-2.5 px-3 text-gray-300">{holding.qty}</td>
+                                  <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(holding.avgPrice)}</td>
+                                  <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(holding.ltp)}</td>
+                                  <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(holding.invested)}</td>
+                                  <td className="text-right py-2.5 px-3 text-gray-300">{formatCurrency(holding.currentValue)}</td>
+                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnl >= 0 ? "text-green-400" : "text-red-400")}>
+                                    {holding.pnl >= 0 ? "+" : ""}{formatCurrency(holding.pnl)}
+                                  </td>
+                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnlPercent >= 0 ? "text-green-400" : "text-red-400")}>
+                                    {formatPercent(holding.pnlPercent)}
+                                  </td>
+                                  <td className="text-right py-2.5 px-3">
+                                    <span className={cn("text-xs font-medium", holding.dayChange >= 0 ? "text-green-400" : "text-red-400")}>
+                                      {formatPercent(holding.dayChange)}
+                                    </span>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <div className="mt-4 pt-3 border-t border-gray-800 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <p className="text-xs text-gray-500">Total Invested</p>
+                            <p className="font-semibold text-gray-200">{formatCurrency(holdingsTotals.invested)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Current Value</p>
+                            <p className="font-semibold text-gray-200">{formatCurrency(holdingsTotals.currentValue)}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Total P&L</p>
+                            <p className={cn("font-semibold", holdingsTotals.pnl >= 0 ? "text-green-400" : "text-red-400")}>
+                              {holdingsTotals.pnl >= 0 ? "+" : ""}{formatCurrency(holdingsTotals.pnl)}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Overall P&L %</p>
+                            <p className={cn("font-semibold", holdingsPnlPercent >= 0 ? "text-green-400" : "text-red-400")}>
+                              {formatPercent(holdingsPnlPercent)}
+                            </p>
+                          </div>
+                        </div>
+                      </>
                     )}
                   </div>
                 )}
