@@ -79,16 +79,23 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    const orderType = body.orderType || "MARKET";
+    const shouldSetMarketProtection = orderType === "MARKET" || orderType === "SL-M";
+    // Kite rejects MARKET (and SL-M) orders if market_protection is 0/absent.
+    // -1 enables automatic market protection as per Kite guidelines.
+    const marketProtection = shouldSetMarketProtection ? -1 : undefined;
+
     const orderParams = {
       tradingsymbol: body.symbol,
       exchange: body.exchange || "NSE",
       transaction_type: body.side,
-      order_type: body.orderType || "MARKET",
+      order_type: orderType,
       quantity: body.quantity,
       price: body.price,
       trigger_price: body.triggerPrice,
       product: body.product || "MIS",
       validity: body.validity || "DAY",
+      ...(marketProtection !== undefined ? { market_protection: marketProtection } : {}),
     };
 
     let orderId: string | undefined;

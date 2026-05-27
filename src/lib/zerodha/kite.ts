@@ -118,11 +118,27 @@ export async function placeOrder(
     trigger_price?: number;
     product: "MIS" | "CNC" | "NRML";
     validity?: "DAY" | "IOC";
+    market_protection?: number;
   }
 ): Promise<{ orderId: string }> {
   const kite = getKiteClient(accessToken);
+
+  // Kite requires market_protection for MARKET and SL-M orders.
+  const shouldSetMarketProtection =
+    params.order_type === "MARKET" || params.order_type === "SL-M";
+
+  // -1 means automatic system-calculated market protection.
+  const market_protection =
+    shouldSetMarketProtection && params.market_protection == null ? -1 : params.market_protection;
+
+  const finalParams = {
+    ...params,
+    ...(market_protection != null && shouldSetMarketProtection
+      ? { market_protection }
+      : {}),
+  };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const result = await kite.placeOrder("regular", params as any);
+  const result = await kite.placeOrder("regular", finalParams as any);
   return { orderId: result.order_id };
 }
 
