@@ -23,7 +23,7 @@ import {
   Check,
   X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
   getSettings as getFirestoreSettings,
@@ -164,6 +164,7 @@ function SettingsContent() {
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const [labelInput, setLabelInput] = useState("");
   const [disconnectingAccount, setDisconnectingAccount] = useState<string | null>(null);
+  const [accountFunds, setAccountFunds] = useState<Record<string, { available: number; used: number; net: number }>>({});
 
   // Available Kite Connect app credentials
   const [availableApps, setAvailableApps] = useState<{ index: number; label: string; apiKeyPrefix: string }[]>([]);
@@ -290,6 +291,27 @@ function SettingsContent() {
       }
 
       setAccounts(merged);
+
+      const connectedIds = merged.filter((a) => a.connected).map((a) => a.kiteUserId);
+      if (connectedIds.length > 0) {
+        const fundResults = await Promise.all(
+          connectedIds.map(async (id) => {
+            try {
+              const mRes = await fetch(`/api/zerodha/margins?accountId=${id}`);
+              if (!mRes.ok) return null;
+              const mData = await mRes.json();
+              return { id, available: mData.available ?? 0, used: mData.used ?? 0, net: mData.net ?? 0 };
+            } catch {
+              return null;
+            }
+          })
+        );
+        const fundsMap: Record<string, { available: number; used: number; net: number }> = {};
+        for (const f of fundResults) {
+          if (f) fundsMap[f.id] = { available: f.available, used: f.used, net: f.net };
+        }
+        setAccountFunds(fundsMap);
+      }
     } catch (e) {
       console.error("Error loading accounts:", e);
     } finally {
@@ -595,6 +617,19 @@ function SettingsContent() {
                           </>
                         )}
                       </div>
+                      {account.connected && accountFunds[account.kiteUserId] && (
+                        <div className="mt-2 flex items-center gap-3 text-xs">
+                          <span className="flex items-center gap-1 text-profit">
+                            <Wallet className="h-3 w-3" />
+                            Available {formatCurrency(accountFunds[account.kiteUserId].available)}
+                          </span>
+                          {accountFunds[account.kiteUserId].used > 0 && (
+                            <span className="text-text-tertiary">
+                              Used {formatCurrency(accountFunds[account.kiteUserId].used)}
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
 

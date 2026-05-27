@@ -133,6 +133,7 @@ export default function PaperTradingPage() {
   const [manualPrice, setManualPrice] = useState("");
 
   const [zerodhaConnected, setZerodhaConnected] = useState(false);
+  const [quoteAccountId, setQuoteAccountId] = useState<string>("");
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [quote, setQuote] = useState<StockQuote | null>(null);
   const [isLoadingQuote, setIsLoadingQuote] = useState(false);
@@ -183,11 +184,19 @@ export default function PaperTradingPage() {
   useEffect(() => {
     async function checkAuth() {
       try {
-        const res = await fetch("/api/zerodha/status");
+        const res = await fetch("/api/zerodha/accounts");
         const data = await res.json();
-        setZerodhaConnected(data.connected === true);
+        const connected = (data.accounts || []).find((a: { connected: boolean }) => a.connected);
+        if (connected) {
+          setZerodhaConnected(true);
+          setQuoteAccountId(connected.kiteUserId);
+        } else {
+          setZerodhaConnected(false);
+          setQuoteAccountId("");
+        }
       } catch {
         setZerodhaConnected(false);
+        setQuoteAccountId("");
       } finally {
         setIsCheckingAuth(false);
       }
@@ -199,8 +208,9 @@ export default function PaperTradingPage() {
     if (!sym.trim()) return;
     setIsLoadingQuote(true);
     try {
+      const accountQuery = quoteAccountId ? `&accountId=${quoteAccountId}` : "";
       const res = await fetch(
-        `/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${ex}`
+        `/api/zerodha/quote?symbol=${encodeURIComponent(sym.trim())}&exchange=${ex}${accountQuery}`
       );
       if (!res.ok) {
         setQuote(null);
@@ -213,7 +223,7 @@ export default function PaperTradingPage() {
     } finally {
       setIsLoadingQuote(false);
     }
-  }, []);
+  }, [quoteAccountId]);
 
   const searchInstruments = useCallback(async (query: string) => {
     if (!query.trim() || query.trim().length < 2) {
@@ -675,6 +685,32 @@ export default function PaperTradingPage() {
                 </div>
               )}
             </div>
+
+            {/* Selected symbol price (quick view) */}
+            {symbol.trim() && (
+              <div className="mb-4 rounded-lg border border-border bg-bg-primary px-3 py-2.5 flex items-center justify-between">
+                <span className="text-xs text-text-tertiary">{symbol} · {exchange}</span>
+                {isLoadingQuote ? (
+                  <span className="text-xs text-text-tertiary flex items-center gap-1.5">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Loading price...
+                  </span>
+                ) : quote ? (
+                  <div className="text-right">
+                    <span className={cn("text-sm font-bold", quote.changePercent >= 0 ? "text-profit" : "text-loss")}>
+                      {formatCurrency(quote.lastPrice)}
+                    </span>
+                    <span className={cn("text-xs ml-2", quote.changePercent >= 0 ? "text-profit/80" : "text-loss/80")}>
+                      {quote.change >= 0 ? "+" : ""}{quote.change?.toFixed(2)} ({formatPercent(quote.changePercent)})
+                    </span>
+                  </div>
+                ) : zerodhaConnected ? (
+                  <span className="text-xs text-text-tertiary">Price unavailable</span>
+                ) : (
+                  <span className="text-xs text-amber-400/80">Connect Zerodha for live price</span>
+                )}
+              </div>
+            )}
 
             {/* Exchange + Order Type */}
             <div className="grid grid-cols-2 gap-3 mb-4">

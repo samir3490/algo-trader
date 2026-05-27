@@ -18,6 +18,7 @@ import {
   ChevronDown,
   Users,
   RefreshCw,
+  Wallet,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent, isMarketOpen, getMarketStatus } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -81,6 +82,13 @@ interface ConnectedAccount extends ZerodhaAccount {
   connected: boolean;
 }
 
+interface AccountFunds {
+  available: number;
+  used: number;
+  net: number;
+  openingBalance: number;
+}
+
 const STOCK_LIST: { symbol: string; name: string }[] = [
   { symbol: "RELIANCE", name: "Reliance Industries" },
   { symbol: "TCS", name: "Tata Consultancy Services" },
@@ -128,6 +136,8 @@ function LiveTradingContent() {
   const [selectedAccountId, setSelectedAccountId] = useState<string>("");
   const [showAccountDropdown, setShowAccountDropdown] = useState(false);
   const [loadingAccounts, setLoadingAccounts] = useState(true);
+  const [accountFunds, setAccountFunds] = useState<Record<string, AccountFunds>>({});
+  const [loadingFunds, setLoadingFunds] = useState(false);
   const accountDropdownRef = useRef<HTMLDivElement>(null);
 
   const [errorMessage, setErrorMessage] = useState("");
@@ -183,6 +193,7 @@ function LiveTradingContent() {
   const connected = accounts.some((a) => a.kiteUserId === selectedAccountId && a.connected);
   const selectedAccount = accounts.find((a) => a.kiteUserId === selectedAccountId);
   const connectedAccounts = accounts.filter((a) => a.connected);
+  const selectedFunds = selectedAccountId ? accountFunds[selectedAccountId] : undefined;
 
   // Close account dropdown on outside click
   useEffect(() => {
@@ -263,6 +274,47 @@ function LiveTradingContent() {
       setIsCheckingAuth(false);
     }
   }
+
+  const fetchAccountFunds = useCallback(async (accountIds: string[]) => {
+    if (accountIds.length === 0) return;
+    setLoadingFunds(true);
+    try {
+      const results = await Promise.all(
+        accountIds.map(async (id) => {
+          try {
+            const res = await fetch(`/api/zerodha/margins?accountId=${id}`);
+            if (!res.ok) return null;
+            const data = await res.json();
+            return {
+              id,
+              funds: {
+                available: data.available ?? 0,
+                used: data.used ?? 0,
+                net: data.net ?? 0,
+                openingBalance: data.openingBalance ?? 0,
+              } as AccountFunds,
+            };
+          } catch {
+            return null;
+          }
+        })
+      );
+      const next: Record<string, AccountFunds> = {};
+      for (const r of results) {
+        if (r) next[r.id] = r.funds;
+      }
+      setAccountFunds((prev) => ({ ...prev, ...next }));
+    } finally {
+      setLoadingFunds(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const connectedIds = accounts.filter((a) => a.connected).map((a) => a.kiteUserId);
+    if (connectedIds.length > 0) {
+      fetchAccountFunds(connectedIds);
+    }
+  }, [accounts, fetchAccountFunds]);
 
   useEffect(() => {
     const error = searchParams.get("error");
@@ -377,6 +429,15 @@ function LiveTradingContent() {
     setShowSuggestions(true);
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => searchInstruments(value), 300);
+  };
+
+  const handleSelectSymbol = (sym: string) => {
+    setSymbol(sym);
+    setSearchInput(sym);
+    setShowSuggestions(false);
+    if (connected) {
+      fetchQuote(sym);
+    }
   };
 
   useEffect(() => {
@@ -637,6 +698,11 @@ function LiveTradingContent() {
                               {account.kiteUserId}
                               {!account.connected && " · Session expired"}
                             </p>
+                            {account.connected && accountFunds[account.kiteUserId] && (
+                              <p className="text-xs text-emerald-400/90 mt-0.5">
+                                Available {formatCurrency(accountFunds[account.kiteUserId].available)}
+                              </p>
+                            )}
                           </div>
                           {account.kiteUserId === selectedAccountId && (
                             <CheckCircle2 className="h-4 w-4 text-blue-400 shrink-0" />
@@ -667,10 +733,26 @@ function LiveTradingContent() {
           </div>
 
           {connected && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-gray-500">
-                {connectedAccounts.length > 1 && `${connectedAccounts.length} accounts active`}
-              </span>
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5 rounded-md bg-emerald-900/20 border border-emerald-800/40 px-3 py-1.5">
+                <Wallet className="h-3.5 w-3.5 text-emerald-400" />
+                <span className="text-xs text-gray-400">Available</span>
+                <span className="text-sm font-semibold text-emerald-300">
+                  {loadingFunds && !selectedFunds
+                    ? "..."
+                    : formatCurrency(selectedFunds?.available ?? 0)}
+                </span>
+              </div>
+              {selectedFunds && selectedFunds.used > 0 && (
+                <span className="text-xs text-gray-500">
+                  Used {formatCurrency(selectedFunds.used)}
+                </span>
+              )}
+              {connectedAccounts.length > 1 && (
+                <span className="text-xs text-gray-500">
+                  {connectedAccounts.length} accounts active
+                </span>
+              )}
             </div>
           )}
         </div>
@@ -804,7 +886,7 @@ function LiveTradingContent() {
                         <button
                           key={s.symbol}
                           onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => { setSymbol(s.symbol); setSearchInput(s.symbol); setShowSuggestions(false); }}
+                          onClick={() => handleSelectSymbol(s.symbol)}
                           className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-blue-600/20 hover:text-white transition-colors flex items-center justify-between"
                         >
                           <span className="font-medium">{s.symbol}</span>
@@ -814,6 +896,32 @@ function LiveTradingContent() {
                     </div>
                   )}
                 </div>
+
+                {/* Selected symbol price (quick view) */}
+                {symbol.trim() && (
+                  <div className="rounded-md border border-gray-700 bg-[#0a0f1a] px-3 py-2 flex items-center justify-between">
+                    <span className="text-xs text-gray-400">{symbol} · {exchange}</span>
+                    {isLoadingQuote ? (
+                      <span className="text-xs text-gray-500 flex items-center gap-1.5">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Loading price...
+                      </span>
+                    ) : quote ? (
+                      <div className="text-right">
+                        <span className={cn("text-sm font-bold", quote.changePercent >= 0 ? "text-green-400" : "text-red-400")}>
+                          {formatCurrency(quote.lastPrice)}
+                        </span>
+                        <span className={cn("text-xs ml-2", quote.changePercent >= 0 ? "text-green-400/80" : "text-red-400/80")}>
+                          {quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)} ({formatPercent(quote.changePercent)})
+                        </span>
+                      </div>
+                    ) : connected ? (
+                      <span className="text-xs text-gray-500">Price unavailable</span>
+                    ) : (
+                      <span className="text-xs text-amber-400/80">Connect Zerodha for live price</span>
+                    )}
+                  </div>
+                )}
 
                 {/* Quote Panel */}
                 {quote && (
