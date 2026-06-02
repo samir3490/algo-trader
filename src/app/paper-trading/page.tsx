@@ -183,6 +183,27 @@ export default function PaperTradingPage() {
   }, [balance, holdings, trades, mounted]);
 
   useEffect(() => {
+    if (!mounted || !user) return;
+    const reload = async () => {
+      try {
+        const state = await getPaperTradingState();
+        setBalance(state.balance);
+        setHoldings(state.holdings as Holding[]);
+        setTrades(state.trades as Trade[]);
+        saveStateToLocalStorage({
+          balance: state.balance,
+          holdings: state.holdings as Holding[],
+          trades: state.trades as Trade[],
+        });
+      } catch {
+        /* ignore */
+      }
+    };
+    window.addEventListener("paper-trading-updated", reload);
+    return () => window.removeEventListener("paper-trading-updated", reload);
+  }, [mounted, user]);
+
+  useEffect(() => {
     async function checkAuth() {
       try {
         const res = await fetch("/api/zerodha/accounts");

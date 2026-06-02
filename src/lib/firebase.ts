@@ -223,6 +223,8 @@ export interface ActiveStrategy {
   createdAt: string;
   signals: number;
   pnl: number;
+  lastRunAt?: string;
+  lastSignalReason?: string;
 }
 
 export async function getActiveStrategies(): Promise<ActiveStrategy[]> {

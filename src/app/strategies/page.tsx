@@ -167,6 +167,8 @@ export default function StrategiesPage() {
   const [modalParams, setModalParams] = useState<Record<string, number>>(() =>
     getDefaultParams(STRATEGY_DEFINITIONS[0])
   );
+  const [lastRunnerAt, setLastRunnerAt] = useState<string | null>(null);
+  const [isScanning, setIsScanning] = useState(false);
 
   // Load persisted strategies on mount (avoid persisting empty state before hydration)
   useEffect(() => {
@@ -346,6 +348,30 @@ export default function StrategiesPage() {
   const runningCount = activeStrategies.filter((s) => s.status === "running").length;
   const pausedCount = activeStrategies.filter((s) => s.status === "paused").length;
 
+  useEffect(() => {
+    const stored = localStorage.getItem("strategy_runner_last_run");
+    if (stored) setLastRunnerAt(stored);
+    const onUpdate = () => {
+      const s = localStorage.getItem("strategy_runner_last_run");
+      if (s) setLastRunnerAt(s);
+      getFirestoreStrategies().then((fs) => {
+        setActiveStrategies(firestoreToLocal(fs));
+      });
+    };
+    window.addEventListener("strategies-updated", onUpdate);
+    return () => window.removeEventListener("strategies-updated", onUpdate);
+  }, []);
+
+  const handleRunScanNow = async () => {
+    setIsScanning(true);
+    window.dispatchEvent(new CustomEvent("strategy-runner-force"));
+    setTimeout(() => {
+      setIsScanning(false);
+      const s = localStorage.getItem("strategy_runner_last_run");
+      if (s) setLastRunnerAt(s);
+    }, 8000);
+  };
+
   const filteredDefinitions = STRATEGY_DEFINITIONS.filter((d) =>
     categoryFilter === "all" ? true : d.category === categoryFilter
   );
@@ -369,13 +395,28 @@ export default function StrategiesPage() {
             Configure and manage your algorithmic trading strategies
           </p>
         </div>
-        <button
-          onClick={openModal}
-          className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-500"
-        >
-          <Plus className="h-4 w-4" />
-          Create Strategy
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={handleRunScanNow}
+            disabled={isScanning || runningCount === 0}
+            className="inline-flex items-center gap-2 rounded-xl border border-emerald-600/50 bg-emerald-600/10 px-4 py-2.5 text-sm font-medium text-emerald-400 transition-colors hover:bg-emerald-600/20 disabled:opacity-50"
+          >
+            {isScanning ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Play className="h-4 w-4" />
+            )}
+            Run scan now
+          </button>
+          <button
+            onClick={openModal}
+            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+          >
+            <Plus className="h-4 w-4" />
+            Create Strategy
+          </button>
+        </div>
       </div>
 
       {/* ── How Strategies Work ────────────────────────────────────────── */}
@@ -387,20 +428,21 @@ export default function StrategiesPage() {
             <ul className="space-y-1.5 text-xs text-gray-400 leading-relaxed">
               <li className="flex items-start gap-2">
                 <Signal className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-                Strategies scan configured stocks at the selected timeframe interval
+                While you are logged in, the app scans <strong className="text-gray-300">running</strong> strategies every 15 minutes on weekdays (market hours) using Yahoo price history
               </li>
               <li className="flex items-start gap-2">
                 <Target className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-                When a BUY/SELL signal is generated, it will auto-place orders in the selected mode
+                <strong className="text-amber-400">Paper mode:</strong> BUY/SELL signals auto-place paper trades (max one per signal type per symbol per day). Screener.in uses different filters — results will not match exactly.
               </li>
               <li className="flex items-start gap-2">
-                <Shield className="h-3.5 w-3.5 text-amber-400 mt-0.5 shrink-0" />
-                <span>
-                  <strong className="text-amber-400">Paper mode:</strong> orders placed in paper portfolio
-                  <span className="mx-2 text-gray-600">|</span>
-                  <strong className="text-red-400">Live mode:</strong> orders placed via Zerodha
-                </span>
+                <Shield className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
+                <strong className="text-red-400">Live mode:</strong> signals are logged only; connect Zerodha and place orders manually until live auto-trade is enabled.
               </li>
+              {lastRunnerAt && (
+                <li className="text-emerald-400/90 pt-1">
+                  Last scan: {new Date(lastRunnerAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST
+                </li>
+              )}
             </ul>
           </div>
         </div>
