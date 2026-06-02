@@ -531,6 +531,7 @@ function LiveTradingContent() {
     const interval = setInterval(() => {
       fetchPositions();
       fetchOrders();
+      fetchHoldings();
     }, 30000);
     return () => clearInterval(interval);
   }, [connected, selectedAccountId, fetchPositions, fetchOrders, fetchHoldings]);

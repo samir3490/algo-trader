@@ -20,6 +20,7 @@ import { cn, formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getPaperTradingState, savePaperTradingState, resetPaperTrading, saveOrder } from "@/lib/firebase";
 import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
+import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 
 type OrderSide = "BUY" | "SELL";
 type OrderType = "MARKET" | "LIMIT";
@@ -143,6 +144,8 @@ export default function PaperTradingPage() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
+  const holdingsRef = useRef(holdings);
+  holdingsRef.current = holdings;
 
   const [validationError, setValidationError] = useState("");
 
@@ -202,6 +205,24 @@ export default function PaperTradingPage() {
     window.addEventListener("paper-trading-updated", reload);
     return () => window.removeEventListener("paper-trading-updated", reload);
   }, [mounted, user]);
+
+  // Refresh LTP / P&L from Yahoo (paper holdings only store price at buy time)
+  useEffect(() => {
+    if (!mounted || holdings.length === 0) return;
+
+    let cancelled = false;
+    async function refreshLtps() {
+      const updated = await refreshHoldingsLtpClient(holdingsRef.current);
+      if (!cancelled) setHoldings(updated);
+    }
+
+    refreshLtps();
+    const interval = setInterval(refreshLtps, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [mounted, holdings.length]);
 
   useEffect(() => {
     async function checkAuth() {
