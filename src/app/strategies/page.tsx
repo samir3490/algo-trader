@@ -364,12 +364,35 @@ export default function StrategiesPage() {
 
   const handleRunScanNow = async () => {
     setIsScanning(true);
-    window.dispatchEvent(new CustomEvent("strategy-runner-force"));
-    setTimeout(() => {
-      setIsScanning(false);
-      const s = localStorage.getItem("strategy_runner_last_run");
-      if (s) setLastRunnerAt(s);
-    }, 8000);
+    try {
+      const { getAuth } = await import("firebase/auth");
+      const { app } = await import("@/lib/firebase");
+      const auth = getAuth(app);
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        window.dispatchEvent(new CustomEvent("strategy-runner-force"));
+      } else {
+        const res = await fetch("/api/strategies/execute", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const s = localStorage.getItem("strategy_runner_last_run");
+          if (!s) localStorage.setItem("strategy_runner_last_run", new Date().toISOString());
+          setLastRunnerAt(new Date().toISOString());
+          window.dispatchEvent(new CustomEvent("strategies-updated"));
+          window.dispatchEvent(new CustomEvent("paper-trading-updated"));
+        } else {
+          window.dispatchEvent(new CustomEvent("strategy-runner-force"));
+        }
+      }
+    } finally {
+      setTimeout(() => {
+        setIsScanning(false);
+        const s = localStorage.getItem("strategy_runner_last_run");
+        if (s) setLastRunnerAt(s);
+      }, 2000);
+    }
   };
 
   const filteredDefinitions = STRATEGY_DEFINITIONS.filter((d) =>
@@ -428,7 +451,7 @@ export default function StrategiesPage() {
             <ul className="space-y-1.5 text-xs text-gray-400 leading-relaxed">
               <li className="flex items-start gap-2">
                 <Signal className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-                While you are logged in, the app scans <strong className="text-gray-300">running</strong> strategies every 15 minutes on weekdays (market hours) using Yahoo price history
+                <strong className="text-gray-300">Server cron</strong> scans running strategies every 15 minutes on weekdays during market hours — <strong className="text-emerald-400">no login required</strong>. Paper trades and email alerts run automatically.
               </li>
               <li className="flex items-start gap-2">
                 <Target className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
