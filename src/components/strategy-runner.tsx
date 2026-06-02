@@ -3,12 +3,11 @@
 import { useEffect, useRef, useCallback } from "react";
 import { getAuth } from "firebase/auth";
 import { useAuth } from "@/lib/auth-context";
-import { isMarketOpen } from "@/lib/utils";
 import { app } from "@/lib/firebase";
 
-const RUN_INTERVAL_MS = 15 * 60 * 1000;
 const STORAGE_LAST_RUN = "strategy_runner_last_run";
 
+/** Manual trigger only — automatic scans run once daily via Vercel Cron (Hobby plan). */
 async function executeOnServer(): Promise<boolean> {
   const auth = getAuth(app);
   const user = auth.currentUser;
@@ -25,15 +24,14 @@ async function executeOnServer(): Promise<boolean> {
     return false;
   }
 
-  const ranAt = new Date().toISOString();
-  localStorage.setItem(STORAGE_LAST_RUN, ranAt);
+  localStorage.setItem(STORAGE_LAST_RUN, new Date().toISOString());
   window.dispatchEvent(new CustomEvent("strategies-updated"));
   window.dispatchEvent(new CustomEvent("paper-trading-updated"));
   return true;
 }
 
 export default function StrategyRunner() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const runningRef = useRef(false);
 
   const runStrategies = useCallback(async () => {
@@ -53,26 +51,6 @@ export default function StrategyRunner() {
     window.addEventListener("strategy-runner-force", onForce);
     return () => window.removeEventListener("strategy-runner-force", onForce);
   }, [runStrategies]);
-
-  useEffect(() => {
-    if (loading || !user) return;
-
-    const ist = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
-    const day = ist.getDay();
-    if (day === 0 || day === 6) return;
-
-    const last = localStorage.getItem(STORAGE_LAST_RUN);
-    const lastMs = last ? new Date(last).getTime() : 0;
-    if (Date.now() - lastMs >= RUN_INTERVAL_MS || lastMs === 0) {
-      runStrategies();
-    }
-
-    const interval = setInterval(() => {
-      if (isMarketOpen()) runStrategies();
-    }, RUN_INTERVAL_MS);
-
-    return () => clearInterval(interval);
-  }, [user, loading, runStrategies]);
 
   return null;
 }

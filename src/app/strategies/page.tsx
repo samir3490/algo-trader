@@ -451,7 +451,7 @@ export default function StrategiesPage() {
             <ul className="space-y-1.5 text-xs text-gray-400 leading-relaxed">
               <li className="flex items-start gap-2">
                 <Signal className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-                <strong className="text-gray-300">Server cron</strong> scans running strategies every 15 minutes on weekdays during market hours — <strong className="text-emerald-400">no login required</strong>. Paper trades and email alerts run automatically.
+                <strong className="text-gray-300">Server cron</strong> scans running strategies <strong className="text-gray-200">once per day</strong> (~9:00 AM IST, weekdays) — <strong className="text-emerald-400">no login required</strong> (Vercel Hobby). Use <strong className="text-gray-200">Run scan now</strong> for an immediate check. Paper trades and email alerts run when signals fire.
               </li>
               <li className="flex items-start gap-2">
                 <Target className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />

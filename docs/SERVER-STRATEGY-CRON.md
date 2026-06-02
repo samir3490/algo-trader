@@ -2,39 +2,33 @@
 
 Paper strategies are executed by **`/api/cron/strategies`** (no login required).
 
-## Vercel Hobby plan
+## Vercel Hobby plan — once per day
 
-Hobby only allows **one Vercel Cron per day**. This project uses a **daily backup** at ~9:00 IST (`30 3 * * 1-5` UTC).
+Hobby allows **one cron job per day**. This project uses:
 
-For **every 15 minutes** during market hours (recommended), use a free external scheduler:
+- **Schedule:** `30 3 * * 1-5` (about **9:00 AM IST**, Monday–Friday)
+- **Path:** `/api/cron/strategies`
 
-1. Sign up at [cron-job.org](https://cron-job.org) (or similar).
-2. Create a job:
-   - **URL:** `https://algo-trader-umber.vercel.app/api/cron/strategies`
-   - **Schedule:** every 15 minutes, Mon–Fri, 9:00–15:45 IST (adjust to your timezone)
-   - **Request header:** `Authorization: Bearer YOUR_CRON_SECRET`
-3. Save. The job calls your app even when you are logged out.
+Vercel invokes the job automatically; you do not need to keep the app open.
 
-Vercel Pro users can use `*/15 * * * *` in `vercel.json` instead.
+For more frequent scans, upgrade to **Vercel Pro** or trigger **Run scan now** on the Strategies page while logged in.
 
 ## Required Vercel environment variables
 
-1. **`CRON_SECRET`** — random string (e.g. `openssl rand -base64 32`). Vercel sends this as `Authorization: Bearer …` when invoking cron jobs.
+1. **`CRON_SECRET`** — run `openssl rand -base64 32` in a terminal and paste the **output** (not the command text).
+2. **`FIREBASE_SERVICE_ACCOUNT_JSON`** — Firebase Console → Service accounts → Generate new private key (paste full JSON as one line).
+3. **Email:** `EMAIL_USER`, `EMAIL_APP_PASSWORD`, `EMAIL_RECIPIENT`
 
-2. **`FIREBASE_SERVICE_ACCOUNT_JSON`** — full JSON from Firebase Console:
-   - Project **agrasen-technologies** → Settings → Service accounts → **Generate new private key**
-   - Paste the entire JSON as **one line** in Vercel (no line breaks), or use Vercel’s secret/file upload.
+Redeploy after changing env vars.
 
-3. **Email** (already used for trade alerts):
-   - `EMAIL_USER`, `EMAIL_APP_PASSWORD`, `EMAIL_RECIPIENT`
+## Verify
 
-## After deploying
+```bash
+curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://algo-trader-umber.vercel.app/api/cron/strategies
+```
 
-1. Vercel → Project → Settings → Cron Jobs — confirm `/api/cron/strategies` is listed.
-2. Optionally trigger manually:
-   ```bash
-   curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://algo-trader-umber.vercel.app/api/cron/strategies
-   ```
-3. Ensure strategies are **Running** and mode **Paper** on the Strategies page.
+- `401` — wrong or missing secret  
+- `skipped: Market closed` — auth OK; try during 9:15–15:30 IST  
+- `usersProcessed` / `totalTrades` — full run  
 
-The endpoint itself skips runs when the **NSE market is closed** (9:15–15:30 IST weekdays).
+Ensure strategies are **Running** and mode **Paper** on the Strategies page.
