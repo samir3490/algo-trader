@@ -1,0 +1,31 @@
+# Runs strategy scans every 15 minutes during NSE hours (weekdays).
+# Works on Vercel Hobby — unlike Vercel Cron, which is limited to once per day on Hobby.
+#
+# Setup: GitHub repo → Settings → Secrets → Actions → CRON_SECRET
+# (same value as CRON_SECRET on Vercel)
+
+name: Strategy scan (15 min)
+
+on:
+  schedule:
+    # UTC: ~09:00–15:45 IST (market 09:15–15:30); adjust if needed
+    - cron: "*/15 4-10 * * 1-5"
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Vercel strategy cron API
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing CRON_SECRET in GitHub Actions secrets"
+            exit 1
+          fi
+          BASE="${APP_URL:-https://algo-trader-umber.vercel.app}"
+          curl -sfS -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${BASE}/api/cron/strategies" | head -c 2000
+          echo ""

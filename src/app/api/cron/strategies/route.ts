@@ -12,7 +12,7 @@ function authorizeCron(request: NextRequest): boolean {
   return auth === `Bearer ${secret}`;
 }
 
-/** Vercel Cron: runs paper strategy scans for all users (no login required). */
+/** Cron endpoint: paper strategy scans + risk exits for all users (Vercel Cron or GitHub Actions). */
 export async function GET(request: NextRequest) {
   if (!authorizeCron(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

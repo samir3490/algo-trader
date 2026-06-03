@@ -7,7 +7,7 @@ import { app } from "@/lib/firebase";
 
 const STORAGE_LAST_RUN = "strategy_runner_last_run";
 
-/** Manual trigger only — automatic scans run once daily via Vercel Cron (Hobby plan). */
+/** Manual trigger — automatic scans every 15 min via GitHub Actions (see docs/SERVER-STRATEGY-CRON.md). */
 async function executeOnServer(): Promise<boolean> {
   const auth = getAuth(app);
   const user = auth.currentUser;

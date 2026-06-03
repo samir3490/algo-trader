@@ -451,7 +451,7 @@ export default function StrategiesPage() {
             <ul className="space-y-1.5 text-xs text-gray-400 leading-relaxed">
               <li className="flex items-start gap-2">
                 <Signal className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-                <strong className="text-gray-300">Server cron</strong> scans running strategies <strong className="text-gray-200">once per day</strong> (~9:00 AM IST, weekdays) — <strong className="text-emerald-400">no login required</strong> (Vercel Hobby). Use <strong className="text-gray-200">Run scan now</strong> for an immediate check. Paper trades and email alerts run when signals fire.
+                <strong className="text-gray-300">Server cron</strong> scans every <strong className="text-gray-200">15 minutes</strong> in market hours (weekdays) via <strong className="text-emerald-400">GitHub Actions</strong> — works on Vercel Hobby. Vercel built-in cron is daily-only on Hobby; Pro can use every 15 min in <code className="text-gray-500">vercel.json</code>. Use <strong className="text-gray-200">Run scan now</strong> anytime. Paper auto-trades; live mode sends signal emails only.
               </li>
               <li className="flex items-start gap-2 text-amber-400/90">
                 <Target className="h-3.5 w-3.5 mt-0.5 shrink-0" />

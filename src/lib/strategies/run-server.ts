@@ -12,6 +12,7 @@ import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
 import { consolidateSignalsForExecution } from "@/lib/strategies/consolidate-signals";
 import { inferStrategyType } from "@/lib/strategies/definitions";
 import { sendOrderEmail } from "@/lib/email";
+import { fetchYahooQuote } from "@/lib/market-data/yahoo";
 import type { StrategySignal } from "@/types";
 import type { OrderRecord } from "@/lib/firebase";
 import {
@@ -25,14 +26,41 @@ function todayKeyIST(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-/** One paper trade per symbol + side per day (across all strategies). */
-function executionDedupeKey(symbol: string, action: string): string {
-  return `${symbol.toUpperCase()}:${action}:${todayKeyIST()}`;
+/** One paper trade per symbol + side per 15-minute window (intraday cron). */
+function executionDedupeKey(
+  symbol: string,
+  action: string,
+  now = new Date()
+): string {
+  const date = todayKeyIST();
+  const ist = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  const slot = Math.floor((ist.getHours() * 60 + ist.getMinutes()) / 15);
+  return `${symbol.toUpperCase()}:${action}:${date}:${slot}`;
 }
 
 function pruneDedupeKeys(keys: string[]): string[] {
   const today = todayKeyIST();
-  return keys.filter((k) => k.endsWith(today)).slice(-500);
+  return keys
+    .filter((k) => k.includes(`:${today}:`) || k.endsWith(`:${today}`))
+    .slice(-500);
+}
+
+async function refreshPaperHoldingsLtp(
+  holdings: PaperTradingState["holdings"]
+): Promise<NonNullable<PaperTradingState["holdings"]>> {
+  if (!holdings?.length) return [];
+  const updated = [];
+  for (const h of holdings) {
+    let ltp = h.ltp > 0 ? h.ltp : h.avgPrice;
+    try {
+      const q = await fetchYahooQuote(h.symbol, h.exchange || "NSE");
+      if (q?.lastPrice && q.lastPrice > 0) ltp = q.lastPrice;
+    } catch {
+      /* keep last ltp */
+    }
+    updated.push({ ...h, ltp });
+  }
+  return updated;
 }
 
 export interface UserRunResult {
@@ -151,6 +179,12 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
 
   const userSettings = await loadUserSettings(db, userId);
   let paperState = await loadPaperState(db, userId);
+  if (paperState.holdings?.length) {
+    paperState = {
+      ...paperState,
+      holdings: await refreshPaperHoldingsLtp(paperState.holdings),
+    };
+  }
   const recentOrders = await loadRecentOrders(db, userId);
   const cleaned = normalizePaperTrades(paperState.trades ?? [], recentOrders);
   if (tradesNormalizedChanged(paperState.trades ?? [], cleaned)) {
@@ -279,6 +313,20 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         }).catch(() => {});
         dedupe.add(key);
       }
+    } else if (strat.mode === "live" && (sig.action === "BUY" || sig.action === "SELL")) {
+      dedupe.add(key);
+      await sendOrderEmail({
+        mode: "LIVE",
+        symbol: sig.symbol,
+        exchange: strat.exchange || "NSE",
+        side: sig.action as "BUY" | "SELL",
+        quantity:
+          strat.params?.quantity ?? userSettings.defaultQuantity ?? 1,
+        price: sig.price,
+        orderType: "MARKET",
+        product: userSettings.defaultProduct || "MIS",
+        status: `SIGNAL — connect Zerodha; auto live orders not enabled from cron yet`,
+      }).catch(() => {});
     }
   }
 
