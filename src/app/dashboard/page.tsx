@@ -33,6 +33,7 @@ import { cn, formatCurrency, formatPercent, getMarketStatus, isMarketOpen } from
 import { useAuth } from "@/lib/auth-context";
 import {
   getPaperTradingState,
+  getOrders,
   getWatchlist,
   saveWatchlist,
   getActiveStrategies,
@@ -42,6 +43,7 @@ import {
   type PaperTrade,
 } from "@/lib/firebase";
 import { enrichTradesWithStrategy } from "@/lib/strategies/strategy-performance";
+import { formatTradeDateTime, normalizePaperTrades } from "@/lib/paper-trades/normalize";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -232,14 +234,20 @@ export default function DashboardPage() {
 
     async function loadFromFirestore() {
       try {
-        const [fsState, fsWatchlist, fsStrategies] = await Promise.all([
+        const [fsState, fsWatchlist, fsStrategies, orders] = await Promise.all([
           getPaperTradingState(),
           getWatchlist(),
           getActiveStrategies(),
+          getOrders(500),
         ]);
 
-        setPaperState(fsState);
-        localStorage.setItem(PAPER_STORAGE_KEY, JSON.stringify(fsState));
+        const normalizedTrades = normalizePaperTrades(
+          fsState.trades as PaperTrade[],
+          orders
+        );
+        const paperWithTrades = { ...fsState, trades: normalizedTrades };
+        setPaperState(paperWithTrades);
+        localStorage.setItem(PAPER_STORAGE_KEY, JSON.stringify(paperWithTrades));
 
         setWatchlist(fsWatchlist);
         localStorage.setItem(WATCHLIST_KEY, JSON.stringify(fsWatchlist));
@@ -381,10 +389,10 @@ export default function DashboardPage() {
     return sum;
   }, 0);
 
-  const recentTradesEnriched = useMemo(
-    () => enrichTradesWithStrategy(paperState.trades as PaperTrade[]).slice(0, 10),
-    [paperState.trades]
-  );
+  const recentTradesEnriched = useMemo(() => {
+    const normalized = normalizePaperTrades(paperState.trades as PaperTrade[]);
+    return enrichTradesWithStrategy(normalized).slice(0, 10);
+  }, [paperState.trades]);
   const runningStrategies = activeStrategies.filter((s) => s.status === "running");
 
   const chartData = buildPortfolioChart(paperState.trades, paperState.balance, paperState.holdings);
@@ -747,7 +755,9 @@ export default function DashboardPage() {
                           isBuy ? "hover:bg-profit/[0.05]" : "hover:bg-loss/[0.05]"
                         )}
                       >
-                        <td className="py-2.5 px-5 text-text-tertiary font-mono">{t.time}</td>
+                        <td className="py-2.5 px-5 text-text-tertiary font-mono whitespace-nowrap">
+                          {formatTradeDateTime(t)}
+                        </td>
                         <td className="py-2.5 px-5 font-medium text-text-primary">{t.symbol}</td>
                         <td className="py-2.5 px-5 text-text-tertiary truncate max-w-[100px]" title={t.displayStrategyName}>
                           {t.displayStrategyName}

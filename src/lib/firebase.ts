@@ -60,6 +60,8 @@ export interface PaperHolding {
 export interface PaperTrade {
   id: string;
   time: string;
+  /** ISO timestamp for sorting (newest first). */
+  executedAt?: string;
   symbol: string;
   exchange: string;
   side: "BUY" | "SELL";

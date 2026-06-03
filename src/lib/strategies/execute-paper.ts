@@ -45,11 +45,18 @@ export function applyPaperSignal(
   const trades = [...(state.trades ?? [])];
 
   const now = new Date();
-  const timeStr = now.toLocaleTimeString("en-IN", {
+  const executedAt = now.toISOString();
+  const timeStr = now.toLocaleString("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hour12: false,
   });
+  const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
   if (signal.action === "BUY") {
     if (total > balance) {
@@ -72,14 +79,15 @@ export function applyPaperSignal(
       });
     }
     const newTrade: PaperTrade = {
-      id: `strat-${Date.now()}-${sym}`,
+      id: `strat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${sym}`,
       time: timeStr,
+      executedAt,
       symbol: sym,
       exchange: ex,
       side: "BUY",
       qty,
       price,
-      date: now.toISOString().slice(0, 10),
+      date: dateStr,
       strategyId: meta?.strategyId,
       strategyName: meta?.strategyName,
       reason: meta?.reason ?? signal.reason,
@@ -107,14 +115,15 @@ export function applyPaperSignal(
           )
         : holdings;
     const newTrade: PaperTrade = {
-      id: `strat-${Date.now()}-${sym}`,
+      id: `strat-${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${sym}`,
       time: timeStr,
+      executedAt,
       symbol: sym,
       exchange: ex,
       side: "SELL",
       qty: sellQty,
       price,
-      date: now.toISOString().slice(0, 10),
+      date: dateStr,
       strategyId: meta?.strategyId,
       strategyName: meta?.strategyName,
       reason: meta?.reason ?? signal.reason,

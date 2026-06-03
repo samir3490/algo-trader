@@ -1,4 +1,5 @@
 import type { PaperTrade } from "@/lib/firebase";
+import { isStrategyTrade, tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
 
 export interface EnrichedPaperTrade extends PaperTrade {
   /** Resolved name for display (from trade or opening BUY lot). */
@@ -29,40 +30,39 @@ function positionKey(symbol: string, exchange: string): string {
   return `${symbol.trim().toUpperCase()}:${(exchange || "NSE").trim().toUpperCase()}`;
 }
 
-function tradeSortKey(t: PaperTrade): string {
-  const date = t.date ?? "";
-  return `${date}T${t.time}`;
+function tradeSortKey(t: PaperTrade): number {
+  return tradeExecutedAtMs(t);
 }
 
 /** Attach strategy labels to sells that predate strategyName on SELL rows. */
 export function enrichTradesWithStrategy(
   trades: PaperTrade[]
 ): EnrichedPaperTrade[] {
-  const chronological = [...trades].sort((a, b) =>
-    tradeSortKey(a).localeCompare(tradeSortKey(b))
+  const chronological = [...trades].sort(
+    (a, b) => tradeSortKey(a) - tradeSortKey(b)
   );
   const lots = new Map<string, Lot[]>();
   const enrichedById = new Map<string, EnrichedPaperTrade>();
 
   for (const t of chronological) {
     const key = positionKey(t.symbol, t.exchange);
-    const name =
-      t.strategyName?.trim() ||
-      (t.strategyId ? `Strategy ${t.strategyId.slice(0, 8)}` : "");
+    const name = t.strategyName?.trim() || "";
     const id = t.strategyId;
+    const auto = isStrategyTrade(t);
+    const displayName = name || (auto ? "Auto strategy" : "Manual");
 
     if (t.side === "BUY") {
       const list = lots.get(key) ?? [];
       list.push({
         qty: t.qty,
         avgPrice: t.price,
-        strategyName: name || "Manual",
+        strategyName: displayName,
         strategyId: id,
       });
       lots.set(key, list);
       enrichedById.set(t.id, {
         ...t,
-        displayStrategyName: name || "Manual",
+        displayStrategyName: displayName,
         displayStrategyId: id,
       });
     } else {
@@ -84,9 +84,12 @@ export function enrichTradesWithStrategy(
       }
       lots.set(key, list);
 
+      const auto = isStrategyTrade(t);
+      const sellDisplay =
+        inheritedName || name || (auto ? "Auto strategy" : "Manual");
       enrichedById.set(t.id, {
         ...t,
-        displayStrategyName: inheritedName || name || "Manual",
+        displayStrategyName: sellDisplay,
         displayStrategyId: inheritedId ?? id,
         strategyName: t.strategyName ?? (inheritedName || undefined),
         strategyId: t.strategyId ?? inheritedId,
@@ -97,7 +100,8 @@ export function enrichTradesWithStrategy(
   return trades.map((t) => {
     const e = enrichedById.get(t.id);
     if (e) return e;
-    const name = t.strategyName?.trim() || "Manual";
+    const auto = isStrategyTrade(t);
+    const name = t.strategyName?.trim() || (auto ? "Auto strategy" : "Manual");
     return {
       ...t,
       displayStrategyName: name,
@@ -111,8 +115,8 @@ export function computeStrategyPerformance(
   trades: PaperTrade[]
 ): StrategyPerformanceRow[] {
   const enriched = enrichTradesWithStrategy(trades);
-  const chronological = [...enriched].sort((a, b) =>
-    tradeSortKey(a).localeCompare(tradeSortKey(b))
+  const chronological = [...enriched].sort(
+    (a, b) => tradeSortKey(a) - tradeSortKey(b)
   );
 
   const lots = new Map<string, Lot[]>();

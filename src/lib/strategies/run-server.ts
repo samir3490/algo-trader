@@ -8,6 +8,11 @@ import { consolidateSignalsForExecution } from "@/lib/strategies/consolidate-sig
 import { inferStrategyType } from "@/lib/strategies/definitions";
 import { sendOrderEmail } from "@/lib/email";
 import type { StrategySignal } from "@/types";
+import type { OrderRecord } from "@/lib/firebase";
+import {
+  normalizePaperTrades,
+  tradesNormalizedChanged,
+} from "@/lib/paper-trades/normalize";
 
 const INITIAL_BALANCE = 1_000_000;
 
@@ -55,21 +60,42 @@ async function loadPaperState(db: Firestore, userId: string): Promise<PaperTradi
   };
 }
 
+async function loadRecentOrders(
+  db: Firestore,
+  userId: string,
+  max = 300
+): Promise<OrderRecord[]> {
+  try {
+    const snap = await db
+      .collection(`users/${userId}/orders`)
+      .orderBy("createdAt", "desc")
+      .limit(max)
+      .get();
+    return snap.docs.map((d) => d.data() as OrderRecord);
+  } catch {
+    return [];
+  }
+}
+
 async function persistPaperState(
   db: Firestore,
   userId: string,
-  paperState: PaperTradingState
+  paperState: PaperTradingState,
+  orders: OrderRecord[] = []
 ): Promise<boolean> {
   try {
+    const raw = paperState.trades ?? [];
+    const trades = normalizePaperTrades(raw, orders).slice(0, 500);
     await db.doc(`users/${userId}/data/paperTrading`).set(
       {
         balance: paperState.balance,
         holdings: paperState.holdings,
-        trades: (paperState.trades ?? []).slice(0, 500),
+        trades,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
+    paperState.trades = trades;
     return true;
   } catch (e) {
     console.error(`Failed to save paper state for ${userId}:`, e);
@@ -110,6 +136,13 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
   const dedupe = new Set(existingKeys);
 
   let paperState = await loadPaperState(db, userId);
+  const recentOrders = await loadRecentOrders(db, userId);
+  const cleaned = normalizePaperTrades(paperState.trades ?? [], recentOrders);
+  if (tradesNormalizedChanged(paperState.trades ?? [], cleaned)) {
+    paperState = { ...paperState, trades: cleaned };
+    await persistPaperState(db, userId, paperState, recentOrders);
+  }
+
   const signals = consolidateSignalsForExecution(
     rawSignals,
     running,
@@ -152,7 +185,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       const exchange = strat.exchange || "NSE";
 
       if (executed) {
-        const saved = await persistPaperState(db, userId, state);
+        const saved = await persistPaperState(db, userId, state, recentOrders);
         if (!saved) {
           console.error(`Paper trade not saved for ${sig.symbol} ${sig.action}`);
           continue;

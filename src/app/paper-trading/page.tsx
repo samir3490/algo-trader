@@ -19,12 +19,23 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { getPaperTradingState, savePaperTradingState, resetPaperTrading, saveOrder } from "@/lib/firebase";
-import type { PaperTrade } from "@/lib/firebase";
+import {
+  getPaperTradingState,
+  savePaperTradingState,
+  resetPaperTrading,
+  saveOrder,
+  getOrders,
+} from "@/lib/firebase";
+import type { OrderRecord, PaperTrade } from "@/lib/firebase";
 import {
   enrichTradesWithStrategy,
   computeStrategyPerformance,
 } from "@/lib/strategies/strategy-performance";
+import {
+  formatTradeDateTime,
+  normalizePaperTrades,
+  tradesNormalizedChanged,
+} from "@/lib/paper-trades/normalize";
 import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 
@@ -48,6 +59,8 @@ interface Trade {
   side: OrderSide;
   qty: number;
   price: number;
+  date?: string;
+  executedAt?: string;
   strategyId?: string;
   strategyName?: string;
   reason?: string;
@@ -159,6 +172,7 @@ export default function PaperTradingPage() {
   holdingsRef.current = holdings;
 
   const [validationError, setValidationError] = useState("");
+  const [orderHistory, setOrderHistory] = useState<OrderRecord[]>([]);
 
   const applyCloudState = useCallback((state: {
     balance: number;
@@ -180,11 +194,24 @@ export default function PaperTradingPage() {
   const syncFromCloud = useCallback(async () => {
     if (!user) return;
     try {
-      const state = await getPaperTradingState();
+      const [state, orders] = await Promise.all([
+        getPaperTradingState(),
+        getOrders(500),
+      ]);
+      setOrderHistory(orders);
+      const rawTrades = (state.trades ?? []) as PaperTrade[];
+      const normalized = normalizePaperTrades(rawTrades, orders);
+      if (tradesNormalizedChanged(rawTrades, normalized)) {
+        await savePaperTradingState({
+          balance: state.balance,
+          holdings: state.holdings,
+          trades: normalized,
+        });
+      }
       applyCloudState({
         balance: state.balance,
         holdings: state.holdings as Holding[],
-        trades: state.trades as Trade[],
+        trades: normalized as Trade[],
         cloudSyncedAtMs: state.cloudUpdatedAtMs ?? Date.now(),
       });
     } catch (e) {
@@ -445,21 +472,29 @@ export default function PaperTradingPage() {
     }
 
     const now = new Date();
-    const timeStr = now.toLocaleTimeString("en-IN", {
-      hour12: false,
+    const executedAt = now.toISOString();
+    const timeStr = now.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
+      hour12: false,
     });
+    const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
     const newTrade: Trade = {
       id: `t${Date.now()}`,
       time: timeStr,
+      executedAt,
       symbol: sym,
       exchange,
       side: orderSide,
       qty: qtyNum,
       price,
+      date: dateStr,
     };
 
     let newBalance = balance;
@@ -493,20 +528,23 @@ export default function PaperTradingPage() {
       }
     }
 
-    const newTrades = [newTrade, ...trades];
+    const merged = normalizePaperTrades(
+      [newTrade as PaperTrade, ...(trades as PaperTrade[])],
+      orderHistory
+    );
     setBalance(newBalance);
     setHoldings(newHoldings);
-    setTrades(newTrades);
+    setTrades(merged as Trade[]);
     saveStateToLocalStorage({
       balance: newBalance,
       holdings: newHoldings,
-      trades: newTrades,
+      trades: merged as Trade[],
       cloudSyncedAtMs: Date.now(),
     });
     savePaperTradingState({
       balance: newBalance,
       holdings: newHoldings,
-      trades: newTrades,
+      trades: merged,
     }).catch(() => {});
 
     setSymbol("");
@@ -568,42 +606,53 @@ export default function PaperTradingPage() {
     const sym = holding.symbol;
 
     const now = new Date();
-    const timeStr = now.toLocaleTimeString("en-IN", {
-      hour12: false,
+    const executedAt = now.toISOString();
+    const timeStr = now.toLocaleString("en-IN", {
+      timeZone: "Asia/Kolkata",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
+      hour12: false,
     });
+    const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
     const newTrade: Trade = {
       id: `t${Date.now()}`,
       time: timeStr,
+      executedAt,
       symbol: sym,
       exchange: holding.exchange,
       side: "SELL",
       qty: holding.qty,
       price,
+      date: dateStr,
     };
 
-    const newTrades = [newTrade, ...trades];
+    const merged = normalizePaperTrades(
+      [newTrade as PaperTrade, ...(trades as PaperTrade[])],
+      orderHistory
+    );
     const newBalance = balance + totalValue;
     const newHoldings = holdings.filter(
       (h) => !(h.symbol === sym && h.exchange === holding.exchange)
     );
 
-    setTrades(newTrades);
+    setTrades(merged as Trade[]);
     setBalance(newBalance);
     setHoldings(newHoldings);
     saveStateToLocalStorage({
       balance: newBalance,
       holdings: newHoldings,
-      trades: newTrades,
+      trades: merged as Trade[],
       cloudSyncedAtMs: Date.now(),
     });
     savePaperTradingState({
       balance: newBalance,
       holdings: newHoldings,
-      trades: newTrades,
+      trades: merged,
     }).catch(() => {});
 
     saveOrder({
@@ -642,13 +691,17 @@ export default function PaperTradingPage() {
 
   const portfolio = computePortfolio(holdings, balance);
 
+  const normalizedTrades = useMemo(
+    () => normalizePaperTrades(trades as PaperTrade[], orderHistory),
+    [trades, orderHistory]
+  );
   const enrichedTrades = useMemo(
-    () => enrichTradesWithStrategy(trades as PaperTrade[]),
-    [trades]
+    () => enrichTradesWithStrategy(normalizedTrades),
+    [normalizedTrades]
   );
   const strategyPerformance = useMemo(
-    () => computeStrategyPerformance(trades as PaperTrade[]),
-    [trades]
+    () => computeStrategyPerformance(normalizedTrades),
+    [normalizedTrades]
   );
   const strategyTradeCount = useMemo(
     () => enrichedTrades.filter((t) => t.displayStrategyName !== "Manual").length,
@@ -1293,9 +1346,9 @@ export default function PaperTradingPage() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-text-primary">
             Trade History
-            {trades.length > 0 && (
+            {enrichedTrades.length > 0 && (
               <span className="ml-2 text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">
-                {trades.length}
+                {enrichedTrades.length}
               </span>
             )}
           </h2>
@@ -1310,7 +1363,7 @@ export default function PaperTradingPage() {
           <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Time</th>
+                <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Date &amp; time</th>
                 <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Symbol</th>
                 <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Strategy</th>
                 <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Side</th>
@@ -1322,7 +1375,9 @@ export default function PaperTradingPage() {
             <tbody>
               {enrichedTrades.map((t) => {
                 const isBuy = t.side === "BUY";
-                const isManual = t.displayStrategyName === "Manual";
+                const isManual =
+                  t.displayStrategyName === "Manual" &&
+                  !t.id?.startsWith("strat-");
                 return (
                   <tr
                     key={t.id}
@@ -1333,7 +1388,9 @@ export default function PaperTradingPage() {
                         : "bg-loss/[0.03] hover:bg-loss/[0.07]"
                     )}
                   >
-                    <td className="py-3 px-5 text-text-secondary font-mono text-xs">{t.time}</td>
+                    <td className="py-3 px-5 text-text-secondary font-mono text-xs whitespace-nowrap">
+                      {formatTradeDateTime(t)}
+                    </td>
                     <td className="py-3 px-5 font-medium text-text-primary">
                       {t.symbol}
                       <span className="text-text-tertiary text-xs ml-1">{t.exchange}</span>
@@ -1366,7 +1423,7 @@ export default function PaperTradingPage() {
                   </tr>
                 );
               })}
-              {trades.length === 0 && (
+              {enrichedTrades.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-12 text-center text-text-tertiary">
                     No trades yet.
