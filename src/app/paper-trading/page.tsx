@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, Fragment } from "react";
 import {
   TrendingUp,
   TrendingDown,
@@ -16,6 +16,8 @@ import {
   LogOut,
   AlertCircle,
   BarChart3,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -30,6 +32,7 @@ import type { OrderRecord, PaperTrade } from "@/lib/firebase";
 import {
   enrichTradesWithStrategy,
   computeStrategyPerformance,
+  computeStrategyDetailBundles,
 } from "@/lib/strategies/strategy-performance";
 import {
   formatTradeDateTime,
@@ -173,6 +176,9 @@ export default function PaperTradingPage() {
 
   const [validationError, setValidationError] = useState("");
   const [orderHistory, setOrderHistory] = useState<OrderRecord[]>([]);
+  const [expandedStrategyKey, setExpandedStrategyKey] = useState<string | null>(
+    null
+  );
 
   const applyCloudState = useCallback((state: {
     balance: number;
@@ -699,10 +705,33 @@ export default function PaperTradingPage() {
     () => enrichTradesWithStrategy(normalizedTrades),
     [normalizedTrades]
   );
-  const strategyPerformance = useMemo(
-    () => computeStrategyPerformance(normalizedTrades),
-    [normalizedTrades]
+  const strategyDetails = useMemo(
+    () =>
+      computeStrategyDetailBundles(
+        normalizedTrades,
+        holdings.map((h) => ({
+          symbol: h.symbol,
+          exchange: h.exchange,
+          qty: h.qty,
+          avgPrice: h.avgPrice,
+          ltp: h.ltp,
+        }))
+      ),
+    [normalizedTrades, holdings]
   );
+  const holdingsNotInHistory = useMemo(() => {
+    const traded = new Set(
+      normalizedTrades.map(
+        (t) => `${t.symbol.toUpperCase()}:${(t.exchange || "NSE").toUpperCase()}`
+      )
+    );
+    return holdings.filter(
+      (h) =>
+        !traded.has(
+          `${h.symbol.toUpperCase()}:${(h.exchange || "NSE").toUpperCase()}`
+        )
+    );
+  }, [holdings, normalizedTrades]);
   const strategyTradeCount = useMemo(
     () => enrichedTrades.filter((t) => t.displayStrategyName !== "Manual").length,
     [enrichedTrades]
@@ -1293,48 +1322,201 @@ export default function PaperTradingPage() {
       </div>
 
       {/* Strategy performance (realized P&L from closed trades) */}
-      {strategyPerformance.some((s) => s.strategyName !== "Manual" && s.trades > 0) && (
+      {strategyDetails.length > 0 && (
         <div className="card">
-          <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-2 mb-1">
             <BarChart3 className="h-5 w-5 text-accent" />
             <h2 className="text-lg font-semibold text-text-primary">Strategy performance</h2>
-            <span className="text-xs text-text-tertiary">Realized P&amp;L from closed round-trips</span>
           </div>
+          <p className="text-xs text-text-tertiary mb-4 px-0">
+            Click a strategy to see each share — buy/sell dates, amounts, and P&amp;L per stock.
+          </p>
           <div className="overflow-x-auto -mx-5">
             <table className="w-full text-sm min-w-[520px]">
               <thead>
                 <tr className="border-b border-border">
+                  <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5 w-8" />
                   <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Strategy</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Trades</th>
+                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Stocks</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Closed</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Win / Loss</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Realized P&amp;L</th>
                 </tr>
               </thead>
               <tbody>
-                {strategyPerformance
-                  .filter((s) => s.strategyName !== "Manual")
-                  .map((s) => (
-                    <tr key={s.strategyId ?? s.strategyName} className="border-b border-border/50">
-                      <td className="py-3 px-5 font-medium text-text-primary">{s.strategyName}</td>
-                      <td className="py-3 px-5 text-right text-text-secondary">{s.trades}</td>
-                      <td className="py-3 px-5 text-right text-text-secondary">{s.closedRounds}</td>
-                      <td className="py-3 px-5 text-right text-text-secondary">
-                        <span className="text-profit">{s.wins}</span>
-                        {" / "}
-                        <span className="text-loss">{s.losses}</span>
-                      </td>
-                      <td
+                {strategyDetails.map((bundle) => {
+                  const s = bundle.summary;
+                  const isOpen = expandedStrategyKey === bundle.key;
+                  const stockCount = bundle.symbols.length;
+                  return (
+                    <Fragment key={bundle.key}>
+                      <tr
+                        onClick={() =>
+                          setExpandedStrategyKey(isOpen ? null : bundle.key)
+                        }
                         className={cn(
-                          "py-3 px-5 text-right font-semibold",
-                          s.realizedPnl >= 0 ? "text-profit" : "text-loss"
+                          "border-b border-border/50 cursor-pointer transition-colors",
+                          isOpen ? "bg-accent/5" : "hover:bg-bg-secondary/60"
                         )}
                       >
-                        {s.realizedPnl >= 0 ? "+" : ""}
-                        {formatCurrency(s.realizedPnl)}
-                      </td>
-                    </tr>
-                  ))}
+                        <td className="py-3 px-5 text-text-tertiary">
+                          {isOpen ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </td>
+                        <td className="py-3 px-5 font-medium text-text-primary">
+                          {s.strategyName}
+                        </td>
+                        <td className="py-3 px-5 text-right text-text-secondary">{s.trades}</td>
+                        <td className="py-3 px-5 text-right text-text-secondary">{stockCount}</td>
+                        <td className="py-3 px-5 text-right text-text-secondary">{s.closedRounds}</td>
+                        <td className="py-3 px-5 text-right text-text-secondary">
+                          <span className="text-profit">{s.wins}</span>
+                          {" / "}
+                          <span className="text-loss">{s.losses}</span>
+                        </td>
+                        <td
+                          className={cn(
+                            "py-3 px-5 text-right font-semibold",
+                            s.realizedPnl >= 0 ? "text-profit" : "text-loss"
+                          )}
+                        >
+                          {s.realizedPnl >= 0 ? "+" : ""}
+                          {formatCurrency(s.realizedPnl)}
+                        </td>
+                      </tr>
+                      {isOpen && (
+                        <tr key={`${bundle.key}-detail`} className="border-b border-border/50 bg-bg-secondary/30">
+                          <td colSpan={7} className="py-4 px-5">
+                            {bundle.symbols.length === 0 ? (
+                              <p className="text-sm text-text-tertiary">No trades recorded for this strategy.</p>
+                            ) : (
+                              <div className="space-y-4">
+                                {bundle.symbols.map((sym) => {
+                                  const totalPnl = sym.realizedPnl + sym.unrealizedPnl;
+                                  return (
+                                    <div
+                                      key={`${sym.symbol}-${sym.exchange}`}
+                                      className="rounded-lg border border-border/60 overflow-hidden"
+                                    >
+                                      <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 bg-bg-primary/50 border-b border-border/50">
+                                        <div className="flex items-center gap-2">
+                                          <span className="font-semibold text-text-primary">{sym.symbol}</span>
+                                          <span className="text-xs text-text-tertiary">{sym.exchange}</span>
+                                          <span
+                                            className={cn(
+                                              "text-[10px] uppercase tracking-wider px-2 py-0.5 rounded font-medium",
+                                              sym.status === "open"
+                                                ? "bg-amber-500/15 text-amber-400"
+                                                : "bg-border/50 text-text-tertiary"
+                                            )}
+                                          >
+                                            {sym.status === "open" ? "Open" : "Closed"}
+                                          </span>
+                                        </div>
+                                        <div className="flex flex-wrap gap-4 text-xs">
+                                          <span className="text-text-tertiary">
+                                            Realized:{" "}
+                                            <span className={sym.realizedPnl >= 0 ? "text-profit font-medium" : "text-loss font-medium"}>
+                                              {sym.realizedPnl >= 0 ? "+" : ""}
+                                              {formatCurrency(sym.realizedPnl)}
+                                            </span>
+                                          </span>
+                                          {sym.openQty > 0 && (
+                                            <span className="text-text-tertiary">
+                                              Open {formatNumber(sym.openQty)} @ {formatCurrency(sym.openAvgCost)}
+                                              {" · "}
+                                              Unrealized:{" "}
+                                              <span className={sym.unrealizedPnl >= 0 ? "text-profit font-medium" : "text-loss font-medium"}>
+                                                {sym.unrealizedPnl >= 0 ? "+" : ""}
+                                                {formatCurrency(sym.unrealizedPnl)}
+                                              </span>
+                                            </span>
+                                          )}
+                                          <span className="text-text-secondary font-medium">
+                                            Total:{" "}
+                                            <span className={totalPnl >= 0 ? "text-profit" : "text-loss"}>
+                                              {totalPnl >= 0 ? "+" : ""}
+                                              {formatCurrency(totalPnl)}
+                                            </span>
+                                          </span>
+                                        </div>
+                                      </div>
+                                      <table className="w-full text-xs">
+                                        <thead>
+                                          <tr className="text-text-tertiary uppercase tracking-wider border-b border-border/40">
+                                            <th className="text-left py-2 px-4 font-medium">Date &amp; time</th>
+                                            <th className="text-left py-2 px-4 font-medium">Side</th>
+                                            <th className="text-right py-2 px-4 font-medium">Qty</th>
+                                            <th className="text-right py-2 px-4 font-medium">Price</th>
+                                            <th className="text-right py-2 px-4 font-medium">Amount</th>
+                                            <th className="text-right py-2 px-4 font-medium">P&amp;L</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {sym.events.map((ev) => {
+                                            const isBuy = ev.side === "BUY";
+                                            return (
+                                              <tr
+                                                key={ev.tradeId}
+                                                className="border-b border-border/30 last:border-0"
+                                              >
+                                                <td className="py-2 px-4 text-text-secondary font-mono whitespace-nowrap">
+                                                  {ev.dateTimeLabel}
+                                                </td>
+                                                <td className="py-2 px-4">
+                                                  <span
+                                                    className={cn(
+                                                      "inline-flex px-1.5 py-0.5 rounded font-semibold",
+                                                      isBuy ? "bg-profit/15 text-profit" : "bg-loss/15 text-loss"
+                                                    )}
+                                                  >
+                                                    {ev.side}
+                                                  </span>
+                                                </td>
+                                                <td className="py-2 px-4 text-right text-text-secondary">
+                                                  {formatNumber(ev.qty)}
+                                                </td>
+                                                <td className="py-2 px-4 text-right text-text-primary">
+                                                  {formatCurrency(ev.price)}
+                                                </td>
+                                                <td className="py-2 px-4 text-right text-text-primary">
+                                                  {formatCurrency(ev.total)}
+                                                </td>
+                                                <td className="py-2 px-4 text-right font-medium">
+                                                  {ev.side === "SELL" && ev.realizedPnl != null ? (
+                                                    <span className={ev.realizedPnl >= 0 ? "text-profit" : "text-loss"}>
+                                                      {ev.realizedPnl >= 0 ? "+" : ""}
+                                                      {formatCurrency(ev.realizedPnl)}
+                                                      {ev.matchedBuyPrice != null && (
+                                                        <span className="block text-[10px] text-text-tertiary font-normal">
+                                                          vs buy {formatCurrency(ev.matchedBuyPrice)}
+                                                        </span>
+                                                      )}
+                                                    </span>
+                                                  ) : (
+                                                    <span className="text-text-tertiary">—</span>
+                                                  )}
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1352,11 +1534,22 @@ export default function PaperTradingPage() {
               </span>
             )}
           </h2>
-          {strategyTradeCount > 0 && (
-            <p className="text-xs text-text-tertiary">
-              {strategyTradeCount} strategy trade{strategyTradeCount !== 1 ? "s" : ""}
-            </p>
-          )}
+          <div className="text-xs text-text-tertiary text-right max-w-md">
+            {strategyTradeCount > 0 && (
+              <span>
+                {strategyTradeCount} strategy trade{strategyTradeCount !== 1 ? "s" : ""}
+                {" · "}
+              </span>
+            )}
+            {holdings.length} holding{holdings.length !== 1 ? "s" : ""}
+            {holdingsNotInHistory.length > 0 && (
+              <span className="block text-amber-400/90 mt-1">
+                {holdingsNotInHistory.length} holding
+                {holdingsNotInHistory.length !== 1 ? "s" : ""} not in history (
+                {holdingsNotInHistory.map((h) => h.symbol).join(", ")}) — may predate logging or were merged as duplicates.
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="overflow-x-auto -mx-5">
