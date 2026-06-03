@@ -26,7 +26,8 @@ function findHolding(
 export function applyPaperSignal(
   state: PaperTradingState,
   signal: StrategySignal,
-  exchange: string
+  exchange: string,
+  meta?: { strategyName?: string; reason?: string }
 ): {
   state: PaperTradingState;
   executed: boolean;
@@ -71,7 +72,7 @@ export function applyPaperSignal(
       });
     }
     const newTrade: PaperTrade = {
-      id: `strat-${Date.now()}`,
+      id: `strat-${Date.now()}-${sym}`,
       time: timeStr,
       symbol: sym,
       exchange: ex,
@@ -79,6 +80,8 @@ export function applyPaperSignal(
       qty,
       price,
       date: now.toISOString().slice(0, 10),
+      strategyName: meta?.strategyName,
+      reason: meta?.reason ?? signal.reason,
     };
     const newState: PaperTradingState = {
       balance: balance - total,
@@ -103,7 +106,7 @@ export function applyPaperSignal(
           )
         : holdings;
     const newTrade: PaperTrade = {
-      id: `strat-${Date.now()}`,
+      id: `strat-${Date.now()}-${sym}`,
       time: timeStr,
       symbol: sym,
       exchange: ex,
@@ -111,6 +114,8 @@ export function applyPaperSignal(
       qty: sellQty,
       price,
       date: now.toISOString().slice(0, 10),
+      strategyName: meta?.strategyName,
+      reason: meta?.reason ?? signal.reason,
     };
     const newState: PaperTradingState = {
       balance: balance + sellTotal,

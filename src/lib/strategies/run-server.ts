@@ -4,6 +4,7 @@ import type { ActiveStrategy } from "@/lib/firebase";
 import type { PaperTradingState } from "@/lib/firebase";
 import { applyPaperSignal } from "@/lib/strategies/execute-paper";
 import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
+import { consolidateSignalsForExecution } from "@/lib/strategies/consolidate-signals";
 import { inferStrategyType } from "@/lib/strategies/definitions";
 import { sendOrderEmail } from "@/lib/email";
 import type { StrategySignal } from "@/types";
@@ -14,8 +15,9 @@ function todayKeyIST(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-function signalDedupeKey(strategyId: string, action: string): string {
-  return `${strategyId}:${action}:${todayKeyIST()}`;
+/** One paper trade per symbol + side per day (across all strategies). */
+function executionDedupeKey(symbol: string, action: string): string {
+  return `${symbol.toUpperCase()}:${action}:${todayKeyIST()}`;
 }
 
 function pruneDedupeKeys(keys: string[]): string[] {
@@ -103,17 +105,23 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     type: inferStrategyType(s.name),
   }));
 
-  const { scanned, signals } = await scanStrategiesForSignals(payload);
+  const { scanned, signals: rawSignals } = await scanStrategiesForSignals(payload);
   const { dedupeKeys: existingKeys } = await loadRunnerMeta(db, userId);
   const dedupe = new Set(existingKeys);
 
   let paperState = await loadPaperState(db, userId);
+  const signals = consolidateSignalsForExecution(
+    rawSignals,
+    running,
+    paperState.holdings ?? []
+  );
+
   let tradesExecuted = 0;
   const signalStrategyIds = new Set<string>();
 
   for (const sig of signals) {
     signalStrategyIds.add(sig.strategyId);
-    const key = signalDedupeKey(sig.strategyId, sig.action);
+    const key = executionDedupeKey(sig.symbol, sig.action);
     if (dedupe.has(key)) continue;
 
     const strat = running.find((s) => s.id === sig.strategyId);
@@ -132,7 +140,8 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       const { state, executed, message, executedQty } = applyPaperSignal(
         paperState,
         signal,
-        strat.exchange || "NSE"
+        strat.exchange || "NSE",
+        { strategyName: strat.name, reason: sig.reason }
       );
 
       const qty = strat.params?.quantity ?? 1;
@@ -232,7 +241,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
   return {
     userId,
     scanned,
-    signalsFound: signals.length,
+    signalsFound: rawSignals.length,
     tradesExecuted,
   };
 }

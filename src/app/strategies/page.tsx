@@ -453,9 +453,15 @@ export default function StrategiesPage() {
                 <Signal className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
                 <strong className="text-gray-300">Server cron</strong> scans running strategies <strong className="text-gray-200">once per day</strong> (~9:00 AM IST, weekdays) — <strong className="text-emerald-400">no login required</strong> (Vercel Hobby). Use <strong className="text-gray-200">Run scan now</strong> for an immediate check. Paper trades and email alerts run when signals fire.
               </li>
+              <li className="flex items-start gap-2 text-amber-400/90">
+                <Target className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                <span>
+                  <strong>One trade per stock per day:</strong> if several strategies cover the same symbol (e.g. Nifty 50), only the strongest single BUY or SELL runs — avoids instant buy+sell at the same price.
+                </span>
+              </li>
               <li className="flex items-start gap-2">
                 <Target className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-                <strong className="text-amber-400">Paper mode:</strong> BUY/SELL signals auto-place paper trades (max one per signal type per symbol per day). Screener.in uses different filters — results will not match exactly.
+                <strong className="text-amber-400">Paper mode:</strong> auto-places trades (max one BUY and one SELL per stock per day). Screener.in uses different filters — results will not match exactly.
               </li>
               <li className="flex items-start gap-2">
                 <Shield className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />

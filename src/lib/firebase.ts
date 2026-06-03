@@ -66,6 +66,8 @@ export interface PaperTrade {
   qty: number;
   price: number;
   date?: string;
+  strategyName?: string;
+  reason?: string;
 }
 
 const INITIAL_BALANCE = 1000000;

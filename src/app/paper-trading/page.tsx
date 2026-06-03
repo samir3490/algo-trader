@@ -42,6 +42,8 @@ interface Trade {
   side: OrderSide;
   qty: number;
   price: number;
+  strategyName?: string;
+  reason?: string;
 }
 
 interface StockQuote {
@@ -1240,6 +1242,7 @@ export default function PaperTradingPage() {
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Qty</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Price</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Total</th>
+                <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Source</th>
               </tr>
             </thead>
             <tbody>
@@ -1272,12 +1275,19 @@ export default function PaperTradingPage() {
                     <td className="py-3 px-5 text-right text-text-secondary">{formatNumber(t.qty)}</td>
                     <td className="py-3 px-5 text-right text-text-primary">{formatCurrency(t.price)}</td>
                     <td className="py-3 px-5 text-right text-text-primary font-medium">{formatCurrency(t.qty * t.price)}</td>
+                    <td className="py-3 px-5 text-xs text-text-tertiary max-w-[140px]">
+                      {t.strategyName ? (
+                        <span title={t.reason}>{t.strategyName}</span>
+                      ) : (
+                        "Manual"
+                      )}
+                    </td>
                   </tr>
                 );
               })}
               {trades.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-text-tertiary">
+                  <td colSpan={7} className="py-12 text-center text-text-tertiary">
                     No trades yet.
                   </td>
                 </tr>
