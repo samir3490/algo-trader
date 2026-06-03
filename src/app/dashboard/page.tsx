@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import Link from "next/link";
 import {
   TrendingUp,
@@ -39,7 +39,9 @@ import {
   type PaperTradingState,
   type WatchlistItem,
   type ActiveStrategy,
+  type PaperTrade,
 } from "@/lib/firebase";
+import { enrichTradesWithStrategy } from "@/lib/strategies/strategy-performance";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -59,6 +61,9 @@ interface Trade {
   side: "BUY" | "SELL";
   qty: number;
   price: number;
+  strategyId?: string;
+  strategyName?: string;
+  reason?: string;
 }
 
 interface PaperState {
@@ -376,7 +381,10 @@ export default function DashboardPage() {
     return sum;
   }, 0);
 
-  const recentTrades = paperState.trades.slice(0, 10);
+  const recentTradesEnriched = useMemo(
+    () => enrichTradesWithStrategy(paperState.trades as PaperTrade[]).slice(0, 10),
+    [paperState.trades]
+  );
   const runningStrategies = activeStrategies.filter((s) => s.status === "running");
 
   const chartData = buildPortfolioChart(paperState.trades, paperState.balance, paperState.holdings);
@@ -704,7 +712,7 @@ export default function DashboardPage() {
         <div className="card !p-0 overflow-hidden">
           <div className="flex items-center justify-between px-5 pt-5 pb-3">
             <h2 className="text-lg font-semibold text-text-primary">Recent Trades</h2>
-            {recentTrades.length > 0 && (
+            {recentTradesEnriched.length > 0 && (
               <Link
                 href="/paper-trading"
                 className="flex items-center gap-1 text-xs text-accent hover:text-accent-hover transition-colors"
@@ -714,13 +722,14 @@ export default function DashboardPage() {
             )}
           </div>
 
-          {recentTrades.length > 0 ? (
+          {recentTradesEnriched.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border text-text-tertiary uppercase tracking-wider">
                     <th className="text-left py-2 px-5 font-medium">Time</th>
                     <th className="text-left py-2 px-5 font-medium">Symbol</th>
+                    <th className="text-left py-2 px-5 font-medium">Strategy</th>
                     <th className="text-left py-2 px-5 font-medium">Side</th>
                     <th className="text-right py-2 px-5 font-medium">Qty</th>
                     <th className="text-right py-2 px-5 font-medium">Price</th>
@@ -728,7 +737,7 @@ export default function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {recentTrades.map((t) => {
+                  {recentTradesEnriched.map((t) => {
                     const isBuy = t.side === "BUY";
                     return (
                       <tr
@@ -740,6 +749,9 @@ export default function DashboardPage() {
                       >
                         <td className="py-2.5 px-5 text-text-tertiary font-mono">{t.time}</td>
                         <td className="py-2.5 px-5 font-medium text-text-primary">{t.symbol}</td>
+                        <td className="py-2.5 px-5 text-text-tertiary truncate max-w-[100px]" title={t.displayStrategyName}>
+                          {t.displayStrategyName}
+                        </td>
                         <td className="py-2.5 px-5">
                           <span className={cn(
                             "inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold",

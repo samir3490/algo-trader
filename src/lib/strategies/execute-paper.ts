@@ -27,7 +27,7 @@ export function applyPaperSignal(
   state: PaperTradingState,
   signal: StrategySignal,
   exchange: string,
-  meta?: { strategyName?: string; reason?: string }
+  meta?: { strategyId?: string; strategyName?: string; reason?: string }
 ): {
   state: PaperTradingState;
   executed: boolean;
@@ -80,6 +80,7 @@ export function applyPaperSignal(
       qty,
       price,
       date: now.toISOString().slice(0, 10),
+      strategyId: meta?.strategyId,
       strategyName: meta?.strategyName,
       reason: meta?.reason ?? signal.reason,
     };
@@ -114,6 +115,7 @@ export function applyPaperSignal(
       qty: sellQty,
       price,
       date: now.toISOString().slice(0, 10),
+      strategyId: meta?.strategyId,
       strategyName: meta?.strategyName,
       reason: meta?.reason ?? signal.reason,
     };

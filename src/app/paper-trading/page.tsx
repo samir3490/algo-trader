@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import {
   TrendingUp,
   TrendingDown,
@@ -15,10 +15,16 @@ import {
   X,
   LogOut,
   AlertCircle,
+  BarChart3,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getPaperTradingState, savePaperTradingState, resetPaperTrading, saveOrder } from "@/lib/firebase";
+import type { PaperTrade } from "@/lib/firebase";
+import {
+  enrichTradesWithStrategy,
+  computeStrategyPerformance,
+} from "@/lib/strategies/strategy-performance";
 import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 
@@ -42,6 +48,7 @@ interface Trade {
   side: OrderSide;
   qty: number;
   price: number;
+  strategyId?: string;
   strategyName?: string;
   reason?: string;
 }
@@ -635,6 +642,19 @@ export default function PaperTradingPage() {
 
   const portfolio = computePortfolio(holdings, balance);
 
+  const enrichedTrades = useMemo(
+    () => enrichTradesWithStrategy(trades as PaperTrade[]),
+    [trades]
+  );
+  const strategyPerformance = useMemo(
+    () => computeStrategyPerformance(trades as PaperTrade[]),
+    [trades]
+  );
+  const strategyTradeCount = useMemo(
+    () => enrichedTrades.filter((t) => t.displayStrategyName !== "Manual").length,
+    [enrichedTrades]
+  );
+
   const summaryItems = [
     {
       label: "Balance",
@@ -1219,6 +1239,55 @@ export default function PaperTradingPage() {
         </div>
       </div>
 
+      {/* Strategy performance (realized P&L from closed trades) */}
+      {strategyPerformance.some((s) => s.strategyName !== "Manual" && s.trades > 0) && (
+        <div className="card">
+          <div className="flex items-center gap-2 mb-4">
+            <BarChart3 className="h-5 w-5 text-accent" />
+            <h2 className="text-lg font-semibold text-text-primary">Strategy performance</h2>
+            <span className="text-xs text-text-tertiary">Realized P&amp;L from closed round-trips</span>
+          </div>
+          <div className="overflow-x-auto -mx-5">
+            <table className="w-full text-sm min-w-[520px]">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Strategy</th>
+                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Trades</th>
+                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Closed</th>
+                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Win / Loss</th>
+                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Realized P&amp;L</th>
+                </tr>
+              </thead>
+              <tbody>
+                {strategyPerformance
+                  .filter((s) => s.strategyName !== "Manual")
+                  .map((s) => (
+                    <tr key={s.strategyId ?? s.strategyName} className="border-b border-border/50">
+                      <td className="py-3 px-5 font-medium text-text-primary">{s.strategyName}</td>
+                      <td className="py-3 px-5 text-right text-text-secondary">{s.trades}</td>
+                      <td className="py-3 px-5 text-right text-text-secondary">{s.closedRounds}</td>
+                      <td className="py-3 px-5 text-right text-text-secondary">
+                        <span className="text-profit">{s.wins}</span>
+                        {" / "}
+                        <span className="text-loss">{s.losses}</span>
+                      </td>
+                      <td
+                        className={cn(
+                          "py-3 px-5 text-right font-semibold",
+                          s.realizedPnl >= 0 ? "text-profit" : "text-loss"
+                        )}
+                      >
+                        {s.realizedPnl >= 0 ? "+" : ""}
+                        {formatCurrency(s.realizedPnl)}
+                      </td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* Trade History */}
       <div className="card">
         <div className="flex items-center justify-between mb-4">
@@ -1230,24 +1299,30 @@ export default function PaperTradingPage() {
               </span>
             )}
           </h2>
+          {strategyTradeCount > 0 && (
+            <p className="text-xs text-text-tertiary">
+              {strategyTradeCount} strategy trade{strategyTradeCount !== 1 ? "s" : ""}
+            </p>
+          )}
         </div>
 
         <div className="overflow-x-auto -mx-5">
-          <table className="w-full text-sm min-w-[550px]">
+          <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-border">
                 <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Time</th>
                 <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Symbol</th>
+                <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Strategy</th>
                 <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Side</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Qty</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Price</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Total</th>
-                <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Source</th>
               </tr>
             </thead>
             <tbody>
-              {trades.map((t) => {
+              {enrichedTrades.map((t) => {
                 const isBuy = t.side === "BUY";
+                const isManual = t.displayStrategyName === "Manual";
                 return (
                   <tr
                     key={t.id}
@@ -1263,6 +1338,19 @@ export default function PaperTradingPage() {
                       {t.symbol}
                       <span className="text-text-tertiary text-xs ml-1">{t.exchange}</span>
                     </td>
+                    <td className="py-3 px-5 max-w-[160px]">
+                      <span
+                        className={cn(
+                          "inline-block text-xs font-medium px-2 py-0.5 rounded truncate max-w-full",
+                          isManual
+                            ? "bg-border/40 text-text-tertiary"
+                            : "bg-accent/15 text-accent"
+                        )}
+                        title={t.reason || t.displayStrategyName}
+                      >
+                        {t.displayStrategyName}
+                      </span>
+                    </td>
                     <td className="py-3 px-5">
                       <span className={cn(
                         "inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold",
@@ -1275,13 +1363,6 @@ export default function PaperTradingPage() {
                     <td className="py-3 px-5 text-right text-text-secondary">{formatNumber(t.qty)}</td>
                     <td className="py-3 px-5 text-right text-text-primary">{formatCurrency(t.price)}</td>
                     <td className="py-3 px-5 text-right text-text-primary font-medium">{formatCurrency(t.qty * t.price)}</td>
-                    <td className="py-3 px-5 text-xs text-text-tertiary max-w-[140px]">
-                      {t.strategyName ? (
-                        <span title={t.reason}>{t.strategyName}</span>
-                      ) : (
-                        "Manual"
-                      )}
-                    </td>
                   </tr>
                 );
               })}

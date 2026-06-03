@@ -141,7 +141,11 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         paperState,
         signal,
         strat.exchange || "NSE",
-        { strategyName: strat.name, reason: sig.reason }
+        {
+          strategyId: strat.id,
+          strategyName: strat.name,
+          reason: sig.reason,
+        }
       );
 
       const qty = strat.params?.quantity ?? 1;
@@ -187,6 +191,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           status: "EXECUTED",
           date: todayKeyIST(),
           reason: sig.reason,
+          strategyId: strat.id,
           strategyName: strat.name,
           createdAt: FieldValue.serverTimestamp(),
         });

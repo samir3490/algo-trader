@@ -66,6 +66,7 @@ export interface PaperTrade {
   qty: number;
   price: number;
   date?: string;
+  strategyId?: string;
   strategyName?: string;
   reason?: string;
 }
@@ -326,6 +327,9 @@ export interface OrderRecord {
   status: string;
   orderId?: string;
   date: string;
+  strategyId?: string;
+  strategyName?: string;
+  reason?: string;
 }
 
 export async function saveOrder(order: OrderRecord): Promise<void> {

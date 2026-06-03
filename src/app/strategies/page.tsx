@@ -461,7 +461,7 @@ export default function StrategiesPage() {
               </li>
               <li className="flex items-start gap-2">
                 <Target className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-                <strong className="text-amber-400">Paper mode:</strong> auto-places trades (max one BUY and one SELL per stock per day). Screener.in uses different filters — results will not match exactly.
+                <strong className="text-amber-400">Paper mode:</strong> auto-places trades (max one BUY and one SELL per stock per day). Each trade is tagged with the <strong className="text-gray-200">strategy name</strong> in Paper Trading → Trade History and the performance table. Screener.in uses different filters — results will not match exactly.
               </li>
               <li className="flex items-start gap-2">
                 <Shield className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
