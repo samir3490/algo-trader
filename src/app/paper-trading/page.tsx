@@ -27,11 +27,17 @@ import {
   resetPaperTrading,
   saveOrder,
   getOrders,
+  getSettings,
+  type AppSettings,
 } from "@/lib/firebase";
 import type { OrderRecord, PaperTrade } from "@/lib/firebase";
+import { loadSettingsFromCache, saveSettingsToCache } from "@/lib/settings/cache";
+import {
+  applyPaperRiskExits,
+  canPlacePaperBuy,
+} from "@/lib/risk/paper-risk-guard";
 import {
   enrichTradesWithStrategy,
-  computeStrategyPerformance,
   computeStrategyDetailBundles,
 } from "@/lib/strategies/strategy-performance";
 import {
@@ -179,6 +185,14 @@ export default function PaperTradingPage() {
   const [expandedStrategyKey, setExpandedStrategyKey] = useState<string | null>(
     null
   );
+  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const [riskToast, setRiskToast] = useState<string | null>(null);
+  const settingsRef = useRef<AppSettings | null>(null);
+  const balanceRef = useRef(balance);
+  const tradesRef = useRef(trades);
+  balanceRef.current = balance;
+  tradesRef.current = trades;
+  settingsRef.current = appSettings;
 
   const applyCloudState = useCallback((state: {
     balance: number;
@@ -232,8 +246,25 @@ export default function PaperTradingPage() {
     setTrades(cached.trades);
     setMounted(true);
 
+    const cachedSettings = loadSettingsFromCache();
+    setAppSettings(cachedSettings);
+    setExchange((cachedSettings.defaultExchange as Exchange) || "NSE");
+    setOrderType(
+      (cachedSettings.defaultOrderType as OrderType) || "MARKET"
+    );
+    setQty(String(cachedSettings.defaultQuantity || 1));
+
     if (!user) return;
     syncFromCloud();
+    getSettings()
+      .then((s) => {
+        setAppSettings(s);
+        saveSettingsToCache(s);
+        setExchange((s.defaultExchange as Exchange) || "NSE");
+        setOrderType((s.defaultOrderType as OrderType) || "MARKET");
+        if (!qty) setQty(String(s.defaultQuantity || 1));
+      })
+      .catch(() => {});
   }, [user, syncFromCloud]);
 
   // Cache LTP locally only — do NOT auto-upload to Firestore (would undo server strategy trades)
@@ -263,14 +294,55 @@ export default function PaperTradingPage() {
     };
   }, [mounted, user, syncFromCloud]);
 
-  // Refresh LTP / P&L from Yahoo (paper holdings only store price at buy time)
+  // Refresh LTP / P&L and run stop-loss / take-profit from Settings
   useEffect(() => {
     if (!mounted || holdings.length === 0) return;
 
     let cancelled = false;
     async function refreshLtps() {
       const updated = await refreshHoldingsLtpClient(holdingsRef.current);
-      if (!cancelled) setHoldings(updated);
+      if (cancelled) return;
+
+      const settings = settingsRef.current;
+      if (settings?.autoStopLoss || settings?.autoTakeProfit) {
+        const { state, exits } = applyPaperRiskExits(
+          {
+            balance: balanceRef.current,
+            holdings: updated,
+            trades: tradesRef.current as PaperTrade[],
+          },
+          settings
+        );
+        if (exits.length > 0) {
+          setBalance(state.balance ?? balanceRef.current);
+          setHoldings((state.holdings ?? []) as Holding[]);
+          setTrades((state.trades ?? []) as Trade[]);
+          savePaperTradingState(state).catch(() => {});
+          const msg = exits
+            .map((e) => `${e.symbol}: ${e.message}`)
+            .join("; ");
+          setRiskToast(`Risk exit: ${msg}`);
+          setTimeout(() => setRiskToast(null), 8000);
+          for (const ex of exits) {
+            fetch("/api/notify/order", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                mode: "PAPER",
+                symbol: ex.symbol,
+                exchange: ex.exchange,
+                side: "SELL",
+                quantity: ex.qty,
+                price: ex.price,
+                orderType: "MARKET",
+              }),
+            }).catch(() => {});
+          }
+          return;
+        }
+      }
+
+      setHoldings(updated);
     }
 
     refreshLtps();
@@ -279,7 +351,7 @@ export default function PaperTradingPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [mounted, holdings.length]);
+  }, [mounted, holdings.length, appSettings?.autoStopLoss, appSettings?.autoTakeProfit]);
 
   useEffect(() => {
     async function checkAuth() {
@@ -461,6 +533,21 @@ export default function PaperTradingPage() {
     const sym = symbol.toUpperCase().trim();
 
     if (orderSide === "BUY") {
+      const isNewPosition = !holdings.some(
+        (h) => h.symbol === sym && h.exchange === exchange
+      );
+      if (appSettings) {
+        const buyCheck = canPlacePaperBuy({
+          balance,
+          orderValue: totalCost,
+          holdingsCount: isNewPosition ? holdings.length + 1 : holdings.length,
+          settings: appSettings,
+        });
+        if (!buyCheck.allowed) {
+          setValidationError(buyCheck.message ?? "Buy not allowed");
+          return;
+        }
+      }
       if (totalCost > balance) {
         setValidationError(
           `Insufficient balance. Required: ${formatCurrency(totalCost)}, Available: ${formatCurrency(balance)}`
@@ -583,7 +670,7 @@ export default function PaperTradingPage() {
       qty: qtyNum,
       price,
       orderType,
-      product: "CNC",
+      product: appSettings?.paperDefaultProduct ?? "CNC",
       mode: "PAPER",
       status: "EXECUTED",
       date: new Date().toISOString().split("T")[0],
@@ -670,7 +757,7 @@ export default function PaperTradingPage() {
       qty: holding.qty,
       price,
       orderType: "MARKET",
-      product: "CNC",
+      product: appSettings?.paperDefaultProduct ?? "CNC",
       mode: "PAPER",
       status: "EXECUTED",
       date: new Date().toISOString().split("T")[0],
@@ -813,6 +900,33 @@ export default function PaperTradingPage() {
           </div>
         </div>
 
+        {appSettings && (appSettings.autoStopLoss || appSettings.autoTakeProfit) && (
+          <div className="mb-4 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 text-xs text-text-secondary">
+            <span className="text-accent font-medium">Risk guard active: </span>
+            {appSettings.autoStopLoss && (
+              <span>stop loss at −{appSettings.stopLossPercent}%</span>
+            )}
+            {appSettings.autoStopLoss && appSettings.autoTakeProfit && " · "}
+            {appSettings.autoTakeProfit && (
+              <span>take profit at +{appSettings.takeProfitPercent}%</span>
+            )}
+            <span className="text-text-tertiary">
+              {" "}
+              · product {appSettings.paperDefaultProduct}
+              · default qty {appSettings.defaultQuantity}
+              {" "}
+              <a href="/settings" className="text-accent hover:underline">Settings</a>
+            </span>
+          </div>
+        )}
+
+        {riskToast && (
+          <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            {riskToast}
+          </div>
+        )}
+
         {/* Portfolio Summary Bar */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {summaryItems.map((item) => (
@@ -946,8 +1060,8 @@ export default function PaperTradingPage() {
               </div>
             )}
 
-            {/* Exchange + Order Type */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
+            {/* Exchange + Order Type + Product (from Settings) */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
               <div>
                 <label className="block text-xs text-text-tertiary uppercase tracking-wider mb-1.5">
                   Exchange
@@ -978,17 +1092,36 @@ export default function PaperTradingPage() {
                   <option value="LIMIT">LIMIT</option>
                 </select>
               </div>
+              <div>
+                <label className="block text-xs text-text-tertiary uppercase tracking-wider mb-1.5">
+                  Product
+                </label>
+                <div
+                  className="w-full px-3 py-2.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm"
+                  title="Change in Settings → Paper Trading"
+                >
+                  {appSettings?.paperDefaultProduct ?? "CNC"}
+                  <span className="text-text-tertiary text-xs ml-1">
+                    ({appSettings?.paperDefaultProduct === "MIS" ? "Intraday" : "Delivery"})
+                  </span>
+                </div>
+              </div>
             </div>
 
             {/* Quantity */}
             <div className="mb-4">
               <label className="block text-xs text-text-tertiary uppercase tracking-wider mb-1.5">
                 Quantity
+                {appSettings && (
+                  <span className="text-text-tertiary font-normal normal-case ml-1">
+                    (default {appSettings.defaultQuantity})
+                  </span>
+                )}
               </label>
               <input
                 type="number"
                 min={1}
-                placeholder="0"
+                placeholder={String(appSettings?.defaultQuantity ?? 1)}
                 value={qty}
                 onChange={(e) => { setQty(e.target.value); setValidationError(""); }}
                 className="w-full px-3 py-2.5 rounded-lg bg-bg-primary border border-border

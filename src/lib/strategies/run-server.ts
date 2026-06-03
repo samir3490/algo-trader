@@ -1,7 +1,12 @@
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import { getAdminFirestore, isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import type { ActiveStrategy } from "@/lib/firebase";
-import type { PaperTradingState } from "@/lib/firebase";
+import {
+  DEFAULT_SETTINGS,
+  type AppSettings,
+  type PaperTradingState,
+} from "@/lib/firebase";
+import { applyPaperRiskExits } from "@/lib/risk/paper-risk-guard";
 import { applyPaperSignal } from "@/lib/strategies/execute-paper";
 import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
 import { consolidateSignalsForExecution } from "@/lib/strategies/consolidate-signals";
@@ -103,6 +108,15 @@ async function persistPaperState(
   }
 }
 
+async function loadUserSettings(
+  db: Firestore,
+  userId: string
+): Promise<AppSettings> {
+  const snap = await db.doc(`users/${userId}/data/settings`).get();
+  if (!snap.exists) return DEFAULT_SETTINGS;
+  return { ...DEFAULT_SETTINGS, ...snap.data() } as AppSettings;
+}
+
 async function loadRunnerMeta(db: Firestore, userId: string) {
   const snap = await db.doc(`users/${userId}/data/strategyRunner`).get();
   const data = snap.data();
@@ -135,12 +149,32 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
   const { dedupeKeys: existingKeys } = await loadRunnerMeta(db, userId);
   const dedupe = new Set(existingKeys);
 
+  const userSettings = await loadUserSettings(db, userId);
   let paperState = await loadPaperState(db, userId);
   const recentOrders = await loadRecentOrders(db, userId);
   const cleaned = normalizePaperTrades(paperState.trades ?? [], recentOrders);
   if (tradesNormalizedChanged(paperState.trades ?? [], cleaned)) {
     paperState = { ...paperState, trades: cleaned };
     await persistPaperState(db, userId, paperState, recentOrders);
+  }
+
+  const riskResult = applyPaperRiskExits(paperState, userSettings);
+  if (riskResult.exits.length > 0) {
+    paperState = riskResult.state;
+    await persistPaperState(db, userId, paperState, recentOrders);
+    for (const exit of riskResult.exits) {
+      await sendOrderEmail({
+        mode: "PAPER",
+        symbol: exit.symbol,
+        exchange: exit.exchange,
+        side: "SELL",
+        quantity: exit.qty ?? 1,
+        price: exit.price ?? 0,
+        orderType: "MARKET",
+        product: userSettings.paperDefaultProduct,
+        status: `RISK EXIT — ${exit.message}`,
+      }).catch(() => {});
+    }
   }
 
   const signals = consolidateSignalsForExecution(
@@ -165,7 +199,8 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         symbol: sig.symbol,
         action: sig.action as "BUY" | "SELL",
         price: sig.price,
-        quantity: strat.params?.quantity ?? 1,
+        quantity:
+          strat.params?.quantity ?? userSettings.defaultQuantity ?? 1,
         reason: sig.reason,
         confidence: sig.confidence,
         timestamp: new Date(),
@@ -181,7 +216,8 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         }
       );
 
-      const qty = strat.params?.quantity ?? 1;
+      const qty =
+        strat.params?.quantity ?? userSettings.defaultQuantity ?? 1;
       const exchange = strat.exchange || "NSE";
 
       if (executed) {
@@ -205,7 +241,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           quantity: tradeQty,
           price: sig.price,
           orderType: "MARKET",
-          product: "CNC",
+          product: userSettings.paperDefaultProduct,
           status: "EXECUTED",
         });
 
@@ -219,7 +255,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           qty: tradeQty,
           price: sig.price,
           orderType: "MARKET",
-          product: "CNC",
+          product: userSettings.paperDefaultProduct,
           mode: "PAPER",
           status: "EXECUTED",
           date: todayKeyIST(),
@@ -238,7 +274,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           quantity: qty,
           price: sig.price,
           orderType: "MARKET",
-          product: "CNC",
+          product: userSettings.paperDefaultProduct,
           status: `SKIPPED — ${message}`,
         }).catch(() => {});
         dedupe.add(key);

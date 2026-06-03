@@ -170,14 +170,21 @@ export async function saveWatchlist(items: WatchlistItem[]): Promise<void> {
 
 export interface AppSettings {
   defaultExchange: string;
+  /** Live Zerodha default product (MIS/CNC/NRML). */
   defaultProduct: string;
   defaultOrderType: string;
+  /** Paper + strategy default quantity when not set on strategy card. */
+  defaultQuantity: number;
+  /** Paper simulated product — delivery (CNC) recommended. */
+  paperDefaultProduct: "CNC" | "MIS";
   maxOrderValue: number;
   maxDailyLoss: number;
   paperStartingBalance: number;
   simulateBrokerage: boolean;
   stopLossPercent: number;
   takeProfitPercent: number;
+  autoStopLoss: boolean;
+  autoTakeProfit: boolean;
   maxPositions: number;
   squareOffTime: string;
   notifyOrders: boolean;
@@ -185,16 +192,20 @@ export interface AppSettings {
   notifyPnl: boolean;
 }
 
-const DEFAULT_SETTINGS: AppSettings = {
+export const DEFAULT_SETTINGS: AppSettings = {
   defaultExchange: "NSE",
-  defaultProduct: "MIS",
+  defaultProduct: "CNC",
   defaultOrderType: "MARKET",
+  defaultQuantity: 1,
+  paperDefaultProduct: "CNC",
   maxOrderValue: 100000,
   maxDailyLoss: 5000,
   paperStartingBalance: 1000000,
   simulateBrokerage: false,
   stopLossPercent: 2,
   takeProfitPercent: 5,
+  autoStopLoss: true,
+  autoTakeProfit: true,
   maxPositions: 10,
   squareOffTime: "15:15",
   notifyOrders: true,

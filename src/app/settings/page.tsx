@@ -49,6 +49,8 @@ interface AppSettings {
   paperTrading: {
     startingBalance: number;
     simulateBrokerage: boolean;
+    defaultQuantity: number;
+    defaultProductType: "CNC" | "MIS";
   };
   tradingPreferences: {
     defaultExchange: "NSE" | "BSE";
@@ -65,6 +67,8 @@ interface AppSettings {
   riskManagement: {
     stopLossPercent: number;
     takeProfitPercent: number;
+    autoStopLoss: boolean;
+    autoTakeProfit: boolean;
     maxPositions: number;
     squareOffTime: string;
   };
@@ -74,10 +78,12 @@ const defaultSettings: AppSettings = {
   paperTrading: {
     startingBalance: 1000000,
     simulateBrokerage: true,
+    defaultQuantity: 1,
+    defaultProductType: "CNC",
   },
   tradingPreferences: {
     defaultExchange: "NSE",
-    defaultProductType: "MIS",
+    defaultProductType: "CNC",
     defaultOrderType: "MARKET",
     maxOrderValue: 500000,
     maxDailyLoss: 50000,
@@ -90,6 +96,8 @@ const defaultSettings: AppSettings = {
   riskManagement: {
     stopLossPercent: 2,
     takeProfitPercent: 5,
+    autoStopLoss: true,
+    autoTakeProfit: true,
     maxPositions: 5,
     squareOffTime: "15:15",
   },
@@ -109,6 +117,8 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
     paperTrading: {
       startingBalance: fs.paperStartingBalance,
       simulateBrokerage: fs.simulateBrokerage,
+      defaultQuantity: fs.defaultQuantity ?? 1,
+      defaultProductType: (fs.paperDefaultProduct as "CNC" | "MIS") ?? "CNC",
     },
     tradingPreferences: {
       defaultExchange: fs.defaultExchange as "NSE" | "BSE",
@@ -125,6 +135,8 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
     riskManagement: {
       stopLossPercent: fs.stopLossPercent,
       takeProfitPercent: fs.takeProfitPercent,
+      autoStopLoss: fs.autoStopLoss ?? true,
+      autoTakeProfit: fs.autoTakeProfit ?? true,
       maxPositions: fs.maxPositions,
       squareOffTime: fs.squareOffTime,
     },
@@ -140,8 +152,12 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     maxDailyLoss: s.tradingPreferences.maxDailyLoss,
     paperStartingBalance: s.paperTrading.startingBalance,
     simulateBrokerage: s.paperTrading.simulateBrokerage,
+    defaultQuantity: s.paperTrading.defaultQuantity,
+    paperDefaultProduct: s.paperTrading.defaultProductType,
     stopLossPercent: s.riskManagement.stopLossPercent,
     takeProfitPercent: s.riskManagement.takeProfitPercent,
+    autoStopLoss: s.riskManagement.autoStopLoss,
+    autoTakeProfit: s.riskManagement.autoTakeProfit,
     maxPositions: s.riskManagement.maxPositions,
     squareOffTime: s.riskManagement.squareOffTime,
     notifyOrders: s.notifications.orderExecution,
@@ -717,13 +733,13 @@ function SettingsContent() {
               Paper Trading
             </h2>
             <p className="text-xs text-text-secondary">
-              Simulated trading environment settings
+              Used by Paper Trading and strategy auto-trades (delivery CNC by default)
             </p>
           </div>
         </div>
 
         <div className="space-y-5">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">
                 Starting Balance (₹)
@@ -739,7 +755,40 @@ function SettingsContent() {
                 className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
             </div>
-            <div className="flex items-center gap-3">
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Default Quantity (shares)
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={settings.paperTrading.defaultQuantity}
+                onChange={(e) =>
+                  updateSettings("paperTrading", {
+                    defaultQuantity: Math.max(1, Number(e.target.value) || 1),
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Paper Product Type
+              </label>
+              <select
+                value={settings.paperTrading.defaultProductType}
+                onChange={(e) =>
+                  updateSettings("paperTrading", {
+                    defaultProductType: e.target.value as "CNC" | "MIS",
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              >
+                <option value="CNC">CNC (Delivery) — recommended</option>
+                <option value="MIS">MIS (Intraday) — auto square-off at risk time</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-3 sm:col-span-2">
               <label className="relative inline-flex cursor-pointer items-center">
                 <input
                   type="checkbox"
@@ -808,7 +857,7 @@ function SettingsContent() {
               Trading Preferences
             </h2>
             <p className="text-xs text-text-secondary">
-              Default values for order placement
+              Defaults for Live Trading (Zerodha orders only)
             </p>
           </div>
         </div>
@@ -976,9 +1025,47 @@ function SettingsContent() {
               Risk Management
             </h2>
             <p className="text-xs text-text-secondary">
-              Automatic safeguards for your trades
+              Auto stop-loss / take-profit on paper holdings (checked every minute)
             </p>
           </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+          {[
+            {
+              key: "autoStopLoss" as const,
+              label: "Auto Stop Loss",
+              desc: `Sell when loss reaches ${settings.riskManagement.stopLossPercent}%`,
+            },
+            {
+              key: "autoTakeProfit" as const,
+              label: "Auto Take Profit",
+              desc: `Sell when profit reaches ${settings.riskManagement.takeProfitPercent}%`,
+            },
+          ].map((item) => (
+            <div
+              key={item.key}
+              className="flex items-center justify-between rounded-lg bg-bg-tertiary p-4"
+            >
+              <div>
+                <p className="text-sm font-medium text-text-primary">{item.label}</p>
+                <p className="text-xs text-text-tertiary">{item.desc}</p>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={settings.riskManagement[item.key]}
+                  onChange={(e) =>
+                    updateSettings("riskManagement", {
+                      [item.key]: e.target.checked,
+                    })
+                  }
+                  className="peer sr-only"
+                />
+                <div className="h-5 w-9 rounded-full bg-bg-hover peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+              </label>
+            </div>
+          ))}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
