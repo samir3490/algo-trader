@@ -3,12 +3,38 @@ import type { PaperHolding, PaperTrade, PaperTradingState } from "@/lib/firebase
 
 const INITIAL_BALANCE = 1_000_000;
 
+function normSymbol(s: string): string {
+  return s.trim().toUpperCase();
+}
+
+function normExchange(ex: string): string {
+  return (ex || "NSE").trim().toUpperCase();
+}
+
+function findHolding(
+  holdings: PaperHolding[],
+  symbol: string,
+  exchange: string
+): PaperHolding | undefined {
+  const sym = normSymbol(symbol);
+  const ex = normExchange(exchange);
+  return holdings.find(
+    (h) => normSymbol(h.symbol) === sym && normExchange(h.exchange) === ex
+  );
+}
+
 export function applyPaperSignal(
   state: PaperTradingState,
   signal: StrategySignal,
   exchange: string
-): { state: PaperTradingState; executed: boolean; message?: string } {
-  const sym = signal.symbol.toUpperCase();
+): {
+  state: PaperTradingState;
+  executed: boolean;
+  message?: string;
+  executedQty?: number;
+} {
+  const sym = normSymbol(signal.symbol);
+  const ex = normExchange(exchange);
   const qty = Math.max(1, Math.floor(signal.quantity || 1));
   const price = signal.price;
   const total = qty * price;
@@ -28,9 +54,7 @@ export function applyPaperSignal(
     if (total > balance) {
       return { state, executed: false, message: "Insufficient paper balance" };
     }
-    const existing = holdings.find(
-      (h) => h.symbol === sym && h.exchange === exchange
-    );
+    const existing = findHolding(holdings, sym, ex);
     if (existing) {
       const newQty = existing.qty + qty;
       existing.avgPrice =
@@ -40,7 +64,7 @@ export function applyPaperSignal(
     } else {
       holdings.push({
         symbol: sym,
-        exchange,
+        exchange: ex,
         qty,
         avgPrice: price,
         ltp: price,
@@ -50,7 +74,7 @@ export function applyPaperSignal(
       id: `strat-${Date.now()}`,
       time: timeStr,
       symbol: sym,
-      exchange,
+      exchange: ex,
       side: "BUY",
       qty,
       price,
@@ -61,37 +85,39 @@ export function applyPaperSignal(
       holdings,
       trades: [newTrade, ...trades].slice(0, 500),
     };
-    return { state: newState, executed: true };
+    return { state: newState, executed: true, executedQty: qty };
   }
 
   if (signal.action === "SELL") {
-    const existing = holdings.find(
-      (h) => h.symbol === sym && h.exchange === exchange
-    );
-    if (!existing || existing.qty < qty) {
+    const existing = findHolding(holdings, sym, ex);
+    if (!existing || existing.qty <= 0) {
       return { state, executed: false, message: "No holdings to sell" };
     }
-    existing.qty -= qty;
+    const sellQty = Math.min(qty, existing.qty);
+    const sellTotal = sellQty * price;
+    existing.qty -= sellQty;
     const newHoldings =
       existing.qty <= 0
-        ? holdings.filter((h) => !(h.symbol === sym && h.exchange === exchange))
+        ? holdings.filter(
+            (h) => !(normSymbol(h.symbol) === sym && normExchange(h.exchange) === ex)
+          )
         : holdings;
     const newTrade: PaperTrade = {
       id: `strat-${Date.now()}`,
       time: timeStr,
       symbol: sym,
-      exchange,
+      exchange: ex,
       side: "SELL",
-      qty,
+      qty: sellQty,
       price,
       date: now.toISOString().slice(0, 10),
     };
     const newState: PaperTradingState = {
-      balance: balance + total,
+      balance: balance + sellTotal,
       holdings: newHoldings,
       trades: [newTrade, ...trades].slice(0, 500),
     };
-    return { state: newState, executed: true };
+    return { state: newState, executed: true, executedQty: sellQty };
   }
 
   return { state, executed: false };

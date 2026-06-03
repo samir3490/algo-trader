@@ -70,16 +70,26 @@ export interface PaperTrade {
 
 const INITIAL_BALANCE = 1000000;
 
-export async function getPaperTradingState(): Promise<PaperTradingState> {
+export async function getPaperTradingState(): Promise<
+  PaperTradingState & { cloudUpdatedAtMs?: number }
+> {
   try {
     const ref = doc(db, "users", getUserId(), "data", "paperTrading");
     const snap = await getDoc(ref);
     if (snap.exists()) {
       const data = snap.data();
+      const updatedAt = data.updatedAt;
+      let cloudUpdatedAtMs: number | undefined;
+      if (updatedAt && typeof updatedAt.toMillis === "function") {
+        cloudUpdatedAtMs = updatedAt.toMillis();
+      } else if (updatedAt?.seconds) {
+        cloudUpdatedAtMs = updatedAt.seconds * 1000;
+      }
       return {
         balance: data.balance ?? INITIAL_BALANCE,
         holdings: data.holdings ?? [],
         trades: data.trades ?? [],
+        cloudUpdatedAtMs,
       };
     }
   } catch (e) {

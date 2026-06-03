@@ -53,6 +53,28 @@ async function loadPaperState(db: Firestore, userId: string): Promise<PaperTradi
   };
 }
 
+async function persistPaperState(
+  db: Firestore,
+  userId: string,
+  paperState: PaperTradingState
+): Promise<boolean> {
+  try {
+    await db.doc(`users/${userId}/data/paperTrading`).set(
+      {
+        balance: paperState.balance,
+        holdings: paperState.holdings,
+        trades: (paperState.trades ?? []).slice(0, 500),
+        updatedAt: FieldValue.serverTimestamp(),
+      },
+      { merge: true }
+    );
+    return true;
+  } catch (e) {
+    console.error(`Failed to save paper state for ${userId}:`, e);
+    return false;
+  }
+}
+
 async function loadRunnerMeta(db: Firestore, userId: string) {
   const snap = await db.doc(`users/${userId}/data/strategyRunner`).get();
   const data = snap.data();
@@ -107,23 +129,34 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         confidence: sig.confidence,
         timestamp: new Date(),
       };
-      const { state, executed } = applyPaperSignal(
+      const { state, executed, message, executedQty } = applyPaperSignal(
         paperState,
         signal,
         strat.exchange || "NSE"
       );
+
+      const qty = strat.params?.quantity ?? 1;
+      const exchange = strat.exchange || "NSE";
+
       if (executed) {
+        const saved = await persistPaperState(db, userId, state);
+        if (!saved) {
+          console.error(`Paper trade not saved for ${sig.symbol} ${sig.action}`);
+          continue;
+        }
+
         paperState = state;
         dedupe.add(key);
         tradesExecuted += 1;
 
-        const qty = strat.params?.quantity ?? 1;
+        const tradeQty = executedQty ?? qty;
+
         await sendOrderEmail({
           mode: "PAPER",
           symbol: sig.symbol,
-          exchange: strat.exchange || "NSE",
+          exchange,
           side: sig.action as "BUY" | "SELL",
-          quantity: qty,
+          quantity: tradeQty,
           price: sig.price,
           orderType: "MARKET",
           product: "CNC",
@@ -134,10 +167,10 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         await db.doc(`users/${userId}/orders/${orderId}`).set({
           id: orderId,
           time: new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }),
-          symbol: sig.symbol,
-          exchange: strat.exchange || "NSE",
+          symbol: sig.symbol.toUpperCase(),
+          exchange,
           side: sig.action,
-          qty,
+          qty: tradeQty,
           price: sig.price,
           orderType: "MARKET",
           product: "CNC",
@@ -148,20 +181,22 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           strategyName: strat.name,
           createdAt: FieldValue.serverTimestamp(),
         });
+      } else if (message) {
+        // Notify when a signal could not run (e.g. BUY skipped — insufficient balance)
+        await sendOrderEmail({
+          mode: "PAPER",
+          symbol: sig.symbol,
+          exchange,
+          side: sig.action as "BUY" | "SELL",
+          quantity: qty,
+          price: sig.price,
+          orderType: "MARKET",
+          product: "CNC",
+          status: `SKIPPED — ${message}`,
+        }).catch(() => {});
+        dedupe.add(key);
       }
     }
-  }
-
-  if (tradesExecuted > 0) {
-    await db.doc(`users/${userId}/data/paperTrading`).set(
-      {
-        balance: paperState.balance,
-        holdings: paperState.holdings,
-        trades: (paperState.trades ?? []).slice(0, 500),
-        updatedAt: FieldValue.serverTimestamp(),
-      },
-      { merge: true }
-    );
   }
 
   const now = new Date().toISOString();

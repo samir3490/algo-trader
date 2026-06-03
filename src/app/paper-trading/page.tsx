@@ -74,6 +74,7 @@ interface PaperState {
   balance: number;
   holdings: Holding[];
   trades: Trade[];
+  cloudSyncedAtMs?: number;
 }
 
 const INITIAL_BALANCE = 1000000;
@@ -91,6 +92,7 @@ function loadStateFromLocalStorage(): PaperState {
         balance: parsed.balance ?? INITIAL_BALANCE,
         holdings: parsed.holdings ?? [],
         trades: parsed.trades ?? [],
+        cloudSyncedAtMs: parsed.cloudSyncedAtMs,
       };
     }
   } catch {}
@@ -149,6 +151,38 @@ export default function PaperTradingPage() {
 
   const [validationError, setValidationError] = useState("");
 
+  const applyCloudState = useCallback((state: {
+    balance: number;
+    holdings: Holding[];
+    trades: Trade[];
+    cloudSyncedAtMs?: number;
+  }) => {
+    setBalance(state.balance);
+    setHoldings(state.holdings as Holding[]);
+    setTrades(state.trades as Trade[]);
+    saveStateToLocalStorage({
+      balance: state.balance,
+      holdings: state.holdings as Holding[],
+      trades: state.trades as Trade[],
+      cloudSyncedAtMs: state.cloudSyncedAtMs ?? Date.now(),
+    });
+  }, []);
+
+  const syncFromCloud = useCallback(async () => {
+    if (!user) return;
+    try {
+      const state = await getPaperTradingState();
+      applyCloudState({
+        balance: state.balance,
+        holdings: state.holdings as Holding[],
+        trades: state.trades as Trade[],
+        cloudSyncedAtMs: state.cloudUpdatedAtMs ?? Date.now(),
+      });
+    } catch (e) {
+      console.error("Firestore load failed:", e);
+    }
+  }, [user, applyCloudState]);
+
   useEffect(() => {
     const cached = loadStateFromLocalStorage();
     setBalance(cached.balance);
@@ -157,54 +191,35 @@ export default function PaperTradingPage() {
     setMounted(true);
 
     if (!user) return;
+    syncFromCloud();
+  }, [user, syncFromCloud]);
 
-    async function loadFirestore() {
-      try {
-        const state = await getPaperTradingState();
-        setBalance(state.balance);
-        setHoldings(state.holdings as Holding[]);
-        setTrades(state.trades as Trade[]);
-        saveStateToLocalStorage({
-          balance: state.balance,
-          holdings: state.holdings as Holding[],
-          trades: state.trades as Trade[],
-        });
-      } catch (e) {
-        console.error("Firestore load failed, using localStorage cache:", e);
-      }
-    }
-    loadFirestore();
-  }, [user]);
-
+  // Cache LTP locally only — do NOT auto-upload to Firestore (would undo server strategy trades)
   useEffect(() => {
     if (!mounted) return;
-    saveStateToLocalStorage({ balance, holdings, trades });
-    const timer = setTimeout(() => {
-      savePaperTradingState({ balance, holdings, trades }).catch(() => {});
-    }, 1000);
-    return () => clearTimeout(timer);
+    const cached = loadStateFromLocalStorage();
+    saveStateToLocalStorage({
+      balance,
+      holdings,
+      trades,
+      cloudSyncedAtMs: cached.cloudSyncedAtMs,
+    });
   }, [balance, holdings, trades, mounted]);
 
   useEffect(() => {
     if (!mounted || !user) return;
-    const reload = async () => {
-      try {
-        const state = await getPaperTradingState();
-        setBalance(state.balance);
-        setHoldings(state.holdings as Holding[]);
-        setTrades(state.trades as Trade[]);
-        saveStateToLocalStorage({
-          balance: state.balance,
-          holdings: state.holdings as Holding[],
-          trades: state.trades as Trade[],
-        });
-      } catch {
-        /* ignore */
-      }
+    window.addEventListener("paper-trading-updated", syncFromCloud);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") syncFromCloud();
     };
-    window.addEventListener("paper-trading-updated", reload);
-    return () => window.removeEventListener("paper-trading-updated", reload);
-  }, [mounted, user]);
+    document.addEventListener("visibilitychange", onVisible);
+    const interval = setInterval(syncFromCloud, 120_000);
+    return () => {
+      window.removeEventListener("paper-trading-updated", syncFromCloud);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(interval);
+    };
+  }, [mounted, user, syncFromCloud]);
 
   // Refresh LTP / P&L from Yahoo (paper holdings only store price at buy time)
   useEffect(() => {
@@ -438,35 +453,52 @@ export default function PaperTradingPage() {
       price,
     };
 
-    setTrades((prev) => [newTrade, ...prev]);
+    let newBalance = balance;
+    let newHoldings = [...holdings];
 
     if (orderSide === "BUY") {
-      setBalance((prev) => prev - totalCost);
-      setHoldings((prev) => {
-        const existing = prev.find((h) => h.symbol === sym && h.exchange === exchange);
-        if (existing) {
-          const newQty = existing.qty + qtyNum;
-          const newAvg = (existing.avgPrice * existing.qty + price * qtyNum) / newQty;
-          return prev.map((h) =>
-            h.symbol === sym && h.exchange === exchange
-              ? { ...h, qty: newQty, avgPrice: Math.round(newAvg * 100) / 100, ltp: price }
-              : h
-          );
-        }
-        return [...prev, { symbol: sym, exchange, qty: qtyNum, avgPrice: price, ltp: price }];
-      });
-    } else {
-      setBalance((prev) => prev + totalCost);
-      setHoldings((prev) => {
-        const existing = prev.find((h) => h.symbol === sym && h.exchange === exchange);
-        if (!existing) return prev;
-        const newQty = existing.qty - qtyNum;
-        if (newQty === 0) return prev.filter((h) => !(h.symbol === sym && h.exchange === exchange));
-        return prev.map((h) =>
-          h.symbol === sym && h.exchange === exchange ? { ...h, qty: newQty } : h
+      newBalance = balance - totalCost;
+      const existing = newHoldings.find((h) => h.symbol === sym && h.exchange === exchange);
+      if (existing) {
+        const newQty = existing.qty + qtyNum;
+        const newAvg = (existing.avgPrice * existing.qty + price * qtyNum) / newQty;
+        newHoldings = newHoldings.map((h) =>
+          h.symbol === sym && h.exchange === exchange
+            ? { ...h, qty: newQty, avgPrice: Math.round(newAvg * 100) / 100, ltp: price }
+            : h
         );
-      });
+      } else {
+        newHoldings.push({ symbol: sym, exchange, qty: qtyNum, avgPrice: price, ltp: price });
+      }
+    } else {
+      newBalance = balance + totalCost;
+      const existing = newHoldings.find((h) => h.symbol === sym && h.exchange === exchange);
+      if (existing) {
+        const newQty = existing.qty - qtyNum;
+        newHoldings =
+          newQty <= 0
+            ? newHoldings.filter((h) => !(h.symbol === sym && h.exchange === exchange))
+            : newHoldings.map((h) =>
+                h.symbol === sym && h.exchange === exchange ? { ...h, qty: newQty } : h
+              );
+      }
     }
+
+    const newTrades = [newTrade, ...trades];
+    setBalance(newBalance);
+    setHoldings(newHoldings);
+    setTrades(newTrades);
+    saveStateToLocalStorage({
+      balance: newBalance,
+      holdings: newHoldings,
+      trades: newTrades,
+      cloudSyncedAtMs: Date.now(),
+    });
+    savePaperTradingState({
+      balance: newBalance,
+      holdings: newHoldings,
+      trades: newTrades,
+    }).catch(() => {});
 
     setSymbol("");
     setQty("");
@@ -544,9 +576,26 @@ export default function PaperTradingPage() {
       price,
     };
 
-    setTrades((prev) => [newTrade, ...prev]);
-    setBalance((prev) => prev + totalValue);
-    setHoldings((prev) => prev.filter((h) => !(h.symbol === sym && h.exchange === holding.exchange)));
+    const newTrades = [newTrade, ...trades];
+    const newBalance = balance + totalValue;
+    const newHoldings = holdings.filter(
+      (h) => !(h.symbol === sym && h.exchange === holding.exchange)
+    );
+
+    setTrades(newTrades);
+    setBalance(newBalance);
+    setHoldings(newHoldings);
+    saveStateToLocalStorage({
+      balance: newBalance,
+      holdings: newHoldings,
+      trades: newTrades,
+      cloudSyncedAtMs: Date.now(),
+    });
+    savePaperTradingState({
+      balance: newBalance,
+      holdings: newHoldings,
+      trades: newTrades,
+    }).catch(() => {});
 
     saveOrder({
       id: newTrade.id,
