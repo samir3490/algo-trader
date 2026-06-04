@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { Loader2, TrendingUp } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import BrandLogo from "@/components/brand/brand-logo";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -18,14 +19,9 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0d1117] flex flex-col items-center justify-center gap-4">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600">
-            <TrendingUp className="h-5 w-5 text-white" />
-          </div>
-          <span className="text-xl font-bold text-white">AlgoTrader</span>
-        </div>
-        <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+      <div className="min-h-screen bg-bg-primary flex flex-col items-center justify-center gap-4">
+        <BrandLogo variant="login" showProduct className="flex-col items-center" />
+        <Loader2 className="w-6 h-6 animate-spin text-accent" />
       </div>
     );
   }

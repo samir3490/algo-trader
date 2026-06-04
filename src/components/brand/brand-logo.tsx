@@ -26,10 +26,10 @@ export default function BrandLogo({
     <div className={cn("flex items-center gap-3 min-w-0", className)}>
       <div
         className={cn(
-          "shrink-0 flex items-center justify-center overflow-hidden bg-white",
+          "shrink-0 flex items-center justify-center overflow-hidden bg-bg-secondary",
           variant === "login"
-            ? "rounded-xl shadow-lg ring-1 ring-border/80 px-3 py-2"
-            : "rounded-lg ring-1 ring-border/60 px-2 py-1.5"
+            ? "rounded-xl shadow-md ring-1 ring-border px-3 py-2"
+            : "rounded-lg ring-1 ring-border px-2 py-1.5"
         )}
       >
         <Image

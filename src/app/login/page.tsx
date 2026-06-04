@@ -56,8 +56,8 @@ export default function LoginPage() {
           <button
             onClick={signInWithGoogle}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg
-                       bg-white hover:bg-gray-100 text-brand font-medium text-sm
-                       transition-all duration-200 shadow-lg cursor-pointer ring-1 ring-border/40"
+                       bg-bg-secondary hover:bg-bg-hover text-text-primary font-medium text-sm
+                       transition-all duration-200 shadow-md cursor-pointer ring-1 ring-border"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path

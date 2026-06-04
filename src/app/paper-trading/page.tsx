@@ -995,7 +995,7 @@ export default function PaperTradingPage() {
 
               {/* Search Dropdown */}
               {showSuggestions && searchResults.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-[#1a2035] border border-gray-700 rounded-lg shadow-xl max-h-52 overflow-y-auto">
+                <div className="absolute z-50 w-full mt-1 bg-bg-elevated border border-border rounded-lg shadow-xl max-h-52 overflow-y-auto">
                   {searchResults.map((item, i) => (
                     <button
                       key={`${item.tradingsymbol}-${i}`}

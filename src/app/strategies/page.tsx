@@ -403,8 +403,8 @@ export default function StrategiesPage() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-gray-400">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-400" />
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-text-secondary">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" />
         <p className="text-sm">Loading strategies…</p>
       </div>
     );
@@ -415,8 +415,8 @@ export default function StrategiesPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Trading Strategies</h1>
-          <p className="mt-1 text-sm text-gray-400">
+          <h1 className="text-2xl font-bold text-text-primary">Trading Strategies</h1>
+          <p className="mt-1 text-sm text-text-secondary">
             Configure and manage your algorithmic trading strategies
           </p>
         </div>
@@ -436,7 +436,7 @@ export default function StrategiesPage() {
           </button>
           <button
             onClick={openModal}
-            className="inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-medium text-white transition-colors hover:bg-blue-500"
+            className="inline-flex items-center gap-2 rounded-xl bg-accent text-brand px-5 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-accent-hover"
           >
             <Plus className="h-4 w-4" />
             Create Strategy
@@ -445,15 +445,15 @@ export default function StrategiesPage() {
       </div>
 
       {/* ── How Strategies Work ────────────────────────────────────────── */}
-      <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
+      <div className="rounded-xl border border-accent/30 bg-accent-muted p-5">
         <div className="flex items-start gap-3">
-          <Info className="h-5 w-5 text-blue-400 mt-0.5 shrink-0" />
+          <Info className="h-5 w-5 text-accent mt-0.5 shrink-0" />
           <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-blue-300">How Strategies Work</h3>
-            <ul className="space-y-1.5 text-xs text-gray-400 leading-relaxed">
+            <h3 className="text-sm font-semibold text-brand">How Strategies Work</h3>
+            <ul className="space-y-1.5 text-xs text-text-secondary leading-relaxed">
               <li className="flex items-start gap-2">
-                <Signal className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-                <strong className="text-gray-300">Server cron</strong> scans every <strong className="text-gray-200">15 minutes</strong> in market hours (weekdays) via <strong className="text-emerald-400">GitHub Actions</strong> — works on Vercel Hobby. Vercel built-in cron is daily-only on Hobby; Pro can use every 15 min in <code className="text-gray-500">vercel.json</code>. Use <strong className="text-gray-200">Run scan now</strong> anytime. Paper auto-trades; live mode sends signal emails only.
+                <Signal className="h-3.5 w-3.5 text-accent mt-0.5 shrink-0" />
+                <strong className="text-text-secondary">Server cron</strong> scans every <strong className="text-text-primary">15 minutes</strong> in market hours (weekdays) via <strong className="text-emerald-400">GitHub Actions</strong> — works on Vercel Hobby. Vercel built-in cron is daily-only on Hobby; Pro can use every 15 min in <code className="text-text-tertiary">vercel.json</code>. Use <strong className="text-text-primary">Run scan now</strong> anytime. Paper auto-trades; live mode sends signal emails only.
               </li>
               <li className="flex items-start gap-2 text-amber-400/90">
                 <Target className="h-3.5 w-3.5 mt-0.5 shrink-0" />
@@ -462,8 +462,8 @@ export default function StrategiesPage() {
                 </span>
               </li>
               <li className="flex items-start gap-2">
-                <Target className="h-3.5 w-3.5 text-blue-400 mt-0.5 shrink-0" />
-                <strong className="text-amber-400">Paper mode:</strong> auto-places trades (max one BUY and one SELL per stock per day). Each trade is tagged with the <strong className="text-gray-200">strategy name</strong> in Paper Trading → Trade History and the performance table. Screener.in uses different filters — results will not match exactly.
+                <Target className="h-3.5 w-3.5 text-accent mt-0.5 shrink-0" />
+                <strong className="text-amber-400">Paper mode:</strong> auto-places trades (max one BUY and one SELL per stock per day). Each trade is tagged with the <strong className="text-text-primary">strategy name</strong> in Paper Trading → Trade History and the performance table. Screener.in uses different filters — results will not match exactly.
               </li>
               <li className="flex items-start gap-2">
                 <Shield className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
@@ -482,45 +482,45 @@ export default function StrategiesPage() {
       {/* ── Strategy Performance Overview ──────────────────────────────── */}
       {activeStrategies.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="rounded-xl border border-gray-800 bg-[#111827] p-4">
+          <div className="rounded-xl border border-border bg-bg-secondary p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Hash className="h-4 w-4 text-blue-400" />
-              <span className="text-xs text-gray-400 uppercase tracking-wider">Total Strategies</span>
+              <Hash className="h-4 w-4 text-accent" />
+              <span className="text-xs text-text-secondary uppercase tracking-wider">Total Strategies</span>
             </div>
-            <p className="text-xl font-bold text-white">
+            <p className="text-xl font-bold text-text-primary">
               {activeStrategies.length}
             </p>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-text-tertiary mt-1">
               {runningCount} running · {pausedCount} paused
             </p>
           </div>
-          <div className="rounded-xl border border-gray-800 bg-[#111827] p-4">
+          <div className="rounded-xl border border-border bg-bg-secondary p-4">
             <div className="flex items-center gap-2 mb-2">
               <Signal className="h-4 w-4 text-purple-400" />
-              <span className="text-xs text-gray-400 uppercase tracking-wider">Total Signals</span>
+              <span className="text-xs text-text-secondary uppercase tracking-wider">Total Signals</span>
             </div>
-            <p className="text-xl font-bold text-white">{totalSignals}</p>
-            <p className="text-xs text-gray-500 mt-1">Across all strategies</p>
+            <p className="text-xl font-bold text-text-primary">{totalSignals}</p>
+            <p className="text-xs text-text-tertiary mt-1">Across all strategies</p>
           </div>
-          <div className="rounded-xl border border-gray-800 bg-[#111827] p-4">
+          <div className="rounded-xl border border-border bg-bg-secondary p-4">
             <div className="flex items-center gap-2 mb-2">
               <TrendingUp className="h-4 w-4 text-emerald-400" />
-              <span className="text-xs text-gray-400 uppercase tracking-wider">Total P&amp;L</span>
+              <span className="text-xs text-text-secondary uppercase tracking-wider">Total P&amp;L</span>
             </div>
             <p className={cn("text-xl font-bold", totalPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
               {formatCurrency(totalPnl)}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Combined performance</p>
+            <p className="text-xs text-text-tertiary mt-1">Combined performance</p>
           </div>
-          <div className="rounded-xl border border-gray-800 bg-[#111827] p-4">
+          <div className="rounded-xl border border-border bg-bg-secondary p-4">
             <div className="flex items-center gap-2 mb-2">
               <Target className="h-4 w-4 text-cyan-400" />
-              <span className="text-xs text-gray-400 uppercase tracking-wider">Unique Symbols</span>
+              <span className="text-xs text-text-secondary uppercase tracking-wider">Unique Symbols</span>
             </div>
-            <p className="text-xl font-bold text-white">
+            <p className="text-xl font-bold text-text-primary">
               {new Set(activeStrategies.map((s) => s.symbol)).size}
             </p>
-            <p className="text-xs text-gray-500 mt-1">Being monitored</p>
+            <p className="text-xs text-text-tertiary mt-1">Being monitored</p>
           </div>
         </div>
       )}
@@ -534,14 +534,14 @@ export default function StrategiesPage() {
             className={cn(
               "rounded-lg px-4 py-2 text-xs font-medium transition-colors",
               categoryFilter === cat
-                ? "bg-blue-600 text-white"
-                : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                ? "bg-accent text-brand"
+                : "bg-bg-tertiary text-text-secondary hover:bg-bg-hover"
             )}
           >
             {cat === "all" ? "All strategies" : cat === "basic" ? "Basic (5)" : "Advanced (7)"}
           </button>
         ))}
-        <p className="text-[10px] text-gray-600 ml-1 w-full sm:w-auto">
+        <p className="text-[10px] text-text-tertiary ml-1 w-full sm:w-auto">
           Win rates are historical backtest benchmarks — not guaranteed future performance.
         </p>
       </div>
@@ -557,8 +557,8 @@ export default function StrategiesPage() {
               className={cn(
                 "group relative rounded-xl border p-5 transition-all duration-200",
                 state.active
-                  ? "border-blue-500/40 bg-[#111827] shadow-lg shadow-blue-500/5"
-                  : "border-gray-800 bg-[#111827] hover:border-gray-700"
+                  ? "border-accent/50 bg-bg-secondary shadow-lg shadow-accent/10"
+                  : "border-border bg-bg-secondary hover:border-border"
               )}
             >
               {/* Status dot */}
@@ -566,7 +566,7 @@ export default function StrategiesPage() {
                 <span
                   className={cn(
                     "inline-flex h-2.5 w-2.5 rounded-full",
-                    state.active ? "bg-emerald-400 shadow-sm shadow-emerald-400/50" : "bg-gray-600"
+                    state.active ? "bg-profit shadow-sm shadow-profit/30" : "bg-border-light"
                   )}
                 />
               </div>
@@ -576,17 +576,17 @@ export default function StrategiesPage() {
                 <div
                   className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-lg",
-                    state.active ? "bg-blue-500/20 text-blue-400" : "bg-gray-800 text-gray-400"
+                    state.active ? "bg-accent/25 text-accent" : "bg-bg-tertiary text-text-secondary"
                   )}
                 >
                   <Icon className="h-5 w-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-semibold text-white">{def.name}</h3>
+                  <h3 className="text-base font-semibold text-text-primary">{def.name}</h3>
                   <span
                     className={cn(
                       "text-[10px] font-medium uppercase tracking-wide",
-                      def.category === "advanced" ? "text-purple-400" : "text-gray-500"
+                      def.category === "advanced" ? "text-purple-400" : "text-text-tertiary"
                     )}
                   >
                     {def.category}
@@ -594,15 +594,15 @@ export default function StrategiesPage() {
                 </div>
               </div>
 
-              <p className="mb-3 text-sm leading-relaxed text-gray-400">{def.description}</p>
+              <p className="mb-3 text-sm leading-relaxed text-text-secondary">{def.description}</p>
 
               <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-2.5 py-2">
-                  <span className="text-gray-500">Hist. win rate</span>
+                <div className="rounded-lg border border-border bg-bg-tertiary px-2.5 py-2">
+                  <span className="text-text-tertiary">Hist. win rate</span>
                   <p className="font-semibold text-emerald-400">{def.winRate}%</p>
                 </div>
-                <div className="rounded-lg border border-gray-800 bg-gray-900/50 px-2.5 py-2">
-                  <span className="text-gray-500">Risk</span>
+                <div className="rounded-lg border border-border bg-bg-tertiary px-2.5 py-2">
+                  <span className="text-text-tertiary">Risk</span>
                   <p
                     className={cn(
                       "font-semibold",
@@ -616,22 +616,22 @@ export default function StrategiesPage() {
                     {def.riskLevel}
                   </p>
                 </div>
-                <div className="col-span-2 rounded-lg border border-gray-800 bg-gray-900/50 px-2.5 py-2">
-                  <span className="text-gray-500">Best for</span>
-                  <p className="text-gray-300">{def.bestFor}</p>
+                <div className="col-span-2 rounded-lg border border-border bg-bg-tertiary px-2.5 py-2">
+                  <span className="text-text-tertiary">Best for</span>
+                  <p className="text-text-secondary">{def.bestFor}</p>
                 </div>
               </div>
-              <p className="mb-4 text-[11px] italic text-gray-500 leading-relaxed">{def.feedback}</p>
+              <p className="mb-4 text-[11px] italic text-text-tertiary leading-relaxed">{def.feedback}</p>
 
               {/* Parameter inputs */}
               <div className="mb-4 space-y-2">
-                <span className="text-xs font-medium uppercase tracking-wider text-gray-500">
+                <span className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
                   Parameters
                 </span>
                 <div className="grid grid-cols-2 gap-2">
                   {def.params.map((p) => (
                     <div key={p.key}>
-                      <label className="mb-1 block text-xs text-gray-500">{p.label}</label>
+                      <label className="mb-1 block text-xs text-text-tertiary">{p.label}</label>
                       <input
                         type="number"
                         value={state.params[p.key]}
@@ -647,7 +647,7 @@ export default function StrategiesPage() {
                             },
                           }))
                         }
-                        className="w-full rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-1.5 text-sm text-white outline-none transition-colors focus:border-blue-500"
+                        className="w-full rounded-lg border border-border bg-bg-primary px-3 py-1.5 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                       />
                     </div>
                   ))}
@@ -656,7 +656,7 @@ export default function StrategiesPage() {
 
               {/* Symbols (multi-symbol) */}
               <div className="mb-3">
-                <label className="mb-1 block text-xs text-gray-500">Symbols (comma-separated)</label>
+                <label className="mb-1 block text-xs text-text-tertiary">Symbols (comma-separated)</label>
                 <input
                   type="text"
                   value={state.symbols}
@@ -667,11 +667,11 @@ export default function StrategiesPage() {
                     }))
                   }
                   placeholder="RELIANCE, TCS, INFY"
-                  className="w-full rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-1.5 text-sm uppercase text-white outline-none transition-colors focus:border-blue-500 placeholder:text-gray-600 placeholder:normal-case"
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-1.5 text-sm uppercase text-text-primary outline-none transition-colors focus:border-accent placeholder:text-text-tertiary placeholder:normal-case"
                 />
                 {/* Preset buttons */}
                 <div className="flex items-center gap-2 mt-2">
-                  <span className="text-[10px] text-gray-600">Presets:</span>
+                  <span className="text-[10px] text-text-tertiary">Presets:</span>
                   {[
                     { label: "Nifty 50", key: "nifty50" },
                     { label: "Bank Nifty", key: "banknifty" },
@@ -680,7 +680,7 @@ export default function StrategiesPage() {
                     <button
                       key={preset.key}
                       onClick={() => applyPreset("card", def.id, preset.key)}
-                      className="rounded px-2 py-0.5 text-[10px] font-medium text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 transition-colors"
+                      className="rounded px-2 py-0.5 text-[10px] font-medium text-accent bg-accent-muted hover:bg-accent-hover/20 transition-colors"
                     >
                       {preset.label}
                     </button>
@@ -690,7 +690,7 @@ export default function StrategiesPage() {
 
               {/* Timeframe */}
               <div className="mb-4">
-                <label className="mb-1 block text-xs text-gray-500">Timeframe</label>
+                <label className="mb-1 block text-xs text-text-tertiary">Timeframe</label>
                 <div className="relative">
                   <select
                     value={state.timeframe}
@@ -703,7 +703,7 @@ export default function StrategiesPage() {
                         },
                       }))
                     }
-                    className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-1.5 text-sm text-white outline-none transition-colors focus:border-blue-500"
+                    className="w-full appearance-none rounded-lg border border-border bg-bg-primary px-3 py-1.5 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                   >
                     {TIMEFRAMES.map((tf) => (
                       <option key={tf} value={tf}>
@@ -711,12 +711,12 @@ export default function StrategiesPage() {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
                 </div>
               </div>
 
               {/* Paper / Live toggle + Activate */}
-              <div className="flex items-center justify-between border-t border-gray-800 pt-4">
+              <div className="flex items-center justify-between border-t border-border pt-4">
                 <button
                   onClick={() =>
                     setCardState((prev) => ({
@@ -748,7 +748,7 @@ export default function StrategiesPage() {
                     "rounded-lg px-4 py-1.5 text-xs font-semibold transition-colors",
                     state.active
                       ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                      : "bg-blue-600 text-white hover:bg-blue-500"
+                      : "bg-accent text-brand hover:bg-accent-hover"
                   )}
                 >
                   {state.active ? "Deactivate" : "Activate"}
@@ -760,23 +760,23 @@ export default function StrategiesPage() {
       </div>
 
       {/* Active Strategies Table */}
-      <div className="rounded-xl border border-gray-800 bg-[#111827]">
-        <div className="flex items-center justify-between border-b border-gray-800 px-6 py-4">
-          <h2 className="text-lg font-semibold text-white">Active Strategies</h2>
-          <span className="rounded-full bg-blue-500/10 px-3 py-1 text-xs font-medium text-blue-400">
+      <div className="rounded-xl border border-border bg-bg-secondary">
+        <div className="flex items-center justify-between border-b border-border px-6 py-4">
+          <h2 className="text-lg font-semibold text-text-primary">Active Strategies</h2>
+          <span className="rounded-full bg-accent-muted px-3 py-1 text-xs font-medium text-accent">
             {runningCount} running
           </span>
         </div>
 
         {activeStrategies.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-gray-500">
+          <div className="px-6 py-12 text-center text-sm text-text-tertiary">
             No active strategies. Activate a strategy above or create a new one.
           </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
               <thead>
-                <tr className="border-b border-gray-800 text-xs uppercase tracking-wider text-gray-500">
+                <tr className="border-b border-border text-xs uppercase tracking-wider text-text-tertiary">
                   <th className="px-6 py-3 font-medium">Strategy</th>
                   <th className="px-6 py-3 font-medium">Symbol</th>
                   <th className="px-6 py-3 font-medium">Mode</th>
@@ -787,24 +787,24 @@ export default function StrategiesPage() {
                   <th className="px-6 py-3 font-medium text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-800">
+              <tbody className="divide-y divide-border">
                 {activeStrategies.map((s) => {
                   const def = getStrategyDef(s.type);
                   const Icon = def.icon;
                   return (
                     <tr
                       key={s.id}
-                      className="transition-colors hover:bg-gray-800/40"
+                      className="transition-colors hover:bg-bg-tertiary/40"
                     >
                       <td className="whitespace-nowrap px-6 py-4">
                         <div className="flex items-center gap-2.5">
-                          <Icon className="h-4 w-4 text-blue-400" />
-                          <span className="font-medium text-white">
+                          <Icon className="h-4 w-4 text-accent" />
+                          <span className="font-medium text-text-primary">
                             {def.name}
                           </span>
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 font-mono text-sm text-gray-300">
+                      <td className="whitespace-nowrap px-6 py-4 font-mono text-sm text-text-secondary">
                         {s.symbol}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
@@ -848,10 +848,10 @@ export default function StrategiesPage() {
                           {s.status === "running" ? "Running" : s.status === "paused" ? "Paused" : "Stopped"}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-gray-400 text-xs">
+                      <td className="whitespace-nowrap px-6 py-4 text-text-secondary text-xs">
                         {s.timeframe}
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-gray-300">
+                      <td className="whitespace-nowrap px-6 py-4 text-text-secondary">
                         {s.signals}
                       </td>
                       <td className="whitespace-nowrap px-6 py-4">
@@ -908,17 +908,17 @@ export default function StrategiesPage() {
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div
-            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            className="absolute inset-0 bg-brand/25 backdrop-blur-sm"
             onClick={() => setModalOpen(false)}
           />
-          <div className="relative w-full max-w-md rounded-xl border border-gray-800 bg-[#111827] p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-md rounded-xl border border-border bg-bg-secondary p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-white">
+              <h2 className="text-lg font-semibold text-text-primary">
                 Create Strategy
               </h2>
               <button
                 onClick={() => setModalOpen(false)}
-                className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+                className="rounded-lg p-1.5 text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -927,7 +927,7 @@ export default function StrategiesPage() {
             <div className="space-y-4">
               {/* Strategy type */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                <label className="mb-1.5 block text-sm font-medium text-text-secondary">
                   Strategy Type
                 </label>
                 <div className="relative">
@@ -936,7 +936,7 @@ export default function StrategiesPage() {
                     onChange={(e) =>
                       handleModalTypeChange(e.target.value as StrategyType)
                     }
-                    className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm text-white outline-none transition-colors focus:border-blue-500"
+                    className="w-full appearance-none rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                   >
                     {STRATEGY_DEFINITIONS.map((d) => (
                       <option key={d.id} value={d.id}>
@@ -944,13 +944,13 @@ export default function StrategiesPage() {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
                 </div>
               </div>
 
               {/* Symbols (multi-symbol) */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                <label className="mb-1.5 block text-sm font-medium text-text-secondary">
                   Symbols (comma-separated)
                 </label>
                 <input
@@ -958,10 +958,10 @@ export default function StrategiesPage() {
                   value={modalSymbols}
                   onChange={(e) => setModalSymbols(e.target.value)}
                   placeholder="RELIANCE, TCS, INFY"
-                  className="w-full rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm uppercase text-white outline-none transition-colors focus:border-blue-500 placeholder:text-gray-600 placeholder:normal-case"
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm uppercase text-text-primary outline-none transition-colors focus:border-accent placeholder:text-text-tertiary placeholder:normal-case"
                 />
                 <div className="flex items-center gap-2 mt-2">
-                  <span className="text-[10px] text-gray-600">Presets:</span>
+                  <span className="text-[10px] text-text-tertiary">Presets:</span>
                   {[
                     { label: "Nifty 50", key: "nifty50" },
                     { label: "Bank Nifty", key: "banknifty" },
@@ -970,14 +970,14 @@ export default function StrategiesPage() {
                     <button
                       key={preset.key}
                       onClick={() => applyPreset("modal", null, preset.key)}
-                      className="rounded px-2 py-0.5 text-[10px] font-medium text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 transition-colors"
+                      className="rounded px-2 py-0.5 text-[10px] font-medium text-accent bg-accent-muted hover:bg-accent-hover/20 transition-colors"
                     >
                       {preset.label}
                     </button>
                   ))}
                 </div>
                 {parseSymbols(modalSymbols).length > 1 && (
-                  <p className="text-[10px] text-gray-500 mt-1">
+                  <p className="text-[10px] text-text-tertiary mt-1">
                     {parseSymbols(modalSymbols).length} symbols selected — a separate strategy will run for each
                   </p>
                 )}
@@ -985,7 +985,7 @@ export default function StrategiesPage() {
 
               {/* Timeframe */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-300">
+                <label className="mb-1.5 block text-sm font-medium text-text-secondary">
                   Timeframe
                 </label>
                 <div className="relative">
@@ -994,7 +994,7 @@ export default function StrategiesPage() {
                     onChange={(e) =>
                       setModalTimeframe(e.target.value as Timeframe)
                     }
-                    className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm text-white outline-none transition-colors focus:border-blue-500"
+                    className="w-full appearance-none rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                   >
                     {TIMEFRAMES.map((tf) => (
                       <option key={tf} value={tf}>
@@ -1002,19 +1002,19 @@ export default function StrategiesPage() {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
                 </div>
               </div>
 
               {/* Dynamic params */}
               <div>
-                <span className="mb-2 block text-sm font-medium text-gray-300">
+                <span className="mb-2 block text-sm font-medium text-text-secondary">
                   Parameters
                 </span>
                 <div className="grid grid-cols-2 gap-3">
                   {getStrategyDef(modalType).params.map((p) => (
                     <div key={p.key}>
-                      <label className="mb-1 block text-xs text-gray-500">
+                      <label className="mb-1 block text-xs text-text-tertiary">
                         {p.label}
                       </label>
                       <input
@@ -1026,7 +1026,7 @@ export default function StrategiesPage() {
                             [p.key]: Number(e.target.value),
                           }))
                         }
-                        className="w-full rounded-lg border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm text-white outline-none transition-colors focus:border-blue-500"
+                        className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition-colors focus:border-accent"
                       />
                     </div>
                   ))}
@@ -1034,11 +1034,11 @@ export default function StrategiesPage() {
               </div>
 
               {/* Paper / Live */}
-              <div className="flex items-center justify-between rounded-lg border border-gray-700 bg-gray-900/40 px-4 py-3">
-                <span className="text-sm text-gray-300">Trading Mode</span>
+              <div className="flex items-center justify-between rounded-lg border border-border bg-bg-tertiary px-4 py-3">
+                <span className="text-sm text-text-secondary">Trading Mode</span>
                 <button
                   onClick={() => setModalPaper((p) => !p)}
-                  className="relative inline-flex h-7 w-[120px] items-center rounded-full bg-gray-800 p-0.5"
+                  className="relative inline-flex h-7 w-[120px] items-center rounded-full bg-bg-tertiary p-0.5"
                 >
                   <span
                     className={cn(
@@ -1051,7 +1051,7 @@ export default function StrategiesPage() {
                   <span
                     className={cn(
                       "relative z-10 w-1/2 text-center text-xs font-medium transition-colors",
-                      modalPaper ? "text-amber-300" : "text-gray-500"
+                      modalPaper ? "text-amber-300" : "text-text-tertiary"
                     )}
                   >
                     Paper
@@ -1059,7 +1059,7 @@ export default function StrategiesPage() {
                   <span
                     className={cn(
                       "relative z-10 w-1/2 text-center text-xs font-medium transition-colors",
-                      !modalPaper ? "text-red-300" : "text-gray-500"
+                      !modalPaper ? "text-red-300" : "text-text-tertiary"
                     )}
                   >
                     Live
@@ -1070,11 +1070,11 @@ export default function StrategiesPage() {
               {/* Save */}
               <button
                 onClick={handleModalSave}
-                className="w-full rounded-xl bg-blue-600 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
+                className="w-full rounded-xl bg-accent text-brand py-2.5 text-sm font-semibold text-text-primary transition-colors hover:bg-accent-hover"
               >
                 Save &amp; Activate
                 {parseSymbols(modalSymbols).length > 1 && (
-                  <span className="ml-1 text-blue-200">
+                  <span className="ml-1 text-text-secondary">
                     ({parseSymbols(modalSymbols).length} symbols)
                   </span>
                 )}

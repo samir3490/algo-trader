@@ -576,13 +576,13 @@ export default function DashboardPage() {
                   dataKey="date"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#6b7280", fontSize: 11 }}
+                  tick={{ fill: "#595959", fontSize: 11 }}
                   interval="preserveStartEnd"
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#6b7280", fontSize: 11 }}
+                  tick={{ fill: "#595959", fontSize: 11 }}
                   tickFormatter={(v: number) => `₹${(v / 100000).toFixed(1)}L`}
                   domain={[chartMin, chartMax]}
                   width={60}
