@@ -36,6 +36,12 @@ import {
   applyPaperRiskExits,
   canPlacePaperBuy,
 } from "@/lib/risk/paper-risk-guard";
+import { applyPaperSignal } from "@/lib/strategies/execute-paper";
+import { canExecuteStrategyTrade } from "@/lib/strategies/portfolio-gate";
+import {
+  computeZerodhaCharges,
+  cashFlowForTrade,
+} from "@/lib/brokerage/zerodha-charges";
 import {
   enrichTradesWithStrategy,
   computeStrategyDetailBundles,
@@ -73,6 +79,13 @@ interface Trade {
   strategyId?: string;
   strategyName?: string;
   reason?: string;
+  product?: string;
+  charges?: number;
+  brokerage?: number;
+  stt?: number;
+  gst?: number;
+  netPnl?: number;
+  grossAmount?: number;
 }
 
 interface StockQuote {
@@ -488,7 +501,22 @@ export default function PaperTradingPage() {
   };
 
   const estimatedPrice = getOrderPrice();
-  const estimatedCost = estimatedPrice && qty ? estimatedPrice * parseInt(qty || "0") : null;
+  const estimatedCost = useMemo(() => {
+    const qtyNum = parseInt(qty || "0", 10);
+    if (!estimatedPrice || !qtyNum || qtyNum <= 0) return null;
+    const turnover = estimatedPrice * qtyNum;
+    if (!appSettings?.simulateBrokerage) return turnover;
+    const product = appSettings.paperDefaultProduct ?? "CNC";
+    const charges = computeZerodhaCharges({
+      side: orderSide,
+      qty: qtyNum,
+      price: estimatedPrice,
+      product,
+    });
+    return orderSide === "BUY"
+      ? cashFlowForTrade("BUY", turnover, charges)
+      : turnover - charges.total;
+  }, [estimatedPrice, qty, orderSide, appSettings?.simulateBrokerage, appSettings?.paperDefaultProduct]);
 
   function handlePlaceOrder() {
     setValidationError("");
@@ -514,17 +542,32 @@ export default function PaperTradingPage() {
       return;
     }
 
-    const totalCost = price * qtyNum;
     const sym = symbol.toUpperCase().trim();
 
-    if (orderSide === "BUY") {
-      const isNewPosition = !holdings.some(
-        (h) => h.symbol === sym && h.exchange === exchange
-      );
-      if (appSettings) {
+    if (appSettings) {
+      const gate = canExecuteStrategyTrade(orderSide, sym, exchange, {
+        holdings: holdings.map((h) => ({
+          symbol: h.symbol,
+          exchange: h.exchange,
+          qty: h.qty,
+          avgPrice: h.avgPrice,
+          ltp: h.ltp,
+        })),
+        trades: trades as PaperTrade[],
+        settings: appSettings,
+        soldThisRun: new Set(),
+      });
+      if (!gate.allowed) {
+        setValidationError(gate.reason ?? "Trade not allowed");
+        return;
+      }
+      if (orderSide === "BUY") {
+        const isNewPosition = !holdings.some(
+          (h) => h.symbol === sym && h.exchange === exchange
+        );
         const buyCheck = canPlacePaperBuy({
           balance,
-          orderValue: totalCost,
+          orderValue: price * qtyNum,
           holdingsCount: isNewPosition ? holdings.length + 1 : holdings.length,
           settings: appSettings,
         });
@@ -533,95 +576,54 @@ export default function PaperTradingPage() {
           return;
         }
       }
-      if (totalCost > balance) {
-        setValidationError(
-          `Insufficient balance. Required: ${formatCurrency(totalCost)}, Available: ${formatCurrency(balance)}`
-        );
-        return;
-      }
-    } else {
-      const holding = holdings.find((h) => h.symbol === sym && h.exchange === exchange);
-      if (!holding || holding.qty < qtyNum) {
-        setValidationError(
-          `Insufficient holdings. You hold ${holding?.qty ?? 0} shares of ${sym}`
-        );
-        return;
-      }
     }
 
-    const now = new Date();
-    const executedAt = now.toISOString();
-    const timeStr = now.toLocaleString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
-    const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
-
-    const newTrade: Trade = {
-      id: `t${Date.now()}`,
-      time: timeStr,
-      executedAt,
-      symbol: sym,
+    const { state, executed, message } = applyPaperSignal(
+      { balance, holdings, trades: trades as PaperTrade[] },
+      {
+        symbol: sym,
+        action: orderSide,
+        price,
+        quantity: qtyNum,
+        reason: "Manual order",
+        confidence: 1,
+        timestamp: new Date(),
+      },
       exchange,
-      side: orderSide,
-      qty: qtyNum,
-      price,
-      date: dateStr,
-    };
-
-    let newBalance = balance;
-    let newHoldings = [...holdings];
-
-    if (orderSide === "BUY") {
-      newBalance = balance - totalCost;
-      const existing = newHoldings.find((h) => h.symbol === sym && h.exchange === exchange);
-      if (existing) {
-        const newQty = existing.qty + qtyNum;
-        const newAvg = (existing.avgPrice * existing.qty + price * qtyNum) / newQty;
-        newHoldings = newHoldings.map((h) =>
-          h.symbol === sym && h.exchange === exchange
-            ? { ...h, qty: newQty, avgPrice: Math.round(newAvg * 100) / 100, ltp: price }
-            : h
-        );
-      } else {
-        newHoldings.push({ symbol: sym, exchange, qty: qtyNum, avgPrice: price, ltp: price });
+      { strategyName: "Manual" },
+      {
+        simulateBrokerage: appSettings?.simulateBrokerage,
+        product: appSettings?.paperDefaultProduct ?? "CNC",
       }
-    } else {
-      newBalance = balance + totalCost;
-      const existing = newHoldings.find((h) => h.symbol === sym && h.exchange === exchange);
-      if (existing) {
-        const newQty = existing.qty - qtyNum;
-        newHoldings =
-          newQty <= 0
-            ? newHoldings.filter((h) => !(h.symbol === sym && h.exchange === exchange))
-            : newHoldings.map((h) =>
-                h.symbol === sym && h.exchange === exchange ? { ...h, qty: newQty } : h
-              );
-      }
+    );
+
+    if (!executed) {
+      setValidationError(message ?? "Order could not be executed");
+      return;
+    }
+
+    const newTrade = state.trades?.[0] as Trade | undefined;
+    if (!newTrade) {
+      setValidationError("Order failed");
+      return;
     }
 
     const merged = normalizePaperTrades(
-      [newTrade as PaperTrade, ...(trades as PaperTrade[])],
+      state.trades ?? [],
       orderHistory
     );
-    setBalance(newBalance);
-    setHoldings(newHoldings);
+    setBalance(state.balance ?? balance);
+    setHoldings((state.holdings ?? []) as Holding[]);
     setTrades(merged as Trade[]);
     saveStateToLocalStorage({
-      balance: newBalance,
-      holdings: newHoldings,
+      balance: state.balance ?? balance,
+      holdings: (state.holdings ?? []) as Holding[],
       trades: merged as Trade[],
       cloudSyncedAtMs: Date.now(),
     });
     savePaperTradingState({
-      balance: newBalance,
-      holdings: newHoldings,
+      balance: state.balance,
+      holdings: state.holdings,
       trades: merged,
     }).catch(() => {});
 
@@ -1175,6 +1177,7 @@ export default function PaperTradingPage() {
               <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-bg-primary mb-5">
                 <span className="text-xs text-text-tertiary">
                   Estimated {orderSide === "BUY" ? "Cost" : "Value"}
+                  {appSettings?.simulateBrokerage ? " (incl. charges)" : ""}
                 </span>
                 <span className="text-sm font-semibold text-text-primary">
                   {formatCurrency(estimatedCost)}
@@ -1683,6 +1686,12 @@ export default function PaperTradingPage() {
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Qty</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Price</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Total</th>
+                {appSettings?.simulateBrokerage && (
+                  <>
+                    <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Charges</th>
+                    <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Net P&amp;L</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -1733,12 +1742,28 @@ export default function PaperTradingPage() {
                     <td className="py-3 px-5 text-right text-text-secondary">{formatNumber(t.qty)}</td>
                     <td className="py-3 px-5 text-right text-text-primary">{formatCurrency(t.price)}</td>
                     <td className="py-3 px-5 text-right text-text-primary font-medium">{formatCurrency(t.qty * t.price)}</td>
+                    {appSettings?.simulateBrokerage && (
+                      <>
+                        <td className="py-3 px-5 text-right text-text-tertiary text-xs">
+                          {t.charges != null ? formatCurrency(t.charges) : "—"}
+                        </td>
+                        <td className="py-3 px-5 text-right text-xs">
+                          {t.netPnl != null ? (
+                            <span className={t.netPnl >= 0 ? "text-profit" : "text-loss"}>
+                              {formatCurrency(t.netPnl)}
+                            </span>
+                          ) : (
+                            <span className="text-text-tertiary">—</span>
+                          )}
+                        </td>
+                      </>
+                    )}
                   </tr>
                 );
               })}
               {enrichedTrades.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-text-tertiary">
+                  <td colSpan={appSettings?.simulateBrokerage ? 9 : 7} className="py-12 text-center text-text-tertiary">
                     No trades yet.
                   </td>
                 </tr>

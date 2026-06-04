@@ -71,6 +71,13 @@ export interface PaperTrade {
   strategyId?: string;
   strategyName?: string;
   reason?: string;
+  product?: string;
+  charges?: number;
+  brokerage?: number;
+  stt?: number;
+  gst?: number;
+  netPnl?: number;
+  grossAmount?: number;
 }
 
 const INITIAL_BALANCE = 1000000;
@@ -196,6 +203,10 @@ export interface AppSettings {
   notifyRiskExits: boolean;
   notifySignals: boolean;
   notifyPnl: boolean;
+  /** Minutes before same symbol can be bought after a sell (default 4h). */
+  rebuyCooldownMinutes: number;
+  /** Max complete buy→sell cycles per symbol per day. */
+  maxRoundTripsPerSymbolPerDay: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -220,6 +231,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifyRiskExits: true,
   notifySignals: false,
   notifyPnl: false,
+  rebuyCooldownMinutes: 240,
+  maxRoundTripsPerSymbolPerDay: 1,
 };
 
 export async function getSettings(): Promise<AppSettings> {

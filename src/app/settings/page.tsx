@@ -74,6 +74,8 @@ interface AppSettings {
     autoTakeProfit: boolean;
     maxPositions: number;
     squareOffTime: string;
+    rebuyCooldownMinutes: number;
+    maxRoundTripsPerSymbolPerDay: number;
   };
 }
 
@@ -106,6 +108,8 @@ const defaultSettings: AppSettings = {
     autoTakeProfit: true,
     maxPositions: 5,
     squareOffTime: "15:15",
+    rebuyCooldownMinutes: 240,
+    maxRoundTripsPerSymbolPerDay: 1,
   },
 };
 
@@ -148,6 +152,8 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       autoTakeProfit: fs.autoTakeProfit ?? true,
       maxPositions: fs.maxPositions,
       squareOffTime: fs.squareOffTime,
+      rebuyCooldownMinutes: fs.rebuyCooldownMinutes ?? 240,
+      maxRoundTripsPerSymbolPerDay: fs.maxRoundTripsPerSymbolPerDay ?? 1,
     },
   };
 }
@@ -169,6 +175,8 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     autoTakeProfit: s.riskManagement.autoTakeProfit,
     maxPositions: s.riskManagement.maxPositions,
     squareOffTime: s.riskManagement.squareOffTime,
+    rebuyCooldownMinutes: s.riskManagement.rebuyCooldownMinutes,
+    maxRoundTripsPerSymbolPerDay: s.riskManagement.maxRoundTripsPerSymbolPerDay,
     notifyOrders: s.notifications.orderExecution,
     notifyEmailDigest: s.notifications.emailDigest,
     notifySkipped: s.notifications.skippedOrders,
@@ -1166,6 +1174,51 @@ function SettingsContent() {
                 className="w-full rounded-lg border border-border bg-bg-primary pl-9 pr-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Rebuy Cooldown (minutes)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="15"
+              value={settings.riskManagement.rebuyCooldownMinutes}
+              onChange={(e) =>
+                updateSettings("riskManagement", {
+                  rebuyCooldownMinutes: Math.max(0, Number(e.target.value) || 0),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-xs text-text-tertiary mt-1">
+              After a sell, same symbol cannot be bought again for this long (default 240 = 4h).
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Max Round-Trips / Symbol / Day
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="10"
+              value={settings.riskManagement.maxRoundTripsPerSymbolPerDay}
+              onChange={(e) =>
+                updateSettings("riskManagement", {
+                  maxRoundTripsPerSymbolPerDay: Math.max(
+                    1,
+                    Number(e.target.value) || 1
+                  ),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-xs text-text-tertiary mt-1">
+              Limits buy→sell cycles per symbol per day (stops SAIL-style whipsaw).
+            </p>
           </div>
         </div>
       </section>

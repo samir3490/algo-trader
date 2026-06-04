@@ -6,10 +6,18 @@ import {
   type AppSettings,
   type PaperTradingState,
 } from "@/lib/firebase";
-import { applyPaperRiskExits } from "@/lib/risk/paper-risk-guard";
+import {
+  applyPaperRiskExits,
+  canPlacePaperBuy,
+} from "@/lib/risk/paper-risk-guard";
 import { applyPaperSignal } from "@/lib/strategies/execute-paper";
 import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
 import { consolidateSignalsForExecution } from "@/lib/strategies/consolidate-signals";
+import {
+  canExecuteStrategyTrade,
+  type PortfolioGateContext,
+} from "@/lib/strategies/portfolio-gate";
+import { tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
 import { inferStrategyType } from "@/lib/strategies/definitions";
 import {
   sendOrderEmail,
@@ -41,16 +49,31 @@ function todayKeyIST(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
-/** One paper trade per symbol + side per 15-minute window (intraday cron). */
-function executionDedupeKey(
-  symbol: string,
-  action: string,
-  now = new Date()
-): string {
+function symKey(symbol: string, exchange: string): string {
+  return `${symbol.trim().toUpperCase()}:${(exchange || "NSE").trim().toUpperCase()}`;
+}
+
+/** One paper action per symbol per 15-minute window (blocks BUY+SELL whipsaw). */
+function executionDedupeKey(symbol: string, now = new Date()): string {
   const date = todayKeyIST();
   const ist = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
   const slot = Math.floor((ist.getHours() * 60 + ist.getMinutes()) / 15);
-  return `${symbol.toUpperCase()}:${action}:${date}:${slot}`;
+  return `${symbol.toUpperCase()}:${date}:${slot}`;
+}
+
+function todayRealizedLoss(trades: PaperTradingState["trades"]): number {
+  const today = todayKeyIST();
+  let loss = 0;
+  for (const t of trades ?? []) {
+    if (t.side !== "SELL" || t.netPnl == null || t.netPnl >= 0) continue;
+    const d =
+      t.date ??
+      new Date(tradeExecutedAtMs(t)).toLocaleDateString("en-CA", {
+        timeZone: "Asia/Kolkata",
+      });
+    if (d === today) loss += Math.abs(t.netPnl);
+  }
+  return loss;
 }
 
 function pruneDedupeKeys(keys: string[]): string[] {
@@ -163,9 +186,16 @@ async function loadUserSettings(
 async function loadRunnerMeta(db: Firestore, userId: string) {
   const snap = await db.doc(`users/${userId}/data/strategyRunner`).get();
   const data = snap.data();
+  const raw = (data?.symbolCooldownUntil as Record<string, number>) ?? {};
+  const now = Date.now();
+  const symbolCooldownUntil: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (typeof v === "number" && v > now) symbolCooldownUntil[k] = v;
+  }
   return {
     dedupeKeys: pruneDedupeKeys((data?.dedupeKeys as string[]) ?? []),
     emailDedupeKeys: pruneDedupeKeys((data?.emailDedupeKeys as string[]) ?? []),
+    symbolCooldownUntil,
     lastRunAt: (data?.lastRunAt as string) ?? null,
   };
 }
@@ -191,10 +221,15 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
 
   const { scanned, signals: rawSignals } = await scanStrategiesForSignals(payload);
   const userSettings = await loadUserSettings(db, userId);
-  const { dedupeKeys: existingKeys, emailDedupeKeys: existingEmailKeys } =
-    await loadRunnerMeta(db, userId);
+  const {
+    dedupeKeys: existingKeys,
+    emailDedupeKeys: existingEmailKeys,
+    symbolCooldownUntil: persistedCooldown,
+  } = await loadRunnerMeta(db, userId);
   const dedupe = new Set(existingKeys);
   const emailDedupe = new Set(existingEmailKeys);
+  const symbolCooldownUntil: Record<string, number> = { ...persistedCooldown };
+  const soldThisRun = new Set<string>();
   const digestLines: ScanDigestLine[] = [];
   const digestMode = useScanDigestEmail(userSettings);
 
@@ -232,7 +267,12 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
   if (riskResult.exits.length > 0) {
     paperState = riskResult.state;
     await persistPaperState(db, userId, paperState, recentOrders);
+    const cooldownMs = (userSettings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
     for (const exit of riskResult.exits) {
+      const key = symKey(exit.symbol, exit.exchange);
+      soldThisRun.add(key);
+      symbolCooldownUntil[key] = Date.now() + cooldownMs;
+      dedupe.add(executionDedupeKey(exit.symbol));
       queueEmail(
         "risk_exit",
         {
@@ -266,16 +306,102 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
 
   let tradesExecuted = 0;
   const signalStrategyIds = new Set<string>();
+  const gateCtx: PortfolioGateContext = {
+    holdings: paperState.holdings ?? [],
+    trades: paperState.trades ?? [],
+    settings: userSettings,
+    soldThisRun,
+    symbolCooldownUntil,
+  };
 
   for (const sig of signals) {
     signalStrategyIds.add(sig.strategyId);
-    const key = executionDedupeKey(sig.symbol, sig.action);
+    const key = executionDedupeKey(sig.symbol);
     if (dedupe.has(key)) continue;
 
     const strat = running.find((s) => s.id === sig.strategyId);
     if (!strat) continue;
 
+    const exchange = strat.exchange || "NSE";
+
     if (strat.mode === "paper" && (sig.action === "BUY" || sig.action === "SELL")) {
+      const gate = canExecuteStrategyTrade(
+        sig.action as "BUY" | "SELL",
+        sig.symbol,
+        exchange,
+        gateCtx
+      );
+      if (!gate.allowed) {
+        const qty =
+          strat.params?.quantity ?? userSettings.defaultQuantity ?? 1;
+        queueEmail(
+          "skipped",
+          {
+            symbol: sig.symbol,
+            exchange,
+            side: sig.action as "BUY" | "SELL",
+            quantity: qty,
+            price: sig.price,
+            status: `SKIPPED — ${gate.reason}`,
+            strategyName: strat.name,
+          },
+          {
+            mode: "PAPER",
+            symbol: sig.symbol,
+            exchange,
+            side: sig.action as "BUY" | "SELL",
+            quantity: qty,
+            price: sig.price,
+            orderType: "MARKET",
+            product: userSettings.paperDefaultProduct,
+            status: `SKIPPED — ${gate.reason}`,
+            strategyName: strat.name,
+          }
+        );
+        dedupe.add(key);
+        continue;
+      }
+
+      if (sig.action === "BUY") {
+        const qty =
+          strat.params?.quantity ?? userSettings.defaultQuantity ?? 1;
+        const orderValue = qty * sig.price;
+        const buyCheck = canPlacePaperBuy({
+          balance: paperState.balance ?? INITIAL_BALANCE,
+          orderValue,
+          holdingsCount: (paperState.holdings ?? []).length,
+          settings: userSettings,
+          todayRealizedLoss: todayRealizedLoss(paperState.trades),
+        });
+        if (!buyCheck.allowed) {
+          queueEmail(
+            "skipped",
+            {
+              symbol: sig.symbol,
+              exchange,
+              side: "BUY",
+              quantity: qty,
+              price: sig.price,
+              status: `SKIPPED — ${buyCheck.message}`,
+              strategyName: strat.name,
+            },
+            {
+              mode: "PAPER",
+              symbol: sig.symbol,
+              exchange,
+              side: "BUY",
+              quantity: qty,
+              price: sig.price,
+              orderType: "MARKET",
+              product: userSettings.paperDefaultProduct,
+              status: `SKIPPED — ${buyCheck.message}`,
+              strategyName: strat.name,
+            }
+          );
+          dedupe.add(key);
+          continue;
+        }
+      }
       const signal: StrategySignal = {
         symbol: sig.symbol,
         action: sig.action as "BUY" | "SELL",
@@ -289,17 +415,20 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       const { state, executed, message, executedQty } = applyPaperSignal(
         paperState,
         signal,
-        strat.exchange || "NSE",
+        exchange,
         {
           strategyId: strat.id,
           strategyName: strat.name,
           reason: sig.reason,
+        },
+        {
+          simulateBrokerage: userSettings.simulateBrokerage,
+          product: userSettings.paperDefaultProduct,
         }
       );
 
       const qty =
         strat.params?.quantity ?? userSettings.defaultQuantity ?? 1;
-      const exchange = strat.exchange || "NSE";
 
       if (executed) {
         const saved = await persistPaperState(db, userId, state, recentOrders);
@@ -309,10 +438,19 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         }
 
         paperState = state;
+        gateCtx.holdings = paperState.holdings ?? [];
+        gateCtx.trades = paperState.trades ?? [];
         dedupe.add(key);
         tradesExecuted += 1;
 
         const tradeQty = executedQty ?? qty;
+        const sk = symKey(sig.symbol, exchange);
+        if (sig.action === "SELL") {
+          soldThisRun.add(sk);
+          const cooldownMs =
+            (userSettings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
+          symbolCooldownUntil[sk] = Date.now() + cooldownMs;
+        }
 
         queueEmail(
           "executed",
@@ -453,6 +591,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     {
       dedupeKeys: [...dedupe],
       emailDedupeKeys: [...emailDedupe],
+      symbolCooldownUntil,
       lastRunAt: now,
       updatedAt: FieldValue.serverTimestamp(),
     },

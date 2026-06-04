@@ -60,14 +60,18 @@ export function consolidateSignalsForExecution(
     let chosen: ScanSignal | null = null;
 
     if (buys.length > 0 && sells.length > 0) {
-      // Conflicting signals from different strategies — pick one sensible action
-      chosen = hasPosition ? pickStrongest(sells) : pickStrongest(buys);
+      // Majority vote across strategies — if tied, do nothing (avoid whipsaw)
+      if (hasPosition && sells.length > buys.length) {
+        chosen = pickStrongest(sells);
+      } else if (!hasPosition && buys.length > sells.length) {
+        chosen = pickStrongest(buys);
+      }
     } else if (sells.length > 0 && hasPosition) {
       chosen = pickStrongest(sells);
     } else if (buys.length > 0 && !hasPosition) {
       chosen = pickStrongest(buys);
     }
-    // Skip: SELL with no position, BUY when already holding (no add-to-position auto-trade)
+    // Skip: SELL with no position, BUY when already holding, tied BUY/SELL counts
 
     if (chosen) result.push(chosen);
   }

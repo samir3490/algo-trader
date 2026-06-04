@@ -1,5 +1,10 @@
 import type { AppSettings, PaperHolding, PaperTrade, PaperTradingState } from "@/lib/firebase";
 import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
+import {
+  cashFlowForTrade,
+  computeZerodhaCharges,
+  type ZerodhaProduct,
+} from "@/lib/brokerage/zerodha-charges";
 
 export type RiskExitReason = "stop_loss" | "take_profit" | "mis_square_off";
 
@@ -141,11 +146,16 @@ export function canPlacePaperBuy(params: {
   return { allowed: true };
 }
 
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
 /** Execute full exit for one holding; returns updated paper state. */
 export function paperSellHolding(
   state: PaperTradingState,
   holding: PaperHolding,
-  meta: { reason: string; product?: string }
+  meta: { reason: string; product?: string },
+  options?: { simulateBrokerage?: boolean; product?: ZerodhaProduct }
 ): { state: PaperTradingState; trade: PaperTrade } | null {
   if (!holding.qty || holding.qty <= 0) return null;
 
@@ -153,7 +163,18 @@ export function paperSellHolding(
   const sym = holding.symbol.trim().toUpperCase();
   const ex = (holding.exchange || "NSE").trim().toUpperCase();
   const sellQty = holding.qty;
-  const sellTotal = sellQty * price;
+  const sellTurnover = sellQty * price;
+  const product = (options?.product ?? meta.product ?? "CNC") as ZerodhaProduct;
+  const simulate = options?.simulateBrokerage === true;
+
+  const charges = simulate
+    ? computeZerodhaCharges({ side: "SELL", qty: sellQty, price, product })
+    : null;
+  const cashIn = simulate
+    ? -cashFlowForTrade("SELL", sellTurnover, charges!)
+    : sellTurnover;
+  const costBasis = holding.avgPrice * sellQty;
+  const netPnl = round2(cashIn - costBasis);
 
   const now = new Date();
   const executedAt = now.toISOString();
@@ -181,9 +202,20 @@ export function paperSellHolding(
     date: dateStr,
     strategyName: "Risk guard",
     reason: meta.reason,
+    product,
+    grossAmount: sellTurnover,
+    netPnl,
+    ...(charges
+      ? {
+          charges: charges.total,
+          brokerage: charges.brokerage,
+          stt: charges.stt,
+          gst: charges.gst,
+        }
+      : {}),
   };
 
-  const balance = (state.balance ?? 0) + sellTotal;
+  const balance = round2((state.balance ?? 0) + cashIn);
   const holdings = (state.holdings ?? []).filter(
     (h) =>
       !(
@@ -223,10 +255,18 @@ export function applyPaperRiskExits(
     );
     if (!holding) continue;
 
-    const result = paperSellHolding(current, holding, {
-      reason: signal.message,
-      product: settings.paperDefaultProduct,
-    });
+    const result = paperSellHolding(
+      current,
+      holding,
+      {
+        reason: signal.message,
+        product: settings.paperDefaultProduct,
+      },
+      {
+        simulateBrokerage: settings.simulateBrokerage,
+        product: settings.paperDefaultProduct,
+      }
+    );
     if (result) {
       current = result.state;
       exits.push({
