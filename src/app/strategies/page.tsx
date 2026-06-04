@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   TrendingUp,
   Plus,
@@ -16,6 +17,8 @@ import {
   Signal,
   Hash,
   Loader2,
+  BarChart3,
+  ScrollText,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -36,6 +39,10 @@ import {
 } from "@/lib/strategies/definitions";
 import BacktestPanel from "@/components/backtest-panel";
 import AuditLogsPanel from "@/components/audit-logs-panel";
+import StrategiesSectionNav, {
+  strategiesSectionFromParam,
+  type StrategiesSection,
+} from "@/components/strategies/strategies-section-nav";
 
 interface ActiveStrategy {
   id: string;
@@ -121,14 +128,183 @@ function persistStrategies(strategies: ActiveStrategy[]) {
   saveFirestoreStrategies(localToFirestore(strategies));
 }
 
+function ActiveStrategiesTable({
+  activeStrategies,
+  onToggleStatus,
+  onStop,
+}: {
+  activeStrategies: ActiveStrategy[];
+  onToggleStatus: (id: string) => void;
+  onStop: (id: string) => void;
+}) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-border text-xs uppercase tracking-wider text-text-tertiary">
+            <th className="px-6 py-3 font-medium">Strategy</th>
+            <th className="px-6 py-3 font-medium">Symbol</th>
+            <th className="px-6 py-3 font-medium">Mode</th>
+            <th className="px-6 py-3 font-medium">Status</th>
+            <th className="px-6 py-3 font-medium">Timeframe</th>
+            <th className="px-6 py-3 font-medium">Signals</th>
+            <th className="px-6 py-3 font-medium">P&amp;L</th>
+            <th className="px-6 py-3 font-medium text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {activeStrategies.map((s) => {
+            const def = getStrategyDef(s.type);
+            const Icon = def.icon;
+            return (
+              <tr
+                key={s.id}
+                className="transition-colors hover:bg-bg-tertiary/40"
+              >
+                <td className="whitespace-nowrap px-6 py-4">
+                  <div className="flex items-center gap-2.5">
+                    <Icon className="h-4 w-4 text-accent" />
+                    <span className="font-medium text-text-primary">
+                      {def.name}
+                    </span>
+                  </div>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 font-mono text-sm text-text-secondary">
+                  {s.symbol}
+                </td>
+                <td className="whitespace-nowrap px-6 py-4">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
+                      s.mode === "paper"
+                        ? "bg-amber-500/10 text-amber-400"
+                        : "bg-red-500/10 text-red-400"
+                    )}
+                  >
+                    {s.mode === "paper" ? (
+                      <Shield className="h-3 w-3" />
+                    ) : (
+                      <Zap className="h-3 w-3" />
+                    )}
+                    {s.mode === "paper" ? "Paper" : "Live"}
+                  </span>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 text-xs font-medium",
+                      s.status === "running"
+                        ? "text-emerald-400"
+                        : s.status === "paused"
+                          ? "text-yellow-400"
+                          : "text-red-400"
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "h-1.5 w-1.5 rounded-full",
+                        s.status === "running"
+                          ? "bg-emerald-400"
+                          : s.status === "paused"
+                            ? "bg-yellow-400"
+                            : "bg-red-400"
+                      )}
+                    />
+                    {s.status === "running"
+                      ? "Running"
+                      : s.status === "paused"
+                        ? "Paused"
+                        : "Stopped"}
+                  </span>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 text-text-secondary text-xs">
+                  {s.timeframe}
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 text-text-secondary">
+                  {s.signals}
+                </td>
+                <td className="whitespace-nowrap px-6 py-4">
+                  <span
+                    className={cn(
+                      "font-medium",
+                      s.pnl >= 0 ? "text-emerald-400" : "text-red-400"
+                    )}
+                  >
+                    {formatCurrency(s.pnl)}
+                  </span>
+                </td>
+                <td className="whitespace-nowrap px-6 py-4 text-right">
+                  <div className="flex items-center justify-end gap-1.5">
+                    <button
+                      onClick={() => onToggleStatus(s.id)}
+                      className={cn(
+                        "rounded-lg p-1.5 transition-colors",
+                        s.status === "running"
+                          ? "text-yellow-400 hover:bg-yellow-400/10"
+                          : "text-emerald-400 hover:bg-emerald-400/10"
+                      )}
+                      title={
+                        s.status === "running"
+                          ? "Pause strategy"
+                          : "Resume strategy"
+                      }
+                    >
+                      {s.status === "running" ? (
+                        <Pause className="h-4 w-4" />
+                      ) : (
+                        <Play className="h-4 w-4" />
+                      )}
+                    </button>
+                    <button
+                      onClick={() => onStop(s.id)}
+                      className="rounded-lg p-1.5 text-red-400 transition-colors hover:bg-red-400/10"
+                      title="Stop strategy"
+                    >
+                      <Square className="h-4 w-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────
 
-export default function StrategiesPage() {
+function StrategiesPageContent() {
   const { user } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const hydratingRef = useRef(true);
+  const [pageSection, setPageSection] = useState<StrategiesSection>("configure");
   const [categoryFilter, setCategoryFilter] = useState<"all" | "basic" | "advanced">("all");
   const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([]);
+
+  const setSection = useCallback(
+    (section: StrategiesSection) => {
+      setPageSection(section);
+      const params = new URLSearchParams(searchParams.toString());
+      if (section === "configure") {
+        params.delete("tab");
+      } else {
+        params.set("tab", section);
+      }
+      const q = params.toString();
+      router.replace(q ? `/strategies?${q}` : "/strategies", { scroll: false });
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    },
+    [router, searchParams]
+  );
+
+  useEffect(() => {
+    const tab = strategiesSectionFromParam(searchParams.get("tab"));
+    if (tab) setPageSection(tab);
+  }, [searchParams]);
 
   const [cardState, setCardState] = useState<
     Record<
@@ -423,6 +599,32 @@ export default function StrategiesPage() {
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
+            onClick={() => setSection("backtest")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors",
+              pageSection === "backtest"
+                ? "border-accent bg-accent-muted text-brand"
+                : "border-border bg-bg-secondary text-text-secondary hover:border-accent/40"
+            )}
+          >
+            <BarChart3 className="h-4 w-4" />
+            Backtest
+          </button>
+          <button
+            type="button"
+            onClick={() => setSection("audit")}
+            className={cn(
+              "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors",
+              pageSection === "audit"
+                ? "border-accent bg-accent-muted text-brand"
+                : "border-border bg-bg-secondary text-text-secondary hover:border-accent/40"
+            )}
+          >
+            <ScrollText className="h-4 w-4" />
+            Audit logs
+          </button>
+          <button
+            type="button"
             onClick={handleRunScanNow}
             disabled={isScanning || runningCount === 0}
             className="inline-flex items-center gap-2 rounded-xl border border-emerald-600/50 bg-emerald-600/10 px-4 py-2.5 text-sm font-medium text-emerald-400 transition-colors hover:bg-emerald-600/20 disabled:opacity-50"
@@ -444,6 +646,61 @@ export default function StrategiesPage() {
         </div>
       </div>
 
+      <StrategiesSectionNav
+        active={pageSection}
+        onChange={setSection}
+        activeCount={activeStrategies.length}
+        runningCount={runningCount}
+      />
+
+      {pageSection === "backtest" && (
+        <div className="space-y-4">
+          <BacktestPanel />
+        </div>
+      )}
+
+      {pageSection === "audit" && (
+        <div className="space-y-4">
+          <AuditLogsPanel tall />
+        </div>
+      )}
+
+      {pageSection === "active" && (
+        <div className="space-y-4">
+          {/* Active Strategies Table — dedicated tab */}
+          <div className="rounded-xl border border-border bg-bg-secondary">
+            <div className="flex items-center justify-between border-b border-border px-6 py-4">
+              <h2 className="text-lg font-semibold text-text-primary">Active Strategies</h2>
+              <span className="rounded-full bg-accent-muted px-3 py-1 text-xs font-medium text-accent">
+                {runningCount} running
+              </span>
+            </div>
+
+            {activeStrategies.length === 0 ? (
+              <div className="px-6 py-12 text-center text-sm text-text-tertiary">
+                No active strategies. Switch to{" "}
+                <button
+                  type="button"
+                  onClick={() => setSection("configure")}
+                  className="text-accent font-medium hover:underline"
+                >
+                  Configure
+                </button>{" "}
+                to activate one.
+              </div>
+            ) : (
+              <ActiveStrategiesTable
+                activeStrategies={activeStrategies}
+                onToggleStatus={toggleStrategyStatus}
+                onStop={stopStrategy}
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {pageSection === "configure" && (
+        <>
       {/* ── How Strategies Work ────────────────────────────────────────── */}
       <div className="rounded-xl border border-accent/30 bg-accent-muted p-5">
         <div className="flex items-start gap-3">
@@ -759,150 +1016,43 @@ export default function StrategiesPage() {
         })}
       </div>
 
-      {/* Active Strategies Table */}
-      <div className="rounded-xl border border-border bg-bg-secondary">
-        <div className="flex items-center justify-between border-b border-border px-6 py-4">
-          <h2 className="text-lg font-semibold text-text-primary">Active Strategies</h2>
-          <span className="rounded-full bg-accent-muted px-3 py-1 text-xs font-medium text-accent">
-            {runningCount} running
-          </span>
+      {/* Active strategies — quick link (full table on Active tab) */}
+      <div className="rounded-xl border border-border bg-bg-secondary px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">Active strategies</h2>
+          <p className="text-sm text-text-secondary mt-0.5">
+            {activeStrategies.length === 0
+              ? "None activated yet"
+              : `${runningCount} running · ${activeStrategies.length} total`}
+          </p>
         </div>
-
-        {activeStrategies.length === 0 ? (
-          <div className="px-6 py-12 text-center text-sm text-text-tertiary">
-            No active strategies. Activate a strategy above or create a new one.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs uppercase tracking-wider text-text-tertiary">
-                  <th className="px-6 py-3 font-medium">Strategy</th>
-                  <th className="px-6 py-3 font-medium">Symbol</th>
-                  <th className="px-6 py-3 font-medium">Mode</th>
-                  <th className="px-6 py-3 font-medium">Status</th>
-                  <th className="px-6 py-3 font-medium">Timeframe</th>
-                  <th className="px-6 py-3 font-medium">Signals</th>
-                  <th className="px-6 py-3 font-medium">P&amp;L</th>
-                  <th className="px-6 py-3 font-medium text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {activeStrategies.map((s) => {
-                  const def = getStrategyDef(s.type);
-                  const Icon = def.icon;
-                  return (
-                    <tr
-                      key={s.id}
-                      className="transition-colors hover:bg-bg-tertiary/40"
-                    >
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <div className="flex items-center gap-2.5">
-                          <Icon className="h-4 w-4 text-accent" />
-                          <span className="font-medium text-text-primary">
-                            {def.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 font-mono text-sm text-text-secondary">
-                        {s.symbol}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium",
-                            s.mode === "paper"
-                              ? "bg-amber-500/10 text-amber-400"
-                              : "bg-red-500/10 text-red-400"
-                          )}
-                        >
-                          {s.mode === "paper" ? (
-                            <Shield className="h-3 w-3" />
-                          ) : (
-                            <Zap className="h-3 w-3" />
-                          )}
-                          {s.mode === "paper" ? "Paper" : "Live"}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-1.5 text-xs font-medium",
-                            s.status === "running"
-                              ? "text-emerald-400"
-                              : s.status === "paused"
-                                ? "text-yellow-400"
-                                : "text-red-400"
-                          )}
-                        >
-                          <span
-                            className={cn(
-                              "h-1.5 w-1.5 rounded-full",
-                              s.status === "running"
-                                ? "bg-emerald-400"
-                                : s.status === "paused"
-                                  ? "bg-yellow-400"
-                                  : "bg-red-400"
-                            )}
-                          />
-                          {s.status === "running" ? "Running" : s.status === "paused" ? "Paused" : "Stopped"}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-text-secondary text-xs">
-                        {s.timeframe}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-text-secondary">
-                        {s.signals}
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4">
-                        <span
-                          className={cn(
-                            "font-medium",
-                            s.pnl >= 0 ? "text-emerald-400" : "text-red-400"
-                          )}
-                        >
-                          {formatCurrency(s.pnl)}
-                        </span>
-                      </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <button
-                            onClick={() => toggleStrategyStatus(s.id)}
-                            className={cn(
-                              "rounded-lg p-1.5 transition-colors",
-                              s.status === "running"
-                                ? "text-yellow-400 hover:bg-yellow-400/10"
-                                : "text-emerald-400 hover:bg-emerald-400/10"
-                            )}
-                            title={
-                              s.status === "running"
-                                ? "Pause strategy"
-                                : "Resume strategy"
-                            }
-                          >
-                            {s.status === "running" ? (
-                              <Pause className="h-4 w-4" />
-                            ) : (
-                              <Play className="h-4 w-4" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => stopStrategy(s.id)}
-                            className="rounded-lg p-1.5 text-red-400 transition-colors hover:bg-red-400/10"
-                            title="Stop strategy"
-                          >
-                            <Square className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setSection("active")}
+            className="text-sm font-medium text-accent hover:underline"
+          >
+            View full list →
+          </button>
+          <button
+            type="button"
+            onClick={() => setSection("backtest")}
+            className="text-sm font-medium text-text-secondary hover:text-accent"
+          >
+            Backtest
+          </button>
+          <button
+            type="button"
+            onClick={() => setSection("audit")}
+            className="text-sm font-medium text-text-secondary hover:text-accent"
+          >
+            Audit logs
+          </button>
+        </div>
       </div>
+
+        </>
+      )}
 
       {/* Create Strategy Modal */}
       {modalOpen && (
@@ -1084,8 +1234,21 @@ export default function StrategiesPage() {
         </div>
       )}
 
-      <BacktestPanel />
-      <AuditLogsPanel />
     </div>
+  );
+}
+
+export default function StrategiesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex flex-col items-center justify-center gap-3 text-text-secondary">
+          <Loader2 className="h-8 w-8 animate-spin text-accent" />
+          <p className="text-sm">Loading strategies…</p>
+        </div>
+      }
+    >
+      <StrategiesPageContent />
+    </Suspense>
   );
 }

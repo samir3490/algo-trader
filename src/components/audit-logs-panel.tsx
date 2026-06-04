@@ -12,7 +12,7 @@ interface LogRow {
   message: string;
 }
 
-export default function AuditLogsPanel() {
+export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
   const [logs, setLogs] = useState<LogRow[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -61,7 +61,12 @@ export default function AuditLogsPanel() {
         </button>
       </div>
 
-      <div className="overflow-x-auto max-h-64 overflow-y-auto">
+      <div
+        className={cn(
+          "overflow-x-auto overflow-y-auto",
+          tall ? "max-h-[min(70vh,560px)]" : "max-h-64"
+        )}
+      >
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border text-text-tertiary text-left">
