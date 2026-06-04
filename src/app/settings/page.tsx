@@ -474,7 +474,7 @@ function SettingsContent() {
           type="button"
           onClick={() => void handleSave()}
           disabled={saving}
-          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-brand transition-colors hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <Save className={cn("h-4 w-4", saving && "animate-pulse")} />
           {saving ? "Saving…" : "Save Settings"}
@@ -500,7 +500,7 @@ function SettingsContent() {
           {availableApps.length <= 1 ? (
             <a
               href="/api/zerodha/login"
-              className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
+              className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-brand transition-colors hover:bg-accent-hover cursor-pointer"
             >
               <Plus className="h-4 w-4" />
               Add Account
@@ -511,7 +511,7 @@ function SettingsContent() {
                 <a
                   key={app.index}
                   href={`/api/zerodha/login?credIndex=${app.index}`}
-                  className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
+                  className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-brand transition-colors hover:bg-accent-hover cursor-pointer"
                   title={`API Key: ${app.apiKeyPrefix}`}
                 >
                   <Plus className="h-3.5 w-3.5" />
@@ -569,7 +569,7 @@ function SettingsContent() {
             {availableApps.length <= 1 ? (
               <a
                 href="/api/zerodha/login"
-                className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
+                className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-brand transition-colors hover:bg-accent-hover cursor-pointer"
               >
                 <Plus className="h-4 w-4" />
                 Connect Zerodha Account
@@ -580,7 +580,7 @@ function SettingsContent() {
                   <a
                     key={app.index}
                     href={`/api/zerodha/login?credIndex=${app.index}`}
-                    className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover cursor-pointer"
+                    className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-brand transition-colors hover:bg-accent-hover cursor-pointer"
                   >
                     <Plus className="h-4 w-4" />
                     {app.label}
@@ -737,7 +737,7 @@ function SettingsContent() {
                   ) : (
                     <button
                       onClick={() => handleReconnect(account.kiteUserId)}
-                      className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-accent-hover"
+                      className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-brand transition-colors hover:bg-accent-hover"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
                       Reconnect

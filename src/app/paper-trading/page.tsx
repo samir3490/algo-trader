@@ -53,6 +53,7 @@ import {
 } from "@/lib/paper-trades/normalize";
 import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
+import { computePortfolio } from "@/lib/portfolio/compute-portfolio";
 
 type OrderSide = "BUY" | "SELL";
 type OrderType = "MARKET" | "LIMIT";
@@ -156,14 +157,6 @@ const POPULAR_STOCKS = [
   "SUNPHARMA", "WIPRO", "HCLTECH", "TATAMOTORS", "TATASTEEL",
   "POWERGRID", "NTPC", "ONGC", "ADANIENT", "TECHM",
 ];
-
-function computePortfolio(holdings: Holding[], balance: number) {
-  const invested = holdings.reduce((sum, h) => sum + h.qty * h.avgPrice, 0);
-  const currentValue = holdings.reduce((sum, h) => sum + h.qty * h.ltp, 0);
-  const pnl = currentValue - invested;
-  const pnlPercent = invested > 0 ? (pnl / invested) * 100 : 0;
-  return { balance, invested, currentValue, pnl, pnlPercent };
-}
 
 export default function PaperTradingPage() {
   const { user } = useAuth();
@@ -824,7 +817,7 @@ export default function PaperTradingPage() {
       label: "Invested",
       value: formatCurrency(portfolio.invested),
       icon: IndianRupee,
-      color: "text-yellow-400",
+      color: "text-text-primary",
     },
     {
       label: "Current Value",
@@ -1369,7 +1362,8 @@ export default function PaperTradingPage() {
               </thead>
               <tbody>
                 {holdings.map((h) => {
-                  const currentVal = h.qty * h.ltp;
+                  const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
+                  const currentVal = h.qty * mark;
                   const investedVal = h.qty * h.avgPrice;
                   const pnl = currentVal - investedVal;
                   const pnlPct = investedVal > 0 ? (pnl / investedVal) * 100 : 0;

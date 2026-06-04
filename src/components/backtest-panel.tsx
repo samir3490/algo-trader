@@ -118,7 +118,7 @@ export default function BacktestPanel() {
         type="button"
         onClick={() => void runBacktest()}
         disabled={loading}
-        className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-white disabled:opacity-60"
+        className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-brand disabled:opacity-60 hover:bg-accent-hover"
       >
         {loading ? (
           <Loader2 className="h-4 w-4 animate-spin" />

@@ -3,7 +3,8 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
-import { TrendingUp, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import BrandLogo from "@/components/brand/brand-logo";
 
 export default function LoginPage() {
   const { user, loading, signInWithGoogle } = useAuth();
@@ -17,38 +18,46 @@ export default function LoginPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#0d1117] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-gray-400" />
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-accent" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0d1117] flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 mb-4">
-            <TrendingUp className="w-8 h-8 text-white" />
+    <div className="min-h-screen bg-bg-primary flex items-center justify-center p-4">
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-24 -right-24 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+        <div className="absolute -bottom-32 -left-24 h-80 w-80 rounded-full bg-accent/5 blur-3xl" />
+      </div>
+
+      <div className="w-full max-w-md relative">
+        <div className="text-center mb-8 flex flex-col items-center gap-4">
+          <BrandLogo variant="login" showProduct={false} className="justify-center" />
+          <div>
+            <h1 className="text-3xl font-bold text-text-primary mb-1">AlgoTrader</h1>
+            <p className="text-sm uppercase tracking-[0.25em] text-text-tertiary">
+              Indian market algo trading
+            </p>
+            <p className="text-xs text-text-secondary mt-2">
+              Powered by Agrasen Technologies
+            </p>
           </div>
-          <h1 className="text-3xl font-bold text-white mb-2">AlgoTrader</h1>
-          <p className="text-gray-400">
-            Indian Market Algo Trading Platform
-          </p>
         </div>
 
-        <div className="bg-[#161b22] border border-gray-800 rounded-xl p-8">
-          <h2 className="text-xl font-semibold text-white text-center mb-2">
+        <div className="card glow-accent">
+          <h2 className="text-xl font-semibold text-text-primary text-center mb-2">
             Welcome back
           </h2>
-          <p className="text-gray-400 text-center text-sm mb-8">
+          <p className="text-text-secondary text-center text-sm mb-8">
             Sign in to access your trading dashboard
           </p>
 
           <button
             onClick={signInWithGoogle}
             className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg
-                       bg-white hover:bg-gray-100 text-gray-800 font-medium text-sm
-                       transition-all duration-200 shadow-lg cursor-pointer"
+                       bg-white hover:bg-gray-100 text-brand font-medium text-sm
+                       transition-all duration-200 shadow-lg cursor-pointer ring-1 ring-border/40"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path
@@ -71,26 +80,26 @@ export default function LoginPage() {
             Sign in with Google
           </button>
 
-          <div className="mt-6 pt-6 border-t border-gray-700">
+          <div className="mt-6 pt-6 border-t border-border">
             <div className="grid grid-cols-3 gap-4 text-center">
               <div>
-                <p className="text-lg font-bold text-white">430+</p>
-                <p className="text-xs text-gray-500">NSE Stocks</p>
+                <p className="text-lg font-bold text-accent">430+</p>
+                <p className="text-xs text-text-tertiary">NSE Stocks</p>
               </div>
               <div>
-                <p className="text-lg font-bold text-white">5</p>
-                <p className="text-xs text-gray-500">Strategies</p>
+                <p className="text-lg font-bold text-accent">5</p>
+                <p className="text-xs text-text-tertiary">Strategies</p>
               </div>
               <div>
-                <p className="text-lg font-bold text-white">Live</p>
-                <p className="text-xs text-gray-500">Zerodha</p>
+                <p className="text-lg font-bold text-accent">Live</p>
+                <p className="text-xs text-text-tertiary">Zerodha</p>
               </div>
             </div>
           </div>
         </div>
 
-        <p className="text-center text-xs text-gray-600 mt-6">
-          Paper trading &middot; Live trading via Zerodha &middot; Real-time data
+        <p className="text-center text-[10px] uppercase tracking-[0.2em] text-text-tertiary mt-6">
+          Agrasen Technologies &middot; IT consulting services
         </p>
       </div>
     </div>

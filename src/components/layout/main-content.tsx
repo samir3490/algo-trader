@@ -1,8 +1,9 @@
 "use client";
 
 import { useAppStore } from "@/lib/store";
-import { Menu, TrendingUp } from "lucide-react";
+import { Menu } from "lucide-react";
 import { cn } from "@/lib/utils";
+import BrandLogo from "@/components/brand/brand-logo";
 
 export default function MainContent({ children }: { children: React.ReactNode }) {
   const sidebarOpen = useAppStore((s) => s.sidebarOpen);
@@ -19,12 +20,7 @@ export default function MainContent({ children }: { children: React.ReactNode })
         >
           <Menu className="h-5 w-5" />
         </button>
-        <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md gradient-accent">
-            <TrendingUp className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-sm font-bold text-text-primary">AlgoTrader</span>
-        </div>
+        <BrandLogo variant="compact" showProduct className="flex-1" />
       </header>
 
       {/* Main Content Area */}

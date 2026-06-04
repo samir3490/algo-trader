@@ -16,9 +16,12 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "AlgoTrader - Indian Market Algo Trading Platform",
+  title: "AlgoTrader | Agrasen Technologies",
   description:
-    "Automated algorithmic trading platform for NSE and BSE with paper trading, strategy backtesting, and live execution via Zerodha Kite.",
+    "AlgoTrader by Agrasen Technologies — automated trading for NSE and BSE with paper trading, strategy backtesting, and Zerodha execution.",
+  icons: {
+    icon: "/brand/agrasen-logo.svg",
+  },
 };
 
 export default function RootLayout({

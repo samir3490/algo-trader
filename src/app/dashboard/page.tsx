@@ -37,6 +37,7 @@ import {
   getWatchlist,
   saveWatchlist,
   getActiveStrategies,
+  getSettings,
   type PaperTradingState,
   type WatchlistItem,
   type ActiveStrategy,
@@ -44,6 +45,14 @@ import {
 } from "@/lib/firebase";
 import { enrichTradesWithStrategy } from "@/lib/strategies/strategy-performance";
 import { formatTradeDateTime, normalizePaperTrades } from "@/lib/paper-trades/normalize";
+import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
+import { loadSettingsFromCache } from "@/lib/settings/cache";
+import {
+  buildPortfolioChart,
+  computeAllTimePnl,
+  computePortfolio,
+  computeTodayPnl,
+} from "@/lib/portfolio/compute-portfolio";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -140,49 +149,6 @@ function loadActiveStrategiesFromCache(): ActiveStrategy[] {
   return [];
 }
 
-function buildPortfolioChart(trades: Trade[], currentBalance: number, holdings: Holding[]) {
-  if (trades.length === 0) return [];
-
-  const invested = holdings.reduce((sum, h) => sum + h.qty * h.avgPrice, 0);
-  const currentValue = holdings.reduce((sum, h) => sum + h.qty * h.ltp, 0);
-  const totalPortfolio = currentBalance + currentValue;
-
-  const tradesByDate = new Map<string, { buys: number; sells: number }>();
-  const sortedTrades = [...trades].reverse();
-
-  for (const t of sortedTrades) {
-    const dateKey = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short" });
-    const entry = tradesByDate.get(t.time) || { buys: 0, sells: 0 };
-    if (t.side === "BUY") entry.buys += t.qty * t.price;
-    else entry.sells += t.qty * t.price;
-    tradesByDate.set(t.time, entry);
-  }
-
-  const points: { date: string; value: number }[] = [];
-  let runningValue = INITIAL_BALANCE;
-
-  const numPoints = Math.min(trades.length + 1, 30);
-  const step = (totalPortfolio - INITIAL_BALANCE) / Math.max(numPoints - 1, 1);
-
-  for (let i = 0; i < numPoints - 1; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() - (numPoints - 1 - i));
-    const variation = (Math.random() - 0.3) * Math.abs(step) * 0.5;
-    runningValue += step + variation;
-    points.push({
-      date: date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-      value: Math.round(runningValue),
-    });
-  }
-
-  points.push({
-    date: new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-    value: Math.round(totalPortfolio),
-  });
-
-  return points;
-}
-
 // ── Custom Tooltip ───────────────────────────────────────────────────────
 
 function ChartTooltip({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) {
@@ -207,6 +173,7 @@ export default function DashboardPage() {
 
   // Paper trading state
   const [paperState, setPaperState] = useState<PaperState>({ balance: INITIAL_BALANCE, holdings: [], trades: [] });
+  const [startingBalance, setStartingBalance] = useState(INITIAL_BALANCE);
 
   // Watchlist
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -231,15 +198,20 @@ export default function DashboardPage() {
     setPaperState(loadPaperStateFromCache());
     setWatchlist(loadWatchlistFromCache());
     setActiveStrategies(loadActiveStrategiesFromCache());
+    const cachedSettings = loadSettingsFromCache();
+    setStartingBalance(cachedSettings.paperStartingBalance ?? INITIAL_BALANCE);
 
     async function loadFromFirestore() {
       try {
-        const [fsState, fsWatchlist, fsStrategies, orders] = await Promise.all([
+        const [fsState, fsWatchlist, fsStrategies, orders, fsSettings] = await Promise.all([
           getPaperTradingState(),
           getWatchlist(),
           getActiveStrategies(),
           getOrders(500),
+          getSettings(),
         ]);
+
+        setStartingBalance(fsSettings.paperStartingBalance ?? INITIAL_BALANCE);
 
         const normalizedTrades = normalizePaperTrades(
           fsState.trades as PaperTrade[],
@@ -316,6 +288,36 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [mounted, marketOpen, watchlist, fetchWatchlistQuotes]);
 
+  const holdingsRef = useRef(paperState.holdings);
+  holdingsRef.current = paperState.holdings;
+
+  const holdingsRefreshKey = paperState.holdings
+    .map((h) => `${h.symbol}:${h.qty}:${h.avgPrice}`)
+    .join("|");
+
+  // Refresh holdings LTP so portfolio / P&L are not zeroed when quotes were never fetched
+  useEffect(() => {
+    if (!mounted || holdingsRef.current.length === 0) return;
+
+    let cancelled = false;
+    async function refresh() {
+      const current = holdingsRef.current;
+      const updated = await refreshHoldingsLtpClient(current);
+      if (cancelled) return;
+      const changed = updated.some((h, i) => h.ltp !== current[i]?.ltp);
+      if (changed) {
+        setPaperState((prev) => ({ ...prev, holdings: updated }));
+      }
+    }
+
+    refresh();
+    const interval = setInterval(refresh, REFRESH_INTERVAL);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [mounted, holdingsRefreshKey]);
+
   // Watchlist search
   const handleSearchChange = (value: string) => {
     setWatchlistSearch(value);
@@ -373,21 +375,21 @@ export default function DashboardPage() {
   };
 
   // Computed values
-  const invested = paperState.holdings.reduce((sum, h) => sum + h.qty * h.avgPrice, 0);
-  const currentHoldingsValue = paperState.holdings.reduce((sum, h) => sum + h.qty * h.ltp, 0);
-  const portfolioValue = paperState.balance + currentHoldingsValue;
-  const allTimePnl = portfolioValue - INITIAL_BALANCE;
-  const allTimePnlPercent = (allTimePnl / INITIAL_BALANCE) * 100;
+  const portfolio = computePortfolio(paperState.holdings, paperState.balance);
+  const portfolioValue = portfolio.portfolioValue;
+  const invested = portfolio.invested;
+  const allTimePnl = computeAllTimePnl(portfolioValue, startingBalance);
+  const allTimePnlPercent =
+    startingBalance > 0 ? (allTimePnl / startingBalance) * 100 : 0;
 
-  const todayStr = new Date().toLocaleDateString("en-IN");
-  const todayTrades = paperState.trades.filter(() => {
-    return true; // trades don't have date, only time — show all as recent
-  });
-  const todayPnl = todayTrades.reduce((sum, t) => {
-    if (t.side === "SELL") return sum + t.qty * t.price;
-    if (t.side === "BUY") return sum - t.qty * t.price;
-    return sum;
-  }, 0);
+  const normalizedTradesForPnl = normalizePaperTrades(
+    paperState.trades as PaperTrade[]
+  );
+  const todayPnlResult = computeTodayPnl(
+    normalizedTradesForPnl,
+    paperState.holdings
+  );
+  const todayPnl = todayPnlResult.pnl;
 
   const recentTradesEnriched = useMemo(() => {
     const normalized = normalizePaperTrades(paperState.trades as PaperTrade[]);
@@ -395,7 +397,12 @@ export default function DashboardPage() {
   }, [paperState.trades]);
   const runningStrategies = activeStrategies.filter((s) => s.status === "running");
 
-  const chartData = buildPortfolioChart(paperState.trades, paperState.balance, paperState.holdings);
+  const chartData = buildPortfolioChart(
+    normalizedTradesForPnl,
+    paperState.balance,
+    paperState.holdings,
+    startingBalance
+  );
   const chartHasData = chartData.length > 1;
   const chartMin = chartHasData ? Math.min(...chartData.map((d) => d.value)) * 0.998 : 990000;
   const chartMax = chartHasData ? Math.max(...chartData.map((d) => d.value)) * 1.002 : 1010000;
@@ -454,6 +461,16 @@ export default function DashboardPage() {
             </span>
             <span className="text-xs text-text-tertiary ml-1">all time</span>
           </div>
+          {invested > 0 && (
+            <p className="text-xs text-text-tertiary mt-1">
+              Invested {formatCurrency(invested)}
+              <span className="mx-1">·</span>
+              <span className={portfolio.pnl >= 0 ? "text-profit" : "text-loss"}>
+                Unrealized {portfolio.pnl >= 0 ? "+" : ""}
+                {formatCurrency(portfolio.pnl)}
+              </span>
+            </p>
+          )}
         </div>
 
         {/* Today's P&L */}
@@ -468,14 +485,25 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
-          <p className={cn("text-2xl font-bold", todayTrades.length > 0 ? (todayPnl >= 0 ? "text-profit" : "text-loss") : "text-text-primary")}>
-            {formatCurrency(todayTrades.length > 0 ? todayPnl : 0)}
+          <p
+            className={cn(
+              "text-2xl font-bold",
+              todayPnlResult.tradeCount > 0 || todayPnlResult.mode === "unrealized"
+                ? todayPnl >= 0
+                  ? "text-profit"
+                  : "text-loss"
+                : "text-text-primary"
+            )}
+          >
+            {formatCurrency(todayPnl)}
           </p>
           <div className="flex items-center gap-1 mt-1">
             <span className="text-sm text-text-secondary">
-              {todayTrades.length > 0
-                ? `${todayTrades.length} trade${todayTrades.length > 1 ? "s" : ""} today`
-                : "No trades today"}
+              {todayPnlResult.tradeCount > 0
+                ? `${todayPnlResult.tradeCount} trade${todayPnlResult.tradeCount > 1 ? "s" : ""} today`
+                : todayPnlResult.mode === "unrealized"
+                  ? "Mark-to-market (no trades today)"
+                  : "No trades today"}
             </span>
           </div>
         </div>
@@ -484,8 +512,8 @@ export default function DashboardPage() {
         <div className="card">
           <div className="flex items-center justify-between mb-3">
             <span className="text-sm text-text-secondary">Active Strategies</span>
-            <div className="rounded-lg bg-[#1e1b4b] p-2">
-              <Zap className="h-4 w-4 text-[#a78bfa]" />
+            <div className="rounded-lg bg-accent-muted p-2">
+              <Zap className="h-4 w-4 text-accent" />
             </div>
           </div>
           <p className="text-2xl font-bold text-text-primary">{runningStrategies.length}</p>

@@ -238,7 +238,7 @@ export default function OrdersPage() {
             onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
               activeTab === tab.key
-                ? "bg-accent text-white shadow-sm"
+                ? "bg-accent text-brand shadow-sm"
                 : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"
             }`}
           >
