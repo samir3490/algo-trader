@@ -31,10 +31,21 @@ Use **GitHub Actions** (free) — already in this repo:
 
 ### One-time setup
 
-1. GitHub → your repo → **Settings** → **Secrets and variables** → **Actions**
-2. **New repository secret:** `CRON_SECRET` = same value as on Vercel
+1. **Vercel** → algo-trader → **Settings** → **Environment Variables**
+   - Name: `CRON_SECRET` — paste the generated value (no quotes)
+   - Enable **Production** (and Preview if you use preview URLs)
+   - **Save**, then **Deployments** → latest → **⋯** → **Redeploy** (required — env vars are not applied to old builds)
+2. **GitHub** → repo → **Settings** → **Secrets and variables** → **Actions**
+   - **New repository secret:** `CRON_SECRET` = **exact same** value as Vercel (no trailing newline)
 3. Optional **Variable:** `APP_URL` = `https://algo-trader-umber.vercel.app`
-4. Push to `master` — workflow runs automatically
+4. **Actions** → **Strategy scan (15 min)** → **Run workflow**
+
+**401 Unauthorized?** Usually one of:
+- Vercel `CRON_SECRET` not checked for **Production**
+- Forgot to **Redeploy** after adding the variable on Vercel
+- GitHub and Vercel values differ (re-copy from one source into both)
+
+**503 not configured?** `CRON_SECRET` is missing on the live Vercel deployment — add it and redeploy.
 
 Manual test: **Actions** → **Strategy scan (15 min)** → **Run workflow**
 
