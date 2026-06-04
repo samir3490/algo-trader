@@ -61,6 +61,9 @@ interface AppSettings {
   };
   notifications: {
     orderExecution: boolean;
+    emailDigest: boolean;
+    skippedOrders: boolean;
+    riskExits: boolean;
     strategySignals: boolean;
     pnlAlerts: boolean;
   };
@@ -90,7 +93,10 @@ const defaultSettings: AppSettings = {
   },
   notifications: {
     orderExecution: true,
-    strategySignals: true,
+    emailDigest: true,
+    skippedOrders: false,
+    riskExits: true,
+    strategySignals: false,
     pnlAlerts: false,
   },
   riskManagement: {
@@ -129,7 +135,10 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
     },
     notifications: {
       orderExecution: fs.notifyOrders,
-      strategySignals: fs.notifySignals,
+      emailDigest: fs.notifyEmailDigest !== false,
+      skippedOrders: fs.notifySkipped === true,
+      riskExits: fs.notifyRiskExits !== false,
+      strategySignals: fs.notifySignals === true,
       pnlAlerts: fs.notifyPnl,
     },
     riskManagement: {
@@ -161,6 +170,9 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     maxPositions: s.riskManagement.maxPositions,
     squareOffTime: s.riskManagement.squareOffTime,
     notifyOrders: s.notifications.orderExecution,
+    notifyEmailDigest: s.notifications.emailDigest,
+    notifySkipped: s.notifications.skippedOrders,
+    notifyRiskExits: s.notifications.riskExits,
     notifySignals: s.notifications.strategySignals,
     notifyPnl: s.notifications.pnlAlerts,
   };
@@ -963,7 +975,7 @@ function SettingsContent() {
               Notifications
             </h2>
             <p className="text-xs text-text-secondary">
-              Configure alert preferences
+              Strategy scans send at most one summary email per 15 min when digest is on
             </p>
           </div>
         </div>
@@ -972,13 +984,28 @@ function SettingsContent() {
           {[
             {
               key: "orderExecution" as const,
-              label: "Order Execution Alerts",
-              desc: "Notify when orders are placed or filled",
+              label: "Trade emails",
+              desc: "Enable email notifications for trades (required for digest)",
+            },
+            {
+              key: "emailDigest" as const,
+              label: "One email per scan (recommended)",
+              desc: "Single summary per 15-min strategy run instead of one email per stock",
+            },
+            {
+              key: "riskExits" as const,
+              label: "Stop-loss / take-profit exits",
+              desc: "Include auto risk sells in emails",
+            },
+            {
+              key: "skippedOrders" as const,
+              label: "Skipped orders (noisy)",
+              desc: "Email when a strategy signal could not run (e.g. low balance)",
             },
             {
               key: "strategySignals" as const,
-              label: "Strategy Signal Alerts",
-              desc: "Notify when strategies generate buy/sell signals",
+              label: "Live strategy signals only",
+              desc: "Email for live-mode signals that need manual placement (off by default)",
             },
             {
               key: "pnlAlerts" as const,

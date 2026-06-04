@@ -5,6 +5,10 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    if (body.skipEmail === true) {
+      return NextResponse.json({ sent: false, skipped: true });
+    }
+
     await sendOrderEmail({
       mode: body.mode || "PAPER",
       symbol: body.symbol,

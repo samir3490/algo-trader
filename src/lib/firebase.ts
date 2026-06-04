@@ -188,6 +188,12 @@ export interface AppSettings {
   maxPositions: number;
   squareOffTime: string;
   notifyOrders: boolean;
+  /** One email per strategy scan with all trades (recommended). */
+  notifyEmailDigest: boolean;
+  /** SKIPPED / failed paper orders — off by default (very noisy). */
+  notifySkipped: boolean;
+  /** Stop-loss / take-profit exit emails. */
+  notifyRiskExits: boolean;
   notifySignals: boolean;
   notifyPnl: boolean;
 }
@@ -209,7 +215,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxPositions: 10,
   squareOffTime: "15:15",
   notifyOrders: true,
-  notifySignals: true,
+  notifyEmailDigest: true,
+  notifySkipped: false,
+  notifyRiskExits: true,
+  notifySignals: false,
   notifyPnl: false,
 };
 

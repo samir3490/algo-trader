@@ -323,21 +323,6 @@ export default function PaperTradingPage() {
             .join("; ");
           setRiskToast(`Risk exit: ${msg}`);
           setTimeout(() => setRiskToast(null), 8000);
-          for (const ex of exits) {
-            fetch("/api/notify/order", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                mode: "PAPER",
-                symbol: ex.symbol,
-                exchange: ex.exchange,
-                side: "SELL",
-                quantity: ex.qty,
-                price: ex.price,
-                orderType: "MARKET",
-              }),
-            }).catch(() => {});
-          }
           return;
         }
       }
@@ -647,19 +632,21 @@ export default function PaperTradingPage() {
     setQuote(null);
     setValidationError("");
 
-    fetch("/api/notify/order", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        mode: "PAPER",
-        symbol: sym,
-        exchange,
-        side: orderSide,
-        quantity: qtyNum,
-        price,
-        orderType,
-      }),
-    }).catch(() => {});
+    if (appSettings?.notifyOrders !== false && appSettings?.notifyEmailDigest === false) {
+      fetch("/api/notify/order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "PAPER",
+          symbol: sym,
+          exchange,
+          side: orderSide,
+          quantity: qtyNum,
+          price,
+          orderType,
+        }),
+      }).catch(() => {});
+    }
 
     saveOrder({
       id: newTrade.id,

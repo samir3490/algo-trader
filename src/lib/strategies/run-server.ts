@@ -11,7 +11,15 @@ import { applyPaperSignal } from "@/lib/strategies/execute-paper";
 import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
 import { consolidateSignalsForExecution } from "@/lib/strategies/consolidate-signals";
 import { inferStrategyType } from "@/lib/strategies/definitions";
-import { sendOrderEmail } from "@/lib/email";
+import {
+  sendOrderEmail,
+  sendScanDigestEmail,
+  type ScanDigestLine,
+} from "@/lib/email";
+import {
+  shouldSendEmailCategory,
+  useScanDigestEmail,
+} from "@/lib/email/notify-policy";
 import { fetchYahooQuote } from "@/lib/market-data/yahoo";
 import type { StrategySignal } from "@/types";
 import type { OrderRecord } from "@/lib/firebase";
@@ -21,6 +29,13 @@ import {
 } from "@/lib/paper-trades/normalize";
 
 const INITIAL_BALANCE = 1_000_000;
+
+function emailDedupeKey(symbol: string, side: string, tag: string, now = new Date()): string {
+  const date = todayKeyIST();
+  const ist = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
+  const slot = Math.floor((ist.getHours() * 60 + ist.getMinutes()) / 15);
+  return `EMAIL:${tag}:${symbol.toUpperCase()}:${side}:${date}:${slot}`;
+}
 
 function todayKeyIST(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -150,6 +165,7 @@ async function loadRunnerMeta(db: Firestore, userId: string) {
   const data = snap.data();
   return {
     dedupeKeys: pruneDedupeKeys((data?.dedupeKeys as string[]) ?? []),
+    emailDedupeKeys: pruneDedupeKeys((data?.emailDedupeKeys as string[]) ?? []),
     lastRunAt: (data?.lastRunAt as string) ?? null,
   };
 }
@@ -174,10 +190,30 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
   }));
 
   const { scanned, signals: rawSignals } = await scanStrategiesForSignals(payload);
-  const { dedupeKeys: existingKeys } = await loadRunnerMeta(db, userId);
-  const dedupe = new Set(existingKeys);
-
   const userSettings = await loadUserSettings(db, userId);
+  const { dedupeKeys: existingKeys, emailDedupeKeys: existingEmailKeys } =
+    await loadRunnerMeta(db, userId);
+  const dedupe = new Set(existingKeys);
+  const emailDedupe = new Set(existingEmailKeys);
+  const digestLines: ScanDigestLine[] = [];
+  const digestMode = useScanDigestEmail(userSettings);
+
+  function queueEmail(
+    category: Parameters<typeof shouldSendEmailCategory>[1],
+    line: ScanDigestLine,
+    individual?: Parameters<typeof sendOrderEmail>[0]
+  ) {
+    const eKey = emailDedupeKey(line.symbol, line.side, category);
+    if (emailDedupe.has(eKey)) return;
+    if (!shouldSendEmailCategory(userSettings, category)) return;
+
+    emailDedupe.add(eKey);
+    digestLines.push(line);
+
+    if (!digestMode && individual) {
+      void sendOrderEmail(individual).catch(() => {});
+    }
+  }
   let paperState = await loadPaperState(db, userId);
   if (paperState.holdings?.length) {
     paperState = {
@@ -197,17 +233,28 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     paperState = riskResult.state;
     await persistPaperState(db, userId, paperState, recentOrders);
     for (const exit of riskResult.exits) {
-      await sendOrderEmail({
-        mode: "PAPER",
-        symbol: exit.symbol,
-        exchange: exit.exchange,
-        side: "SELL",
-        quantity: exit.qty ?? 1,
-        price: exit.price ?? 0,
-        orderType: "MARKET",
-        product: userSettings.paperDefaultProduct,
-        status: `RISK EXIT — ${exit.message}`,
-      }).catch(() => {});
+      queueEmail(
+        "risk_exit",
+        {
+          symbol: exit.symbol,
+          exchange: exit.exchange,
+          side: "SELL",
+          quantity: exit.qty ?? 1,
+          price: exit.price ?? 0,
+          status: `RISK EXIT — ${exit.message}`,
+        },
+        {
+          mode: "PAPER",
+          symbol: exit.symbol,
+          exchange: exit.exchange,
+          side: "SELL",
+          quantity: exit.qty ?? 1,
+          price: exit.price ?? 0,
+          orderType: "MARKET",
+          product: userSettings.paperDefaultProduct,
+          status: `RISK EXIT — ${exit.message}`,
+        }
+      );
     }
   }
 
@@ -267,17 +314,30 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
 
         const tradeQty = executedQty ?? qty;
 
-        await sendOrderEmail({
-          mode: "PAPER",
-          symbol: sig.symbol,
-          exchange,
-          side: sig.action as "BUY" | "SELL",
-          quantity: tradeQty,
-          price: sig.price,
-          orderType: "MARKET",
-          product: userSettings.paperDefaultProduct,
-          status: "EXECUTED",
-        });
+        queueEmail(
+          "executed",
+          {
+            symbol: sig.symbol,
+            exchange,
+            side: sig.action as "BUY" | "SELL",
+            quantity: tradeQty,
+            price: sig.price,
+            status: "EXECUTED",
+            strategyName: strat.name,
+          },
+          {
+            mode: "PAPER",
+            symbol: sig.symbol,
+            exchange,
+            side: sig.action as "BUY" | "SELL",
+            quantity: tradeQty,
+            price: sig.price,
+            orderType: "MARKET",
+            product: userSettings.paperDefaultProduct,
+            status: "EXECUTED",
+            strategyName: strat.name,
+          }
+        );
 
         const orderId = `strat-${Date.now()}-${sig.symbol}`;
         await db.doc(`users/${userId}/orders/${orderId}`).set({
@@ -299,34 +359,72 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           createdAt: FieldValue.serverTimestamp(),
         });
       } else if (message) {
-        // Notify when a signal could not run (e.g. BUY skipped — insufficient balance)
-        await sendOrderEmail({
-          mode: "PAPER",
-          symbol: sig.symbol,
-          exchange,
-          side: sig.action as "BUY" | "SELL",
-          quantity: qty,
-          price: sig.price,
-          orderType: "MARKET",
-          product: userSettings.paperDefaultProduct,
-          status: `SKIPPED — ${message}`,
-        }).catch(() => {});
+        queueEmail(
+          "skipped",
+          {
+            symbol: sig.symbol,
+            exchange,
+            side: sig.action as "BUY" | "SELL",
+            quantity: qty,
+            price: sig.price,
+            status: `SKIPPED — ${message}`,
+            strategyName: strat.name,
+          },
+          {
+            mode: "PAPER",
+            symbol: sig.symbol,
+            exchange,
+            side: sig.action as "BUY" | "SELL",
+            quantity: qty,
+            price: sig.price,
+            orderType: "MARKET",
+            product: userSettings.paperDefaultProduct,
+            status: `SKIPPED — ${message}`,
+            strategyName: strat.name,
+          }
+        );
         dedupe.add(key);
       }
     } else if (strat.mode === "live" && (sig.action === "BUY" || sig.action === "SELL")) {
       dedupe.add(key);
-      await sendOrderEmail({
-        mode: "LIVE",
-        symbol: sig.symbol,
-        exchange: strat.exchange || "NSE",
-        side: sig.action as "BUY" | "SELL",
-        quantity:
-          strat.params?.quantity ?? userSettings.defaultQuantity ?? 1,
-        price: sig.price,
-        orderType: "MARKET",
-        product: userSettings.defaultProduct || "MIS",
-        status: `SIGNAL — connect Zerodha; auto live orders not enabled from cron yet`,
-      }).catch(() => {});
+      queueEmail(
+        "live_signal",
+        {
+          symbol: sig.symbol,
+          exchange: strat.exchange || "NSE",
+          side: sig.action as "BUY" | "SELL",
+          quantity:
+            strat.params?.quantity ?? userSettings.defaultQuantity ?? 1,
+          price: sig.price,
+          status: "LIVE SIGNAL (manual)",
+          strategyName: strat.name,
+        },
+        {
+          mode: "LIVE",
+          symbol: sig.symbol,
+          exchange: strat.exchange || "NSE",
+          side: sig.action as "BUY" | "SELL",
+          quantity:
+            strat.params?.quantity ?? userSettings.defaultQuantity ?? 1,
+          price: sig.price,
+          orderType: "MARKET",
+          product: userSettings.defaultProduct || "MIS",
+          status: `SIGNAL — place manually in Live Trading`,
+          strategyName: strat.name,
+        }
+      );
+    }
+  }
+
+  if (digestMode && digestLines.length > 0) {
+    const ist = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+    const slot = Math.floor((ist.getHours() * 60 + ist.getMinutes()) / 15);
+    const digestKey = `EMAIL:DIGEST:${todayKeyIST()}:${slot}`;
+    if (!emailDedupe.has(digestKey)) {
+      emailDedupe.add(digestKey);
+      await sendScanDigestEmail(digestLines);
     }
   }
 
@@ -354,6 +452,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
   await db.doc(`users/${userId}/data/strategyRunner`).set(
     {
       dedupeKeys: [...dedupe],
+      emailDedupeKeys: [...emailDedupe],
       lastRunAt: now,
       updatedAt: FieldValue.serverTimestamp(),
     },
