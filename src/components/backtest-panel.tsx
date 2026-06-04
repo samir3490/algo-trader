@@ -18,11 +18,23 @@ interface BacktestResult {
   sharpeRatio: number;
   totalTrades: number;
   closedRoundTrips: number;
+  grossProfit: number;
+  grossLoss: number;
+  typicalQty: number;
 }
 
 function formatProfitFactor(pf: number): string {
   if (!Number.isFinite(pf) || pf >= 99) return "No losing trades";
   return pf.toFixed(2);
+}
+
+function formatReturnPct(pct: number): string {
+  if (pct === 0) return "0.00%";
+  if (Math.abs(pct) < 0.01) {
+    const sign = pct >= 0 ? "+" : "";
+    return `${sign}${pct.toFixed(4)}%`;
+  }
+  return formatPercent(pct);
 }
 
 export default function BacktestPanel() {
@@ -76,8 +88,9 @@ export default function BacktestPanel() {
         <div>
           <h2 className="text-lg font-semibold text-text-primary">Backtest</h2>
           <p className="text-xs text-text-secondary">
-            Simulates trades on historical candles with Zerodha-style charges and
-            slippage. Starting capital: {formatCurrency(INITIAL_CAPITAL)}.
+            Simulates trades on historical Yahoo candles (no Postgres required).
+            Uses ~10% of capital per trade. Starting capital:{" "}
+            {formatCurrency(INITIAL_CAPITAL)}.
           </p>
         </div>
       </div>
@@ -171,10 +184,18 @@ export default function BacktestPanel() {
                 )}
               >
                 Net P&amp;L: {result.netPnL >= 0 ? "+" : ""}
-                {formatCurrency(result.netPnL)} ({formatPercent(result.totalReturnPct)})
+                {formatCurrency(result.netPnL)} ({formatReturnPct(result.totalReturnPct)})
               </span>
             </div>
-            <p className="text-[11px] text-text-tertiary mt-2">
+            {result.closedRoundTrips > 0 && (
+              <p className="text-[11px] text-text-secondary mt-2">
+                ~{result.typicalQty} shares per entry · Gross profit{" "}
+                <strong className="text-profit">{formatCurrency(result.grossProfit)}</strong>
+                {" · "}Gross loss{" "}
+                <strong className="text-loss">{formatCurrency(result.grossLoss)}</strong>
+              </p>
+            )}
+            <p className="text-[11px] text-text-tertiary mt-1">
               Final capital is cash left after all simulated buys and sells
               (brokerage, STT, slippage included). It is not a separate subtraction
               from ₹10L — it is what you would hold at the end of the test period.
@@ -184,7 +205,7 @@ export default function BacktestPanel() {
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Metric
               label="Total return"
-              value={formatPercent(result.totalReturnPct)}
+              value={formatReturnPct(result.totalReturnPct)}
               positive={result.totalReturnPct >= 0}
               hint="(Final − Starting) ÷ Starting. Matches net P&L above."
             />
@@ -194,9 +215,21 @@ export default function BacktestPanel() {
               hint={`Share of ${result.closedRoundTrips} completed round-trip(s) that made money after charges.`}
             />
             <Metric
+              label="Gross profit"
+              value={formatCurrency(result.grossProfit)}
+              positive={result.grossProfit > 0}
+              hint="Sum of P&L on winning round trips (after charges)."
+            />
+            <Metric
+              label="Gross loss"
+              value={formatCurrency(result.grossLoss)}
+              positive={false}
+              hint="Sum of losses on losing round trips (absolute value)."
+            />
+            <Metric
               label="Profit factor"
               value={formatProfitFactor(result.profitFactor)}
-              hint="Gross profit ÷ gross loss on closed trades. Above 1 means winners outweighed losers."
+              hint="Gross profit ÷ gross loss. Above 1 means winners outweighed losers."
             />
             <Metric
               label="Max drawdown"
@@ -217,8 +250,9 @@ export default function BacktestPanel() {
           </div>
 
           <p className="text-xs text-text-tertiary">
-            Past performance is not indicative of future results. Metrics are from
-            a simplified simulator, not live Zerodha fills.
+            Past performance is not indicative of future results. Optional{" "}
+            <code className="text-text-secondary">DATABASE_URL</code> on Vercel
+            only caches candles — backtest works without Postgres.
           </p>
         </div>
       )}

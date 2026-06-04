@@ -36,6 +36,14 @@ describe("runBacktest", () => {
       result.netPnL,
       Math.round((result.finalCapital - result.initialCapital) * 100) / 100
     );
+    if (result.closedRoundTrips > 0) {
+      assert.ok(result.typicalQty >= 1);
+      assert.ok(
+        Math.abs(result.grossProfit - result.grossLoss - result.netPnL) <
+          Math.abs(result.netPnL) * 0.5 + 5000,
+        "gross profit/loss should relate to net P&L when sized properly"
+      );
+    }
   });
 
   it("win rate aligns with net P&L when all round trips lose", () => {

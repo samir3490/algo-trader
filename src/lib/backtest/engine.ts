@@ -1,5 +1,6 @@
 import type { OHLC } from "@/types";
 import { applyBacktestFriction } from "@/lib/backtest/charges";
+import { resolveBacktestQty } from "@/lib/backtest/position-size";
 import { movingAverageCrossover } from "@/lib/strategies/engines/moving-average-crossover";
 import { rsiMeanReversion } from "@/lib/strategies/engines/rsi-mean-reversion";
 import type { StructuredSignal } from "@/lib/trading/structured-signal";
@@ -43,6 +44,10 @@ export interface BacktestResult {
   sharpeRatio: number;
   totalTrades: number;
   closedRoundTrips: number;
+  grossProfit: number;
+  grossLoss: number;
+  /** Shares per entry when not overridden in strategy params. */
+  typicalQty: number;
   trades: BacktestTrade[];
   equityCurve: { timestamp: string; equity: number }[];
 }
@@ -88,6 +93,7 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
   let maxDrawdown = 0;
   const dailyReturns: number[] = [];
   let lastEquity = params.initialCapital;
+  let lastEntryQty = 1;
 
   const minBars = 30;
   for (let i = minBars; i < filtered.length; i++) {
@@ -99,7 +105,7 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
       sig = strategy.evaluate(symbol, window, params.strategyParams ?? {});
     }
 
-    const qty = params.strategyParams?.quantity ?? 1;
+    const qty = resolveBacktestQty(cash, bar.close, params.strategyParams);
 
     if (sig?.signalType === "BUY" && position === 0 && cash > bar.close * qty) {
       const fr = applyBacktestFriction({
@@ -114,6 +120,7 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
         position = qty;
         avgCost = fr.fillPrice;
         entryCashDelta = fr.cashDelta;
+        lastEntryQty = qty;
         trades.push({
           side: "BUY",
           price: fr.fillPrice,
@@ -137,10 +144,10 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
       cash += fr.cashDelta;
       const pnl = fr.cashDelta + entryCashDelta;
       tradePnls.push(pnl);
-      if (pnl >= 0) {
+      if (pnl > 0) {
         wins += 1;
         grossProfit += pnl;
-      } else {
+      } else if (pnl < 0) {
         grossLoss += Math.abs(pnl);
       }
       trades.push({
@@ -179,10 +186,10 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
     cash += fr.cashDelta;
     const pnl = fr.cashDelta + entryCashDelta;
     tradePnls.push(pnl);
-    if (pnl >= 0) {
+    if (pnl > 0) {
       wins += 1;
       grossProfit += pnl;
-    } else {
+    } else if (pnl < 0) {
       grossLoss += Math.abs(pnl);
     }
     trades.push({
@@ -221,20 +228,35 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
     startDate: params.startDate.toISOString(),
     endDate: params.endDate.toISOString(),
     initialCapital: params.initialCapital,
-    finalCapital: round2(finalCapital),
-    netPnL: round2(netPnL),
-    totalReturnPct: round2((netPnL / params.initialCapital) * 100),
+    finalCapital: roundMoney(finalCapital),
+    netPnL: roundMoney(netPnL),
+    totalReturnPct: roundPct((netPnL / params.initialCapital) * 100),
     winRate: round2(winRate),
     profitFactor: Number.isFinite(profitFactor) ? round2(profitFactor) : 999,
-    maxDrawdownPct: round2(maxDrawdown),
+    maxDrawdownPct: roundPct(maxDrawdown),
     sharpeRatio: round2(sharpeRatio),
     totalTrades: trades.length,
     closedRoundTrips,
+    grossProfit: roundMoney(grossProfit),
+    grossLoss: roundMoney(grossLoss),
+    typicalQty: lastEntryQty,
     trades,
     equityCurve,
   };
 }
 
 function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function roundMoney(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+/** Keep small % visible (e.g. −0.03% not 0%). */
+function roundPct(n: number): number {
+  if (Math.abs(n) > 0 && Math.abs(n) < 0.01) {
+    return Math.round(n * 10000) / 10000;
+  }
   return Math.round(n * 100) / 100;
 }
