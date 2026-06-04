@@ -28,6 +28,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   getSettings as getFirestoreSettings,
   saveSettings as saveFirestoreSettings,
+  DEFAULT_SETTINGS,
   type AppSettings as FirestoreAppSettings,
   getZerodhaAccounts,
   saveZerodhaAccount,
@@ -35,6 +36,10 @@ import {
   updateZerodhaAccountLabel,
   type ZerodhaAccount,
 } from "@/lib/firebase";
+import {
+  loadSettingsFromCache as loadFlatSettingsCache,
+  saveSettingsToCache,
+} from "@/lib/settings/cache";
 
 interface ServerAccount {
   kiteUserId: string;
@@ -113,15 +118,6 @@ const defaultSettings: AppSettings = {
   },
 };
 
-function loadSettingsFromCache(): AppSettings {
-  if (typeof window === "undefined") return defaultSettings;
-  try {
-    const saved = localStorage.getItem("algotrader_settings");
-    if (saved) return { ...defaultSettings, ...JSON.parse(saved) };
-  } catch {}
-  return defaultSettings;
-}
-
 function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
   return {
     paperTrading: {
@@ -190,8 +186,9 @@ function SettingsContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
-  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastError, setToastError] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
 
   // Multi-account state
@@ -208,14 +205,14 @@ function SettingsContent() {
   useEffect(() => {
     if (!user) return;
 
-    setSettings(loadSettingsFromCache());
+    setSettings(firestoreToLocal(loadFlatSettingsCache()));
 
     async function loadFromFirestore() {
       try {
         const fs = await getFirestoreSettings();
         const mapped = firestoreToLocal(fs);
         setSettings(mapped);
-        localStorage.setItem("algotrader_settings", JSON.stringify(mapped));
+        saveSettingsToCache(fs);
       } catch (e) {
         console.error("Failed to load settings from Firestore, using cache:", e);
       }
@@ -408,13 +405,30 @@ function SettingsContent() {
   }
 
   async function handleSave() {
-    localStorage.setItem("algotrader_settings", JSON.stringify(settings));
+    if (!user) {
+      setToastError(true);
+      setToast("Sign in to save settings to the cloud.");
+      return;
+    }
+
+    setSaving(true);
+    setToastError(false);
+    const flat = { ...DEFAULT_SETTINGS, ...localToFirestore(settings) };
+
     try {
+      saveSettingsToCache(flat);
       await saveFirestoreSettings(localToFirestore(settings));
       setToast("Settings saved successfully!");
     } catch (e) {
       console.error("Failed to save settings to Firestore:", e);
-      setToast("Settings saved locally (cloud sync failed).");
+      setToastError(true);
+      const msg =
+        e instanceof Error ? e.message : "Could not sync to cloud";
+      setToast(
+        `Saved on this device only. Cloud sync failed: ${msg}`
+      );
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -449,11 +463,13 @@ function SettingsContent() {
           </p>
         </div>
         <button
-          onClick={handleSave}
-          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+          type="button"
+          onClick={() => void handleSave()}
+          disabled={saving}
+          className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          <Save className="h-4 w-4" />
-          Save Settings
+          <Save className={cn("h-4 w-4", saving && "animate-pulse")} />
+          {saving ? "Saving…" : "Save Settings"}
         </button>
       </div>
 
@@ -1225,8 +1241,20 @@ function SettingsContent() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-lg border border-border bg-bg-elevated px-4 py-3 shadow-xl animate-in slide-in-from-bottom-4 fade-in duration-300">
-          <CheckCircle2 className="h-4 w-4 text-profit" />
+        <div
+          role="status"
+          className={cn(
+            "fixed bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-[100] flex items-center gap-2 rounded-lg border px-4 py-3 shadow-xl",
+            toastError
+              ? "border-loss/40 bg-loss-muted"
+              : "border-border bg-bg-elevated"
+          )}
+        >
+          {toastError ? (
+            <AlertTriangle className="h-4 w-4 text-loss shrink-0" />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 text-profit shrink-0" />
+          )}
           <span className="text-sm text-text-primary">{toast}</span>
         </div>
       )}

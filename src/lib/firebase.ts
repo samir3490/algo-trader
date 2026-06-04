@@ -249,12 +249,8 @@ export async function getSettings(): Promise<AppSettings> {
 }
 
 export async function saveSettings(settings: Partial<AppSettings>): Promise<void> {
-  try {
-    const ref = doc(db, "users", getUserId(), "data", "settings");
-    await setDoc(ref, { ...settings, updatedAt: serverTimestamp() }, { merge: true });
-  } catch (e) {
-    console.error("Error saving settings:", e);
-  }
+  const ref = doc(db, "users", getUserId(), "data", "settings");
+  await setDoc(ref, { ...settings, updatedAt: serverTimestamp() }, { merge: true });
 }
 
 // ==================== STRATEGIES ====================
