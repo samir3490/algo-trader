@@ -15,6 +15,8 @@ import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
 import { consolidateSignalsForExecution } from "@/lib/strategies/consolidate-signals";
 import {
   canExecuteStrategyTrade,
+  lockSymbolForToday,
+  pruneSymbolLocksForToday,
   type PortfolioGateContext,
 } from "@/lib/strategies/portfolio-gate";
 import { tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
@@ -59,6 +61,11 @@ function executionDedupeKey(symbol: string, now = new Date()): string {
   const ist = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" }));
   const slot = Math.floor((ist.getHours() * 60 + ist.getMinutes()) / 15);
   return `${symbol.toUpperCase()}:${date}:${slot}`;
+}
+
+/** Block further BUYs for this symbol for the rest of the IST day (set after a sell). */
+function executionNoBuyTodayKey(symbol: string): string {
+  return `NO-BUY:${symbol.toUpperCase()}:${todayKeyIST()}`;
 }
 
 function todayRealizedLoss(trades: PaperTradingState["trades"]): number {
@@ -192,10 +199,14 @@ async function loadRunnerMeta(db: Firestore, userId: string) {
   for (const [k, v] of Object.entries(raw)) {
     if (typeof v === "number" && v > now) symbolCooldownUntil[k] = v;
   }
+  const symbolsLockedToday = pruneSymbolLocksForToday(
+    (data?.symbolsLockedToday as Record<string, string>) ?? {}
+  );
   return {
     dedupeKeys: pruneDedupeKeys((data?.dedupeKeys as string[]) ?? []),
     emailDedupeKeys: pruneDedupeKeys((data?.emailDedupeKeys as string[]) ?? []),
     symbolCooldownUntil,
+    symbolsLockedToday,
     lastRunAt: (data?.lastRunAt as string) ?? null,
   };
 }
@@ -225,10 +236,12 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     dedupeKeys: existingKeys,
     emailDedupeKeys: existingEmailKeys,
     symbolCooldownUntil: persistedCooldown,
+    symbolsLockedToday: persistedLocks,
   } = await loadRunnerMeta(db, userId);
   const dedupe = new Set(existingKeys);
   const emailDedupe = new Set(existingEmailKeys);
   const symbolCooldownUntil: Record<string, number> = { ...persistedCooldown };
+  let symbolsLockedToday: Record<string, string> = { ...persistedLocks };
   const soldThisRun = new Set<string>();
   const digestLines: ScanDigestLine[] = [];
   const digestMode = useScanDigestEmail(userSettings);
@@ -272,7 +285,13 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       const key = symKey(exit.symbol, exit.exchange);
       soldThisRun.add(key);
       symbolCooldownUntil[key] = Date.now() + cooldownMs;
+      symbolsLockedToday = lockSymbolForToday(
+        symbolsLockedToday,
+        exit.symbol,
+        exit.exchange
+      );
       dedupe.add(executionDedupeKey(exit.symbol));
+      dedupe.add(executionNoBuyTodayKey(exit.symbol));
       queueEmail(
         "risk_exit",
         {
@@ -312,12 +331,19 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     settings: userSettings,
     soldThisRun,
     symbolCooldownUntil,
+    symbolsLockedToday,
   };
 
   for (const sig of signals) {
     signalStrategyIds.add(sig.strategyId);
     const key = executionDedupeKey(sig.symbol);
     if (dedupe.has(key)) continue;
+    if (
+      sig.action === "BUY" &&
+      dedupe.has(executionNoBuyTodayKey(sig.symbol))
+    ) {
+      continue;
+    }
 
     const strat = running.find((s) => s.id === sig.strategyId);
     if (!strat) continue;
@@ -450,6 +476,13 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           const cooldownMs =
             (userSettings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
           symbolCooldownUntil[sk] = Date.now() + cooldownMs;
+          symbolsLockedToday = lockSymbolForToday(
+            symbolsLockedToday,
+            sig.symbol,
+            exchange
+          );
+          gateCtx.symbolsLockedToday = symbolsLockedToday;
+          dedupe.add(executionNoBuyTodayKey(sig.symbol));
         }
 
         queueEmail(
@@ -592,6 +625,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       dedupeKeys: [...dedupe],
       emailDedupeKeys: [...emailDedupe],
       symbolCooldownUntil,
+      symbolsLockedToday,
       lastRunAt: now,
       updatedAt: FieldValue.serverTimestamp(),
     },

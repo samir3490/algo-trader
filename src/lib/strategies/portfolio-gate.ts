@@ -9,6 +9,16 @@ function todayIST(): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 }
 
+function tradeOnToday(t: PaperTrade): boolean {
+  const today = todayIST();
+  return (
+    t.date === today ||
+    new Date(tradeExecutedAtMs(t)).toLocaleDateString("en-CA", {
+      timeZone: "Asia/Kolkata",
+    }) === today
+  );
+}
+
 /** Count buy→sell round trips for a symbol today. */
 function roundTripsToday(
   trades: PaperTrade[],
@@ -16,16 +26,8 @@ function roundTripsToday(
   exchange: string
 ): number {
   const key = symKey(symbol, exchange);
-  const today = todayIST();
   const dayTrades = trades
-    .filter(
-      (t) =>
-        symKey(t.symbol, t.exchange) === key &&
-        (t.date === today ||
-          new Date(tradeExecutedAtMs(t)).toLocaleDateString("en-CA", {
-            timeZone: "Asia/Kolkata",
-          }) === today)
-    )
+    .filter((t) => symKey(t.symbol, t.exchange) === key && tradeOnToday(t))
     .sort((a, b) => tradeExecutedAtMs(a) - tradeExecutedAtMs(b));
 
   let trips = 0;
@@ -51,6 +53,71 @@ function lastSellMs(trades: PaperTrade[], symbol: string, exchange: string): num
   return last;
 }
 
+function lastBuyMs(trades: PaperTrade[], symbol: string, exchange: string): number {
+  const key = symKey(symbol, exchange);
+  let last = 0;
+  for (const t of trades) {
+    if (t.side !== "BUY" || symKey(t.symbol, t.exchange) !== key) continue;
+    const ms = tradeExecutedAtMs(t);
+    if (ms > last) last = ms;
+  }
+  return last;
+}
+
+function anySellToday(
+  trades: PaperTrade[],
+  symbol: string,
+  exchange: string
+): boolean {
+  const key = symKey(symbol, exchange);
+  return trades.some(
+    (t) =>
+      t.side === "SELL" &&
+      symKey(t.symbol, t.exchange) === key &&
+      tradeOnToday(t)
+  );
+}
+
+function lastSellToday(
+  trades: PaperTrade[],
+  symbol: string,
+  exchange: string
+): PaperTrade | undefined {
+  const key = symKey(symbol, exchange);
+  return [...trades]
+    .filter(
+      (t) =>
+        t.side === "SELL" &&
+        symKey(t.symbol, t.exchange) === key &&
+        tradeOnToday(t)
+    )
+    .sort((a, b) => tradeExecutedAtMs(b) - tradeExecutedAtMs(a))[0];
+}
+
+/** Infer whether the latest sell today was a loss (works before brokerage netPnl existed). */
+function lastSellTodayWasLoss(
+  trades: PaperTrade[],
+  symbol: string,
+  exchange: string
+): boolean {
+  const sell = lastSellToday(trades, symbol, exchange);
+  if (!sell) return false;
+  if (sell.netPnl != null) return sell.netPnl < 0;
+
+  const key = symKey(symbol, exchange);
+  const buysBefore = trades
+    .filter(
+      (t) =>
+        t.side === "BUY" &&
+        symKey(t.symbol, t.exchange) === key &&
+        tradeExecutedAtMs(t) <= tradeExecutedAtMs(sell)
+    )
+    .sort((a, b) => tradeExecutedAtMs(b) - tradeExecutedAtMs(a));
+  const buy = buysBefore[0];
+  if (!buy) return false;
+  return sell.price < buy.price;
+}
+
 export interface PortfolioGateContext {
   holdings: PaperHolding[];
   trades: PaperTrade[];
@@ -59,6 +126,28 @@ export interface PortfolioGateContext {
   soldThisRun: Set<string>;
   /** Symbol → cooldown end (ms). */
   symbolCooldownUntil?: Record<string, number>;
+  /** Symbol locked for rest of IST day (persisted in strategyRunner). */
+  symbolsLockedToday?: Record<string, string>;
+}
+
+export function lockSymbolForToday(
+  locks: Record<string, string>,
+  symbol: string,
+  exchange: string
+): Record<string, string> {
+  const key = symKey(symbol, exchange);
+  return { ...locks, [key]: todayIST() };
+}
+
+export function pruneSymbolLocksForToday(
+  locks: Record<string, string> | undefined
+): Record<string, string> {
+  const today = todayIST();
+  const out: Record<string, string> = {};
+  for (const [k, d] of Object.entries(locks ?? {})) {
+    if (d === today) out[k] = d;
+  }
+  return out;
 }
 
 export function canExecuteStrategyTrade(
@@ -75,6 +164,14 @@ export function canExecuteStrategyTrade(
     if (!hasPosition) {
       return { allowed: false, reason: "No position to sell" };
     }
+    const minHold = ctx.settings.minHoldMinutesBeforeSell ?? 60;
+    const lastBuy = lastBuyMs(ctx.trades, symbol, exchange);
+    if (lastBuy > 0 && Date.now() - lastBuy < minHold * 60 * 1000) {
+      return {
+        allowed: false,
+        reason: `Min hold ${minHold}m before strategy sell`,
+      };
+    }
     return { allowed: true };
   }
 
@@ -83,25 +180,24 @@ export function canExecuteStrategyTrade(
     return { allowed: false, reason: "Sold this scan — no immediate rebuy" };
   }
 
+  if (ctx.symbolsLockedToday?.[key] === todayIST()) {
+    return { allowed: false, reason: "Symbol locked for today after sell" };
+  }
+
   if (hasPosition) {
     return { allowed: false, reason: "Already holding — no add-on buy" };
   }
 
-  const today = todayIST();
-  const lastSellTrade = [...ctx.trades]
-    .filter(
-      (t) =>
-        t.side === "SELL" &&
-        symKey(t.symbol, t.exchange) === key &&
-        (t.date === today ||
-          new Date(tradeExecutedAtMs(t)).toLocaleDateString("en-CA", {
-            timeZone: "Asia/Kolkata",
-          }) === today)
-    )
-    .sort((a, b) => tradeExecutedAtMs(b) - tradeExecutedAtMs(a))[0];
+  const noSameDayRebuy = ctx.settings.noSameDayRebuyAfterSell !== false;
+  if (noSameDayRebuy && anySellToday(ctx.trades, symbol, exchange)) {
+    return { allowed: false, reason: "Sold today — no rebuy until tomorrow" };
+  }
 
-  if (lastSellTrade?.netPnl != null && lastSellTrade.netPnl < 0) {
-    return { allowed: false, reason: "Last sell was at a loss — no same-day rebuy" };
+  if (lastSellTodayWasLoss(ctx.trades, symbol, exchange)) {
+    return {
+      allowed: false,
+      reason: "Last sell today was at a loss — no rebuy today",
+    };
   }
 
   const cooldownEnd = ctx.symbolCooldownUntil?.[key];

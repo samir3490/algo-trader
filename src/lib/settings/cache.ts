@@ -44,6 +44,8 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
     maxRoundTripsPerSymbolPerDay: rm?.maxRoundTripsPerSymbolPerDay as
       | number
       | undefined,
+    noSameDayRebuyAfterSell: rm?.noSameDayRebuyAfterSell as boolean | undefined,
+    minHoldMinutesBeforeSell: rm?.minHoldMinutesBeforeSell as number | undefined,
   };
 }
 

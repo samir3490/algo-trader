@@ -207,6 +207,10 @@ export interface AppSettings {
   rebuyCooldownMinutes: number;
   /** Max complete buy→sell cycles per symbol per day. */
   maxRoundTripsPerSymbolPerDay: number;
+  /** Block buying a symbol again on the same day after any sell. */
+  noSameDayRebuyAfterSell: boolean;
+  /** Minimum minutes to hold before a strategy SELL (risk exits ignore this). */
+  minHoldMinutesBeforeSell: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -233,6 +237,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifyPnl: false,
   rebuyCooldownMinutes: 240,
   maxRoundTripsPerSymbolPerDay: 1,
+  noSameDayRebuyAfterSell: true,
+  minHoldMinutesBeforeSell: 60,
 };
 
 export async function getSettings(): Promise<AppSettings> {

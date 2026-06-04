@@ -81,6 +81,8 @@ interface AppSettings {
     squareOffTime: string;
     rebuyCooldownMinutes: number;
     maxRoundTripsPerSymbolPerDay: number;
+    noSameDayRebuyAfterSell: boolean;
+    minHoldMinutesBeforeSell: number;
   };
 }
 
@@ -115,6 +117,8 @@ const defaultSettings: AppSettings = {
     squareOffTime: "15:15",
     rebuyCooldownMinutes: 240,
     maxRoundTripsPerSymbolPerDay: 1,
+    noSameDayRebuyAfterSell: true,
+    minHoldMinutesBeforeSell: 60,
   },
 };
 
@@ -150,6 +154,8 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       squareOffTime: fs.squareOffTime,
       rebuyCooldownMinutes: fs.rebuyCooldownMinutes ?? 240,
       maxRoundTripsPerSymbolPerDay: fs.maxRoundTripsPerSymbolPerDay ?? 1,
+      noSameDayRebuyAfterSell: fs.noSameDayRebuyAfterSell !== false,
+      minHoldMinutesBeforeSell: fs.minHoldMinutesBeforeSell ?? 60,
     },
   };
 }
@@ -173,6 +179,8 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     squareOffTime: s.riskManagement.squareOffTime,
     rebuyCooldownMinutes: s.riskManagement.rebuyCooldownMinutes,
     maxRoundTripsPerSymbolPerDay: s.riskManagement.maxRoundTripsPerSymbolPerDay,
+    noSameDayRebuyAfterSell: s.riskManagement.noSameDayRebuyAfterSell,
+    minHoldMinutesBeforeSell: s.riskManagement.minHoldMinutesBeforeSell,
     notifyOrders: s.notifications.orderExecution,
     notifyEmailDigest: s.notifications.emailDigest,
     notifySkipped: s.notifications.skippedOrders,
@@ -1234,6 +1242,54 @@ function SettingsContent() {
             />
             <p className="text-xs text-text-tertiary mt-1">
               Limits buy→sell cycles per symbol per day (stops SAIL-style whipsaw).
+            </p>
+          </div>
+
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                checked={settings.riskManagement.noSameDayRebuyAfterSell}
+                onChange={(e) =>
+                  updateSettings("riskManagement", {
+                    noSameDayRebuyAfterSell: e.target.checked,
+                  })
+                }
+                className="peer sr-only"
+              />
+              <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+            <div>
+              <p className="text-sm font-medium text-text-primary">
+                No same-day rebuy after sell
+              </p>
+              <p className="text-xs text-text-tertiary">
+                After SAIL / Policybazaar is sold once today, strategies cannot buy it again until tomorrow.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Min Hold Before Strategy Sell (minutes)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="15"
+              value={settings.riskManagement.minHoldMinutesBeforeSell}
+              onChange={(e) =>
+                updateSettings("riskManagement", {
+                  minHoldMinutesBeforeSell: Math.max(
+                    0,
+                    Number(e.target.value) || 0
+                  ),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-xs text-text-tertiary mt-1">
+              Stop-loss / take-profit exits are not affected.
             </p>
           </div>
         </div>

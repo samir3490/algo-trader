@@ -41,7 +41,19 @@ describe("canExecuteStrategyTrade", () => {
       soldThisRun: new Set(),
     });
     assert.equal(r.allowed, false);
-    assert.match(r.reason ?? "", /loss/);
+    assert.match(r.reason ?? "", /Sold today|loss/);
+  });
+
+  it("blocks BUY when symbol locked for today", () => {
+    const r = canExecuteStrategyTrade("BUY", "POLICYBAZAAR", "NSE", {
+      holdings: [],
+      trades: [],
+      settings,
+      soldThisRun: new Set(),
+      symbolsLockedToday: { "POLICYBAZAAR:NSE": new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) },
+    });
+    assert.equal(r.allowed, false);
+    assert.match(r.reason ?? "", /locked/);
   });
 
   it("allows SELL when holding exists", () => {
