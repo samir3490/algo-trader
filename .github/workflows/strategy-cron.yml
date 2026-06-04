@@ -1,8 +1,12 @@
 # Runs strategy scans every 15 minutes during NSE hours (weekdays).
 # Works on Vercel Hobby — unlike Vercel Cron, which is limited to once per day on Hobby.
 #
-# Setup: GitHub repo → Settings → Secrets → Actions → CRON_SECRET
-# (same value as CRON_SECRET on Vercel)
+# Required setup (one time):
+#   GitHub → repo → Settings → Secrets and variables → Actions
+#   Secret name: CRON_SECRET  (same value as CRON_SECRET on Vercel)
+#   Optional variable: APP_URL = https://algo-trader-umber.vercel.app
+#
+# See docs/SERVER-STRATEGY-CRON.md
 
 name: Strategy scan (15 min)
 
@@ -16,16 +20,61 @@ jobs:
   trigger:
     runs-on: ubuntu-latest
     steps:
+      - name: Check required secrets
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET is not set in GitHub Actions secrets."
+            echo ""
+            echo "Fix:"
+            echo "  1. Vercel → algo-trader → Settings → Environment Variables → copy CRON_SECRET"
+            echo "     (or create one: openssl rand -base64 32, add to Vercel AND GitHub)"
+            echo "  2. GitHub → samir3490/algo-trader → Settings → Secrets and variables → Actions"
+            echo "  3. New repository secret → Name: CRON_SECRET → paste the same value"
+            echo "  4. Re-run this workflow (Actions → Strategy scan → Run workflow)"
+            echo ""
+            echo "Docs: docs/SERVER-STRATEGY-CRON.md"
+            {
+              echo "## Strategy cron failed — missing secret"
+              echo ""
+              echo "Add repository secret **\`CRON_SECRET\`** (must match Vercel)."
+              echo ""
+              echo "See [SERVER-STRATEGY-CRON.md](https://github.com/samir3490/algo-trader/blob/master/docs/SERVER-STRATEGY-CRON.md)."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
       - name: Call Vercel strategy cron API
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           APP_URL: ${{ vars.APP_URL }}
         run: |
-          if [ -z "$CRON_SECRET" ]; then
-            echo "Missing CRON_SECRET in GitHub Actions secrets"
+          BASE="${APP_URL:-https://algo-trader-umber.vercel.app}"
+          URL="${BASE}/api/cron/strategies"
+          echo "POST ${URL}"
+
+          HTTP=$(curl -sS -w "%{http_code}" -o /tmp/cron-body.json \
+            -H "Authorization: Bearer ${CRON_SECRET}" \
+            "${URL}")
+          echo "HTTP ${HTTP}"
+          head -c 2000 /tmp/cron-body.json || true
+          echo ""
+
+          if [ "$HTTP" = "401" ]; then
+            echo "::error::Unauthorized (401). CRON_SECRET on GitHub does not match Vercel."
             exit 1
           fi
-          BASE="${APP_URL:-https://algo-trader-umber.vercel.app}"
-          curl -sfS -H "Authorization: Bearer ${CRON_SECRET}" \
-            "${BASE}/api/cron/strategies" | head -c 2000
-          echo ""
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::Cron API returned HTTP ${HTTP}"
+            exit 1
+          fi
+
+          {
+            echo "## Strategy cron OK"
+            echo ""
+            echo '```json'
+            head -c 1500 /tmp/cron-body.json
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
