@@ -34,12 +34,15 @@ export interface BacktestResult {
   endDate: string;
   initialCapital: number;
   finalCapital: number;
+  /** finalCapital − initialCapital (charges included). */
+  netPnL: number;
   totalReturnPct: number;
   winRate: number;
   profitFactor: number;
   maxDrawdownPct: number;
   sharpeRatio: number;
   totalTrades: number;
+  closedRoundTrips: number;
   trades: BacktestTrade[];
   equityCurve: { timestamp: string; equity: number }[];
 }
@@ -73,6 +76,8 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
   let cash = params.initialCapital;
   let position = 0;
   let avgCost = 0;
+  /** Cash spent on open position (negative), includes buy charges. */
+  let entryCashDelta = 0;
   const trades: BacktestTrade[] = [];
   const equityCurve: { timestamp: string; equity: number }[] = [];
   const tradePnls: number[] = [];
@@ -108,6 +113,7 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
         cash += fr.cashDelta;
         position = qty;
         avgCost = fr.fillPrice;
+        entryCashDelta = fr.cashDelta;
         trades.push({
           side: "BUY",
           price: fr.fillPrice,
@@ -129,7 +135,7 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
         product: params.product,
       });
       cash += fr.cashDelta;
-      const pnl = fr.cashDelta + avgCost * position;
+      const pnl = fr.cashDelta + entryCashDelta;
       tradePnls.push(pnl);
       if (pnl >= 0) {
         wins += 1;
@@ -147,6 +153,7 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
       });
       position = 0;
       avgCost = 0;
+      entryCashDelta = 0;
     }
 
     const equity = cash + position * bar.close;
@@ -170,19 +177,43 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
       product: params.product,
     });
     cash += fr.cashDelta;
+    const pnl = fr.cashDelta + entryCashDelta;
+    tradePnls.push(pnl);
+    if (pnl >= 0) {
+      wins += 1;
+      grossProfit += pnl;
+    } else {
+      grossLoss += Math.abs(pnl);
+    }
+    trades.push({
+      side: "SELL",
+      price: fr.fillPrice,
+      qty: position,
+      timestamp: lastBar.date.toISOString(),
+      charges: fr.charges,
+      reason: "End-of-period exit",
+    });
     position = 0;
+    entryCashDelta = 0;
   }
 
   const finalCapital = cash;
-  const closedTrades = Math.floor(trades.length / 2);
-  const winRate = closedTrades > 0 ? (wins / closedTrades) * 100 : 0;
+  const closedRoundTrips = tradePnls.length;
+  const winRate =
+    closedRoundTrips > 0 ? (wins / closedRoundTrips) * 100 : 0;
   const profitFactor =
-    grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99 : 0;
+    grossLoss > 0
+      ? grossProfit / grossLoss
+      : grossProfit > 0
+        ? Number.POSITIVE_INFINITY
+        : 0;
   const meanRet = dailyReturns.length
     ? dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
     : 0;
   const sd = stdDev(dailyReturns);
   const sharpeRatio = sd > 0 ? (meanRet / sd) * Math.sqrt(252) : 0;
+
+  const netPnL = finalCapital - params.initialCapital;
 
   return {
     strategyId: params.strategyId,
@@ -191,14 +222,14 @@ export function runBacktest(candles: OHLC[], params: BacktestParams): BacktestRe
     endDate: params.endDate.toISOString(),
     initialCapital: params.initialCapital,
     finalCapital: round2(finalCapital),
-    totalReturnPct: round2(
-      ((finalCapital - params.initialCapital) / params.initialCapital) * 100
-    ),
+    netPnL: round2(netPnL),
+    totalReturnPct: round2((netPnL / params.initialCapital) * 100),
     winRate: round2(winRate),
-    profitFactor: round2(profitFactor),
+    profitFactor: Number.isFinite(profitFactor) ? round2(profitFactor) : 999,
     maxDrawdownPct: round2(maxDrawdown),
     sharpeRatio: round2(sharpeRatio),
     totalTrades: trades.length,
+    closedRoundTrips,
     trades,
     equityCurve,
   };

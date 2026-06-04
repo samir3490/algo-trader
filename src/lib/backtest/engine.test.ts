@@ -32,5 +32,27 @@ describe("runBacktest", () => {
     });
     assert.ok(Number.isFinite(result.totalReturnPct));
     assert.ok(result.equityCurve.length > 0);
+    assert.equal(
+      result.netPnL,
+      Math.round((result.finalCapital - result.initialCapital) * 100) / 100
+    );
+  });
+
+  it("win rate aligns with net P&L when all round trips lose", () => {
+    const candles = syntheticCandles(80);
+    for (const c of candles) {
+      c.close = 100 - (c.date.getUTCDate() % 10);
+    }
+    const result = runBacktest(candles, {
+      strategyId: "sma",
+      symbol: "TEST",
+      startDate: candles[0].date,
+      endDate: candles[candles.length - 1].date,
+      initialCapital: 100_000,
+      strategyParams: { quantity: 100 },
+    });
+    if (result.closedRoundTrips > 0 && result.netPnL < 0) {
+      assert.ok(result.winRate < 100);
+    }
   });
 });

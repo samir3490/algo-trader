@@ -1,18 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { BarChart3, Loader2, Play } from "lucide-react";
+import { BarChart3, HelpCircle, Loader2, Play } from "lucide-react";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { STRATEGY_DEFINITIONS } from "@/lib/strategies/definitions";
 
+const INITIAL_CAPITAL = 1_000_000;
+
 interface BacktestResult {
+  initialCapital: number;
+  finalCapital: number;
+  netPnL: number;
   totalReturnPct: number;
   winRate: number;
   profitFactor: number;
   maxDrawdownPct: number;
   sharpeRatio: number;
-  finalCapital: number;
   totalTrades: number;
+  closedRoundTrips: number;
+}
+
+function formatProfitFactor(pf: number): string {
+  if (!Number.isFinite(pf) || pf >= 99) return "No losing trades";
+  return pf.toFixed(2);
 }
 
 export default function BacktestPanel() {
@@ -41,7 +51,7 @@ export default function BacktestPanel() {
           strategyId,
           startDate,
           endDate,
-          initialCapital: 1_000_000,
+          initialCapital: INITIAL_CAPITAL,
           slippagePct: 0.05,
         }),
       });
@@ -55,6 +65,8 @@ export default function BacktestPanel() {
     }
   }
 
+  const initial = result?.initialCapital ?? INITIAL_CAPITAL;
+
   return (
     <section className="card">
       <div className="flex items-center gap-3 mb-4">
@@ -64,7 +76,8 @@ export default function BacktestPanel() {
         <div>
           <h2 className="text-lg font-semibold text-text-primary">Backtest</h2>
           <p className="text-xs text-text-secondary">
-            Candle-by-candle simulation with Zerodha-style charges + slippage
+            Simulates trades on historical candles with Zerodha-style charges and
+            slippage. Starting capital: {formatCurrency(INITIAL_CAPITAL)}.
           </p>
         </div>
       </div>
@@ -128,32 +141,84 @@ export default function BacktestPanel() {
         Run Backtest
       </button>
 
-      {error && (
-        <p className="mt-3 text-sm text-loss">{error}</p>
-      )}
+      {error && <p className="mt-3 text-sm text-loss">{error}</p>}
 
       {result && (
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Metric
-            label="Total return"
-            value={formatPercent(result.totalReturnPct)}
-            positive={result.totalReturnPct >= 0}
-          />
-          <Metric label="Win rate" value={`${result.winRate.toFixed(1)}%`} />
-          <Metric label="Profit factor" value={result.profitFactor.toFixed(2)} />
-          <Metric
-            label="Max drawdown"
-            value={formatPercent(-result.maxDrawdownPct)}
-            positive={false}
-          />
-          <Metric label="Sharpe" value={result.sharpeRatio.toFixed(2)} />
-          <Metric
-            label="Final capital"
-            value={formatCurrency(result.finalCapital)}
-          />
-          <p className="sm:col-span-2 lg:col-span-3 text-xs text-text-tertiary">
-            {result.totalTrades} simulated fills (charges included). Past
-            performance is not indicative of future results.
+        <div className="mt-5 space-y-4">
+          <div className="rounded-lg border border-accent/30 bg-accent-muted/50 px-4 py-3">
+            <p className="text-xs text-text-secondary mb-1">Portfolio summary</p>
+            <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+              <span className="text-sm text-text-secondary">
+                Started with{" "}
+                <strong className="text-text-primary">
+                  {formatCurrency(initial)}
+                </strong>
+              </span>
+              <span className="text-sm text-text-secondary">
+                Ended with{" "}
+                <strong
+                  className={cn(
+                    result.netPnL >= 0 ? "text-profit" : "text-loss"
+                  )}
+                >
+                  {formatCurrency(result.finalCapital)}
+                </strong>
+              </span>
+              <span
+                className={cn(
+                  "text-sm font-semibold",
+                  result.netPnL >= 0 ? "text-profit" : "text-loss"
+                )}
+              >
+                Net P&amp;L: {result.netPnL >= 0 ? "+" : ""}
+                {formatCurrency(result.netPnL)} ({formatPercent(result.totalReturnPct)})
+              </span>
+            </div>
+            <p className="text-[11px] text-text-tertiary mt-2">
+              Final capital is cash left after all simulated buys and sells
+              (brokerage, STT, slippage included). It is not a separate subtraction
+              from ₹10L — it is what you would hold at the end of the test period.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Metric
+              label="Total return"
+              value={formatPercent(result.totalReturnPct)}
+              positive={result.totalReturnPct >= 0}
+              hint="(Final − Starting) ÷ Starting. Matches net P&L above."
+            />
+            <Metric
+              label="Win rate"
+              value={`${result.winRate.toFixed(1)}%`}
+              hint={`Share of ${result.closedRoundTrips} completed round-trip(s) that made money after charges.`}
+            />
+            <Metric
+              label="Profit factor"
+              value={formatProfitFactor(result.profitFactor)}
+              hint="Gross profit ÷ gross loss on closed trades. Above 1 means winners outweighed losers."
+            />
+            <Metric
+              label="Max drawdown"
+              value={formatPercent(-result.maxDrawdownPct)}
+              positive={false}
+              hint="Largest peak-to-trough drop in portfolio value during the test."
+            />
+            <Metric
+              label="Sharpe ratio"
+              value={result.sharpeRatio.toFixed(2)}
+              hint="Risk-adjusted return (higher is better). Approximate; uses per-bar equity changes."
+            />
+            <Metric
+              label="Round trips"
+              value={String(result.closedRoundTrips)}
+              hint={`${result.totalTrades} total fills (buy + sell).`}
+            />
+          </div>
+
+          <p className="text-xs text-text-tertiary">
+            Past performance is not indicative of future results. Metrics are from
+            a simplified simulator, not live Zerodha fills.
           </p>
         </div>
       )}
@@ -165,14 +230,29 @@ function Metric({
   label,
   value,
   positive,
+  hint,
 }: {
   label: string;
   value: string;
   positive?: boolean;
+  hint?: string;
 }) {
   return (
     <div className="rounded-lg border border-border bg-bg-primary/50 px-3 py-2">
-      <p className="text-xs text-text-tertiary">{label}</p>
+      <div className="flex items-center gap-1">
+        <p className="text-xs text-text-tertiary">{label}</p>
+        {hint && (
+          <span className="group relative">
+            <HelpCircle className="h-3 w-3 text-text-tertiary cursor-help" />
+            <span
+              className="pointer-events-none absolute left-0 bottom-full z-10 mb-1 hidden w-56 rounded-lg border border-border bg-bg-elevated p-2 text-[10px] leading-snug text-text-secondary shadow-lg group-hover:block"
+              role="tooltip"
+            >
+              {hint}
+            </span>
+          </span>
+        )}
+      </div>
       <p
         className={cn(
           "text-lg font-semibold",
