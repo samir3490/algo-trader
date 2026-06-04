@@ -34,6 +34,8 @@ import {
   type StrategyType,
   type Timeframe,
 } from "@/lib/strategies/definitions";
+import BacktestPanel from "@/components/backtest-panel";
+import AuditLogsPanel from "@/components/audit-logs-panel";
 
 interface ActiveStrategy {
   id: string;
@@ -1081,6 +1083,9 @@ export default function StrategiesPage() {
           </div>
         </div>
       )}
+
+      <BacktestPanel />
+      <AuditLogsPanel />
     </div>
   );
 }

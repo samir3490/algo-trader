@@ -149,3 +149,76 @@ model Watchlist {
   userId String
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
+
+// ── SmartAlgo-aligned market data & backtests (optional when DATABASE_URL set) ──
+
+model SymbolMaster {
+  id              String   @id @default(cuid())
+  exchange        String
+  symbol          String
+  companyName     String?
+  instrumentToken String?
+  lotSize         Int      @default(1)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  @@unique([exchange, symbol])
+}
+
+model Candle {
+  id        String   @id @default(cuid())
+  symbol    String
+  exchange  String   @default("NSE")
+  timeframe String
+  timestamp DateTime
+  open      Decimal  @db.Decimal(12, 4)
+  high      Decimal  @db.Decimal(12, 4)
+  low       Decimal  @db.Decimal(12, 4)
+  close     Decimal  @db.Decimal(12, 4)
+  volume    Decimal  @db.Decimal(18, 2)
+  source    String   @default("yahoo")
+  createdAt DateTime @default(now())
+
+  @@unique([symbol, exchange, timeframe, timestamp], name: "symbol_exchange_timeframe_timestamp")
+  @@index([symbol, timeframe, timestamp])
+}
+
+model BacktestRun {
+  id              String   @id @default(cuid())
+  strategyId      String
+  symbol          String
+  exchange        String   @default("NSE")
+  timeframe       String   @default("Day")
+  startDate       DateTime
+  endDate         DateTime
+  initialCapital  Decimal  @db.Decimal(14, 2)
+  finalCapital    Decimal  @db.Decimal(14, 2)
+  totalReturnPct  Decimal  @db.Decimal(10, 4)
+  winRate         Decimal  @db.Decimal(10, 4)
+  profitFactor    Decimal  @db.Decimal(10, 4)
+  maxDrawdownPct  Decimal  @db.Decimal(10, 4)
+  sharpeRatio     Decimal  @db.Decimal(10, 4)
+  reportJson      Json
+  createdAt       DateTime @default(now())
+}
+
+model SystemLog {
+  id        String   @id @default(cuid())
+  severity  String
+  source    String
+  message   String
+  meta      Json?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model RiskCheck {
+  id         String   @id @default(cuid())
+  symbol     String
+  strategyId String?
+  approved   Boolean
+  reason     String?
+  payload    Json?
+  createdAt  DateTime @default(now())
+}

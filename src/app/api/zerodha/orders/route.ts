@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { KiteConnect } from "kiteconnect";
 import { sendOrderEmail } from "@/lib/email";
 import { getAccountToken, getAccountApiKey } from "@/lib/zerodha/account-token";
+import {
+  assertLiveTradingEnabled,
+  LiveTradingDisabledError,
+} from "@/lib/core/live-trading-guard";
 
 export async function GET(request: NextRequest) {
   const accountId = request.nextUrl.searchParams.get("accountId");
@@ -70,6 +74,15 @@ async function placeOrderViaProxy(
 }
 
 export async function POST(request: NextRequest) {
+  try {
+    assertLiveTradingEnabled();
+  } catch (e) {
+    if (e instanceof LiveTradingDisabledError) {
+      return NextResponse.json({ error: e.message }, { status: 403 });
+    }
+    throw e;
+  }
+
   const body = await request.json();
   const accountId = body.accountId as string | undefined;
   const accessToken = getAccountToken(request, accountId);

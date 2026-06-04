@@ -4,6 +4,11 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
-export const prisma = globalForPrisma.prisma ?? new PrismaClient();
-
-if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+/** Lazy Prisma — returns null when DATABASE_URL is unset (Vercel/Firebase-only deploys). */
+export function getPrisma(): PrismaClient | null {
+  if (!process.env.DATABASE_URL?.trim()) return null;
+  if (!globalForPrisma.prisma) {
+    globalForPrisma.prisma = new PrismaClient();
+  }
+  return globalForPrisma.prisma;
+}
