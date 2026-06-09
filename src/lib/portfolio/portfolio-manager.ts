@@ -16,6 +16,7 @@ import type {
   StrategyConflict,
   StrategyOpinion,
 } from "./types";
+import { resolvePaperOrderQty } from "./paper-position-size";
 
 export interface PortfolioContext {
   state: PaperTradingState;
@@ -30,16 +31,27 @@ function symKey(symbol: string, exchange: string): string {
 
 export function scanSignalToOpinion(
   sig: ScanSignal,
-  strat: ActiveStrategy
+  strat: ActiveStrategy,
+  settings: AppSettings,
+  balance?: number
 ): StrategyOpinion {
+  const action = sig.action as "BUY" | "SELL" | "HOLD";
+  const quantity =
+    action === "BUY"
+      ? resolvePaperOrderQty(sig.price, settings, {
+          strategyParams: strat.params,
+          balance,
+        })
+      : strat.params?.quantity ?? 1;
+
   return {
     strategyId: sig.strategyId,
     strategyName: strat.name,
     symbol: sig.symbol,
     exchange: strat.exchange || "NSE",
-    action: sig.action as "BUY" | "SELL" | "HOLD",
+    action,
     price: sig.price,
-    quantity: strat.params?.quantity ?? 1,
+    quantity,
     reason: sig.reason,
     confidence: sig.confidence ?? 0,
   };

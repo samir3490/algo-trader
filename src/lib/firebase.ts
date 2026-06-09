@@ -202,8 +202,10 @@ export interface AppSettings {
   /** Live Zerodha default product (MIS/CNC/NRML). */
   defaultProduct: string;
   defaultOrderType: string;
-  /** Paper + strategy default quantity when not set on strategy card. */
+  /** Legacy share count — paper strategies use paperOrderNotional instead. */
   defaultQuantity: number;
+  /** Target rupee value per paper BUY (default ₹1,00,000). */
+  paperOrderNotional: number;
   /** Paper simulated product — delivery (CNC) recommended. */
   paperDefaultProduct: "CNC" | "MIS";
   maxOrderValue: number;
@@ -240,8 +242,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultProduct: "CNC",
   defaultOrderType: "MARKET",
   defaultQuantity: 1,
+  paperOrderNotional: 100_000,
   paperDefaultProduct: "CNC",
-  maxOrderValue: 100000,
+  maxOrderValue: 100_000,
   maxDailyLoss: 5000,
   paperStartingBalance: 1000000,
   simulateBrokerage: false,

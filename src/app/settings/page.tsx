@@ -54,7 +54,8 @@ interface AppSettings {
   paperTrading: {
     startingBalance: number;
     simulateBrokerage: boolean;
-    defaultQuantity: number;
+    /** Target rupee value per paper BUY (default ₹1,00,000). */
+    orderNotional: number;
     defaultProductType: "CNC" | "MIS";
   };
   tradingPreferences: {
@@ -90,14 +91,14 @@ const defaultSettings: AppSettings = {
   paperTrading: {
     startingBalance: 1000000,
     simulateBrokerage: true,
-    defaultQuantity: 1,
+    orderNotional: 100_000,
     defaultProductType: "CNC",
   },
   tradingPreferences: {
     defaultExchange: "NSE",
     defaultProductType: "CNC",
     defaultOrderType: "MARKET",
-    maxOrderValue: 500000,
+    maxOrderValue: 500_000,
     maxDailyLoss: 50000,
   },
   notifications: {
@@ -127,7 +128,7 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
     paperTrading: {
       startingBalance: fs.paperStartingBalance,
       simulateBrokerage: fs.simulateBrokerage,
-      defaultQuantity: fs.defaultQuantity ?? 1,
+      orderNotional: fs.paperOrderNotional ?? 100_000,
       defaultProductType: (fs.paperDefaultProduct as "CNC" | "MIS") ?? "CNC",
     },
     tradingPreferences: {
@@ -169,7 +170,7 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     maxDailyLoss: s.tradingPreferences.maxDailyLoss,
     paperStartingBalance: s.paperTrading.startingBalance,
     simulateBrokerage: s.paperTrading.simulateBrokerage,
-    defaultQuantity: s.paperTrading.defaultQuantity,
+    paperOrderNotional: s.paperTrading.orderNotional,
     paperDefaultProduct: s.paperTrading.defaultProductType,
     stopLossPercent: s.riskManagement.stopLossPercent,
     takeProfitPercent: s.riskManagement.takeProfitPercent,
@@ -801,19 +802,23 @@ function SettingsContent() {
             </div>
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Default Quantity (shares)
+                Order size per trade (₹)
               </label>
               <input
                 type="number"
-                min={1}
-                value={settings.paperTrading.defaultQuantity}
+                min={1000}
+                step={1000}
+                value={settings.paperTrading.orderNotional}
                 onChange={(e) =>
                   updateSettings("paperTrading", {
-                    defaultQuantity: Math.max(1, Number(e.target.value) || 1),
+                    orderNotional: Math.max(1000, Number(e.target.value) || 100_000),
                   })
                 }
                 className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
+              <p className="mt-1 text-[10px] text-text-tertiary">
+                Share count is calculated automatically from price (e.g. ₹1L → 10,000 shares @ ₹10).
+              </p>
             </div>
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">

@@ -340,7 +340,12 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     .map((sig) => {
       const strat = running.find((s) => s.id === sig.strategyId);
       if (!strat) return null;
-      return scanSignalToOpinion(sig, strat);
+      return scanSignalToOpinion(
+        sig,
+        strat,
+        userSettings,
+        paperState.balance ?? INITIAL_BALANCE
+      );
     })
     .filter((o): o is NonNullable<typeof o> => o != null);
 

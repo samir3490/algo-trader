@@ -59,6 +59,10 @@ import {
 import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { computePortfolio } from "@/lib/portfolio/compute-portfolio";
+import {
+  paperOrderNotional,
+  resolvePaperOrderQty,
+} from "@/lib/portfolio/paper-position-size";
 import { nowISTDateTimeString } from "@/lib/utils";
 
 type OrderSide = "BUY" | "SELL";
@@ -175,7 +179,6 @@ export default function PaperTradingPage() {
   const [symbol, setSymbol] = useState("");
   const [exchange, setExchange] = useState<Exchange>("NSE");
   const [orderType, setOrderType] = useState<OrderType>("MARKET");
-  const [qty, setQty] = useState("");
   const [limitPrice, setLimitPrice] = useState("");
   const [manualPrice, setManualPrice] = useState("");
 
@@ -264,8 +267,6 @@ export default function PaperTradingPage() {
     setOrderType(
       (cachedSettings.defaultOrderType as OrderType) || "MARKET"
     );
-    setQty(String(cachedSettings.defaultQuantity || 1));
-
     if (!user) return;
     syncFromCloud();
     getSettings()
@@ -274,7 +275,6 @@ export default function PaperTradingPage() {
         saveSettingsToCache(s);
         setExchange((s.defaultExchange as Exchange) || "NSE");
         setOrderType((s.defaultOrderType as OrderType) || "MARKET");
-        if (!qty) setQty(String(s.defaultQuantity || 1));
       })
       .catch(() => {});
   }, [user, syncFromCloud]);
@@ -500,8 +500,26 @@ export default function PaperTradingPage() {
   };
 
   const estimatedPrice = getOrderPrice();
+
+  const selectedHolding = useMemo(
+    () =>
+      holdings.find(
+        (h) =>
+          h.symbol.toUpperCase() === symbol.trim().toUpperCase() &&
+          h.exchange === exchange
+      ),
+    [holdings, symbol, exchange]
+  );
+
+  const buyQty = useMemo(() => {
+    if (!appSettings || !estimatedPrice || estimatedPrice <= 0) return 0;
+    return resolvePaperOrderQty(estimatedPrice, appSettings, { balance });
+  }, [appSettings, estimatedPrice, balance]);
+
+  const orderQty = orderSide === "SELL" ? (selectedHolding?.qty ?? 0) : buyQty;
+
   const estimatedCost = useMemo(() => {
-    const qtyNum = parseInt(qty || "0", 10);
+    const qtyNum = orderQty;
     if (!estimatedPrice || !qtyNum || qtyNum <= 0) return null;
     const turnover = estimatedPrice * qtyNum;
     if (!appSettings?.simulateBrokerage) return turnover;
@@ -515,17 +533,27 @@ export default function PaperTradingPage() {
     return orderSide === "BUY"
       ? cashFlowForTrade("BUY", turnover, charges)
       : turnover - charges.total;
-  }, [estimatedPrice, qty, orderSide, appSettings?.simulateBrokerage, appSettings?.paperDefaultProduct]);
+  }, [
+    estimatedPrice,
+    orderQty,
+    orderSide,
+    appSettings?.simulateBrokerage,
+    appSettings?.paperDefaultProduct,
+  ]);
 
   function handlePlaceOrder() {
     setValidationError("");
-    const qtyNum = parseInt(qty);
+    const qtyNum = orderQty;
     if (!symbol.trim()) {
       setValidationError("Please enter a symbol");
       return;
     }
     if (!qtyNum || qtyNum <= 0) {
-      setValidationError("Please enter a valid quantity");
+      setValidationError(
+        orderSide === "SELL"
+          ? "No holding to sell for this symbol"
+          : "Enter a valid price to calculate order size"
+      );
       return;
     }
 
@@ -642,7 +670,6 @@ export default function PaperTradingPage() {
     }).catch(() => {});
 
     setSymbol("");
-    setQty("");
     setLimitPrice("");
     setManualPrice("");
     setQuote(null);
@@ -684,7 +711,6 @@ export default function PaperTradingPage() {
     setOrderSide("SELL");
     setSymbol(holding.symbol);
     setExchange(holding.exchange);
-    setQty(holding.qty.toString());
     setOrderType("MARKET");
     setManualPrice(holding.ltp.toString());
     setValidationError("");
@@ -763,7 +789,6 @@ export default function PaperTradingPage() {
     setTrades([]);
     setBalance(INITIAL_BALANCE);
     setSymbol("");
-    setQty("");
     setLimitPrice("");
     setManualPrice("");
     setOrderSide("BUY");
@@ -907,7 +932,7 @@ export default function PaperTradingPage() {
             <span className="text-text-tertiary">
               {" "}
               · product {appSettings.paperDefaultProduct}
-              · default qty {appSettings.defaultQuantity}
+              · {formatCurrency(paperOrderNotional(appSettings))} per trade
               {" "}
               <a href="/settings" className="text-accent hover:underline">Settings</a>
             </span>
@@ -1102,26 +1127,38 @@ export default function PaperTradingPage() {
               </div>
             </div>
 
-            {/* Quantity */}
-            <div className="mb-4">
-              <label className="block text-xs text-text-tertiary uppercase tracking-wider mb-1.5">
-                Quantity
-                {appSettings && (
-                  <span className="text-text-tertiary font-normal normal-case ml-1">
-                    (default {appSettings.defaultQuantity})
+            {/* Order size — ₹ notional per trade */}
+            <div className="mb-4 rounded-lg border border-border bg-bg-primary px-3 py-2.5">
+              <p className="text-xs text-text-tertiary uppercase tracking-wider mb-1">
+                Order size
+              </p>
+              {orderSide === "SELL" ? (
+                <p className="text-sm text-text-primary">
+                  <span className="font-semibold">{formatNumber(orderQty)}</span> shares
+                  {selectedHolding ? (
+                    <span className="text-text-tertiary"> (full position)</span>
+                  ) : (
+                    <span className="text-text-tertiary"> — select a held symbol</span>
+                  )}
+                </p>
+              ) : (
+                <p className="text-sm text-text-primary">
+                  <span className="font-semibold">{formatNumber(buyQty || 0)}</span> shares
+                  <span className="text-text-tertiary">
+                    {" "}
+                    ≈ {formatCurrency(paperOrderNotional(appSettings ?? { paperOrderNotional: 100_000, maxOrderValue: 100_000 }))}
+                    {estimatedPrice && estimatedPrice > 0
+                      ? ` @ ${formatCurrency(estimatedPrice)}`
+                      : " (set price to preview)"}
                   </span>
-                )}
-              </label>
-              <input
-                type="number"
-                min={1}
-                placeholder={String(appSettings?.defaultQuantity ?? 1)}
-                value={qty}
-                onChange={(e) => { setQty(e.target.value); setValidationError(""); }}
-                className="w-full px-3 py-2.5 rounded-lg bg-bg-primary border border-border
-                           text-text-primary placeholder:text-text-tertiary text-sm
-                           focus:outline-none focus:border-accent transition-colors"
-              />
+                </p>
+              )}
+              <p className="text-[10px] text-text-tertiary mt-1">
+                Paper trades target a fixed rupee amount per stock — change in{" "}
+                <a href="/settings" className="text-accent hover:underline">
+                  Settings
+                </a>
+              </p>
             </div>
 
             {/* Price field for LIMIT orders */}

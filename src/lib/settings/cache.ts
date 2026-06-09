@@ -22,6 +22,7 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
     paperStartingBalance: pt?.startingBalance as number | undefined,
     simulateBrokerage: pt?.simulateBrokerage as boolean | undefined,
     defaultQuantity: pt?.defaultQuantity as number | undefined,
+    paperOrderNotional: pt?.orderNotional as number | undefined,
     paperDefaultProduct: pt?.defaultProductType as AppSettings["paperDefaultProduct"],
     defaultExchange: tp?.defaultExchange as string | undefined,
     defaultProduct: tp?.defaultProductType as string | undefined,
