@@ -18,6 +18,7 @@ import {
 } from "@/lib/portfolio/portfolio-manager";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import { writeSystemLog } from "@/lib/core/system-log";
+import { nowISTDateTimeString } from "@/lib/utils";
 import {
   canExecuteStrategyTrade,
   lockSymbolForToday,
@@ -541,7 +542,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         const orderId = `strat-${Date.now()}-${decision.symbol}`;
         await db.doc(`users/${userId}/orders/${orderId}`).set({
           id: orderId,
-          time: new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }),
+          time: nowISTDateTimeString(),
           symbol: decision.symbol.toUpperCase(),
           exchange,
           side: decision.action,

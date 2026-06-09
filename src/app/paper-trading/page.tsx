@@ -59,6 +59,7 @@ import {
 import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { computePortfolio } from "@/lib/portfolio/compute-portfolio";
+import { nowISTDateTimeString } from "@/lib/utils";
 
 type OrderSide = "BUY" | "SELL";
 type OrderType = "MARKET" | "LIMIT";
@@ -702,16 +703,7 @@ export default function PaperTradingPage() {
 
     const now = new Date();
     const executedAt = now.toISOString();
-    const timeStr = now.toLocaleString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
+    const timeStr = nowISTDateTimeString(now);
     const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
     const newTrade: Trade = {

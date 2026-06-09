@@ -1,4 +1,5 @@
 import type { OrderRecord, PaperTrade } from "@/lib/firebase";
+import { formatDateTimeIST } from "@/lib/utils";
 
 const IST = "Asia/Kolkata";
 
@@ -36,20 +37,8 @@ export function tradeExecutedAtMs(t: PaperTrade): number {
 
 export function formatTradeDateTime(t: PaperTrade): string {
   const ms = tradeExecutedAtMs(t);
-  if (ms > 0) {
-    return new Date(ms).toLocaleString("en-IN", {
-      timeZone: IST,
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
-  }
-  const date = t.date ?? "";
-  return date ? `${date} ${t.time ?? ""}`.trim() : t.time ?? "—";
+  if (ms > 0) return formatDateTimeIST(ms);
+  return formatDateTimeIST(t.time, t.date);
 }
 
 function exactFingerprint(t: PaperTrade): string {

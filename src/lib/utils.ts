@@ -18,6 +18,76 @@ export function formatNumber(num: number): string {
   return new Intl.NumberFormat("en-IN").format(num);
 }
 
+const IST = "Asia/Kolkata";
+
+export const IST_DATETIME_FORMAT: Intl.DateTimeFormatOptions = {
+  timeZone: IST,
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+};
+
+/** Current date+time in IST for storage and display. */
+export function nowISTDateTimeString(now = new Date()): string {
+  return now.toLocaleString("en-IN", IST_DATETIME_FORMAT);
+}
+
+/** Parse assorted timestamp strings to epoch ms (0 if unknown). */
+export function parseDateTimeMs(
+  value: string | number | Date | null | undefined,
+  fallbackDate?: string
+): number {
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isNaN(ms) ? 0 : ms;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+
+  const str = String(value ?? "").trim();
+  if (!str) return 0;
+
+  const parsed = Date.parse(str);
+  if (!Number.isNaN(parsed)) return parsed;
+
+  if (fallbackDate) {
+    const combined = Date.parse(`${fallbackDate}T${str}`);
+    if (!Number.isNaN(combined)) return combined;
+    const spaced = Date.parse(`${fallbackDate} ${str}`);
+    if (!Number.isNaN(spaced)) return spaced;
+  }
+
+  return 0;
+}
+
+/**
+ * Display date+time in IST. Handles ISO strings, Date objects, and legacy time-only
+ * values when `fallbackDate` (YYYY-MM-DD) is provided.
+ */
+export function formatDateTimeIST(
+  value: string | number | Date | null | undefined,
+  fallbackDate?: string
+): string {
+  const ms = parseDateTimeMs(value, fallbackDate);
+  if (ms > 0) {
+    return new Date(ms).toLocaleString("en-IN", IST_DATETIME_FORMAT);
+  }
+
+  const str = String(value ?? "").trim();
+  if (!str && fallbackDate) return fallbackDate;
+  if (!str) return "—";
+
+  if (/\d{4}|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/i.test(str)) {
+    return str;
+  }
+
+  if (fallbackDate) return `${fallbackDate} ${str}`.trim();
+  return str;
+}
+
 export function formatPercent(value: number): string {
   const sign = value >= 0 ? "+" : "";
   return `${sign}${value.toFixed(2)}%`;

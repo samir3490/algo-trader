@@ -763,7 +763,7 @@ export default function DashboardPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border text-text-tertiary uppercase tracking-wider">
-                    <th className="text-left py-2 px-5 font-medium">Time</th>
+                    <th className="text-left py-2 px-5 font-medium">Date &amp; time</th>
                     <th className="text-left py-2 px-5 font-medium">Symbol</th>
                     <th className="text-left py-2 px-5 font-medium">Strategy</th>
                     <th className="text-left py-2 px-5 font-medium">Side</th>

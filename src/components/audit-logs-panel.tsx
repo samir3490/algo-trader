@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ScrollText, RefreshCw } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, formatDateTimeIST } from "@/lib/utils";
 
 interface LogRow {
   id: string;
@@ -70,7 +70,7 @@ export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border text-text-tertiary text-left">
-              <th className="py-2 pr-3">Time</th>
+              <th className="py-2 pr-3">Date &amp; time</th>
               <th className="py-2 pr-3">Level</th>
               <th className="py-2 pr-3">Source</th>
               <th className="py-2">Message</th>
@@ -80,10 +80,7 @@ export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
             {logs.map((l) => (
               <tr key={l.id} className="border-b border-border/40">
                 <td className="py-2 pr-3 text-text-tertiary whitespace-nowrap">
-                  {new Date(l.timestamp).toLocaleString("en-IN", {
-                    timeZone: "Asia/Kolkata",
-                    hour12: false,
-                  })}
+                  {formatDateTimeIST(l.timestamp)}
                 </td>
                 <td className="py-2 pr-3">
                   <span

@@ -20,7 +20,15 @@ import {
   RefreshCw,
   Wallet,
 } from "lucide-react";
-import { cn, formatCurrency, formatPercent, isMarketOpen, getMarketStatus } from "@/lib/utils";
+import {
+  cn,
+  formatCurrency,
+  formatDateTimeIST,
+  formatPercent,
+  isMarketOpen,
+  getMarketStatus,
+  nowISTDateTimeString,
+} from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getZerodhaAccounts, type ZerodhaAccount } from "@/lib/firebase";
 import { fetchMarketQuote, fetchZerodhaQuoteDepth } from "@/lib/market-data/fetch-quote-client";
@@ -215,15 +223,7 @@ function LiveTradingContent() {
 
   useEffect(() => {
     const updateTime = () => {
-      const now = new Date();
-      const ist = now.toLocaleString("en-IN", {
-        timeZone: "Asia/Kolkata",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-        hour12: true,
-      });
-      setCurrentTime(ist);
+      setCurrentTime(nowISTDateTimeString());
       setMarketOpen(isMarketOpen());
       setMarketStatus(getMarketStatus());
     };
@@ -1032,7 +1032,7 @@ function LiveTradingContent() {
                       )}
                       {quoteLastUpdated && (
                         <span className="text-[10px] text-text-tertiary">
-                          Updated {quoteLastUpdated.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true })}
+                          Updated {formatDateTimeIST(quoteLastUpdated)}
                         </span>
                       )}
                     </div>
@@ -1364,7 +1364,7 @@ function LiveTradingContent() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="text-text-secondary text-xs border-b border-border">
-                              <th className="text-left py-2 px-3 font-medium">Time</th>
+                              <th className="text-left py-2 px-3 font-medium">Date &amp; time</th>
                               <th className="text-left py-2 px-3 font-medium">Symbol</th>
                               <th className="text-left py-2 px-3 font-medium">Type</th>
                               <th className="text-left py-2 px-3 font-medium">Side</th>
@@ -1377,7 +1377,9 @@ function LiveTradingContent() {
                           <tbody>
                             {orders.map((order, i) => (
                               <tr key={i} className="border-b border-border/50 hover:bg-bg-tertiary/30">
-                                <td className="py-2.5 px-3 text-text-secondary font-mono text-xs">{order.time}</td>
+                                <td className="py-2.5 px-3 text-text-secondary font-mono text-xs whitespace-nowrap">
+                                  {formatDateTimeIST(order.time)}
+                                </td>
                                 <td className="py-2.5 px-3 font-medium">{order.symbol}</td>
                                 <td className="py-2.5 px-3 text-text-secondary text-xs">{order.type}</td>
                                 <td className="py-2.5 px-3">

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDateTimeIST, parseDateTimeMs } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getOrders as getFirestoreOrders, getZerodhaAccounts, type OrderRecord, type ZerodhaAccount } from "@/lib/firebase";
 import {
@@ -28,6 +28,7 @@ type TabKey = "all" | "paper" | "live";
 interface Order {
   id: string;
   time: string;
+  date?: string;
   symbol: string;
   exchange: string;
   side: OrderSide;
@@ -54,17 +55,12 @@ const tabs: { key: TabKey; label: string }[] = [
   { key: "live", label: "Live Orders" },
 ];
 
-function formatTime(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
-  return d.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true });
-}
-
 interface PaperTrade {
   id?: string;
   timestamp?: string;
   time?: string;
+  date?: string;
+  executedAt?: string;
   symbol?: string;
   tradingsymbol?: string;
   exchange?: string;
@@ -82,7 +78,8 @@ interface PaperTrade {
 function mapPaperTrade(t: PaperTrade, idx: number): Order {
   return {
     id: t.id || `paper-${idx}`,
-    time: t.timestamp || t.time || "",
+    time: t.executedAt || t.timestamp || t.time || "",
+    date: t.date,
     symbol: t.symbol || t.tradingsymbol || "UNKNOWN",
     exchange: t.exchange || "NSE",
     side: ((t.side || t.transaction_type || "BUY") as OrderSide),
@@ -106,6 +103,7 @@ export default function OrdersPage() {
     return {
       id: o.id,
       time: o.time,
+      date: o.date,
       symbol: o.symbol,
       exchange: o.exchange || "NSE",
       side: o.side as OrderSide,
@@ -181,7 +179,9 @@ export default function OrdersPage() {
       if (!a.time && !b.time) return 0;
       if (!a.time) return 1;
       if (!b.time) return -1;
-      return new Date(b.time).getTime() - new Date(a.time).getTime();
+      return (
+        parseDateTimeMs(b.time, b.date) - parseDateTimeMs(a.time, a.date)
+      );
     });
 
     setOrders(allOrders);
@@ -290,7 +290,7 @@ export default function OrdersPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Time</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Date &amp; time</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Symbol</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Side</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Type</th>
@@ -324,7 +324,7 @@ export default function OrdersPage() {
                 return (
                   <tr key={order.id} className="transition-colors hover:bg-bg-hover/50">
                     <td className="px-4 py-3 text-sm text-text-secondary font-mono">
-                      {formatTime(order.time)}
+                      {formatDateTimeIST(order.time, order.date)}
                     </td>
                     <td className="px-4 py-3">
                       <div>
