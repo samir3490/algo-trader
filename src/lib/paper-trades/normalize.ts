@@ -12,6 +12,7 @@ function normExchange(ex: string): string {
 
 export function isStrategyTrade(t: PaperTrade): boolean {
   return !!(
+    t.ownerStrategyId ||
     t.strategyId ||
     t.strategyName?.trim() ||
     t.id?.startsWith("strat-")

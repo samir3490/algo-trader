@@ -64,17 +64,21 @@ export interface HoldingForPnl {
   ltp: number;
 }
 
-export function strategyDetailKey(name: string, id?: string): string {
-  return id ? `id:${id}` : `name:${name}`;
+/** One performance row per strategy name (not per active instance / symbol). */
+export function strategyGroupKey(name: string): string {
+  return name.trim() || "Unknown";
 }
 
-function matchesStrategy(
-  t: EnrichedPaperTrade,
-  name: string,
-  id?: string
-): boolean {
-  if (id && t.displayStrategyId) return t.displayStrategyId === id;
+export function strategyDetailKey(name: string, _id?: string): string {
+  return `name:${strategyGroupKey(name)}`;
+}
+
+function matchesStrategy(t: EnrichedPaperTrade, name: string): boolean {
   return t.displayStrategyName === name;
+}
+
+function resolveStrategyId(t: PaperTrade): string | undefined {
+  return t.ownerStrategyId ?? t.strategyId;
 }
 
 type Lot = {
@@ -105,7 +109,7 @@ export function enrichTradesWithStrategy(
   for (const t of chronological) {
     const key = positionKey(t.symbol, t.exchange);
     const name = t.strategyName?.trim() || "";
-    const id = t.strategyId;
+    const id = resolveStrategyId(t);
     const auto = isStrategyTrade(t);
     const displayName = name || (auto ? "Auto strategy" : "Manual");
 
@@ -163,7 +167,7 @@ export function enrichTradesWithStrategy(
     return {
       ...t,
       displayStrategyName: name,
-      displayStrategyId: t.strategyId,
+      displayStrategyId: resolveStrategyId(t),
     };
   });
 }
@@ -180,16 +184,11 @@ export function computeStrategyPerformance(
   const lots = new Map<string, Lot[]>();
   const stats = new Map<string, StrategyPerformanceRow>();
 
-  function rowKey(name: string, id?: string): string {
-    return id ? `id:${id}` : `name:${name}`;
-  }
-
-  function getRow(name: string, id?: string): StrategyPerformanceRow {
-    const key = rowKey(name, id);
+  function getRow(name: string): StrategyPerformanceRow {
+    const key = strategyGroupKey(name);
     let row = stats.get(key);
     if (!row) {
       row = {
-        strategyId: id,
         strategyName: name,
         trades: 0,
         buys: 0,
@@ -206,8 +205,7 @@ export function computeStrategyPerformance(
 
   for (const t of chronological) {
     const stratName = t.displayStrategyName;
-    const stratId = t.displayStrategyId;
-    const row = getRow(stratName, stratId);
+    const row = getRow(stratName);
     row.trades += 1;
 
     const key = positionKey(t.symbol, t.exchange);
@@ -219,7 +217,7 @@ export function computeStrategyPerformance(
         qty: t.qty,
         avgPrice: t.price,
         strategyName: stratName,
-        strategyId: stratId,
+        strategyId: t.displayStrategyId,
       });
       lots.set(key, list);
     } else {
@@ -231,7 +229,7 @@ export function computeStrategyPerformance(
         const lot = list[0];
         const take = Math.min(sellQty, lot.qty);
         const pnl = (t.price - lot.avgPrice) * take;
-        const lotRow = getRow(lot.strategyName, lot.strategyId);
+        const lotRow = getRow(lot.strategyName);
         lotRow.realizedPnl += pnl;
         lotRow.closedRounds += 1;
         if (pnl > 0) lotRow.wins += 1;
@@ -267,9 +265,7 @@ export function computeStrategyDetailBundles(
 
   return summaryRows.map((summary) => {
     const stratTrades = enriched
-      .filter((t) =>
-        matchesStrategy(t, summary.strategyName, summary.strategyId)
-      )
+      .filter((t) => matchesStrategy(t, summary.strategyName))
       .sort((a, b) => tradeSortKey(a) - tradeSortKey(b));
 
     const bySymbol = new Map<string, EnrichedPaperTrade[]>();
