@@ -1,5 +1,11 @@
 import type { AppSettings, PaperHolding, PaperTrade } from "@/lib/firebase";
 import { tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
+import {
+  canStrategyExitPosition,
+  canStrategyOpenPosition,
+  getOpenPositions,
+} from "@/lib/portfolio/position-manager";
+import type { PaperPosition } from "@/lib/portfolio/types";
 
 function symKey(symbol: string, exchange: string): string {
   return `${symbol.trim().toUpperCase()}:${(exchange || "NSE").trim().toUpperCase()}`;
@@ -120,8 +126,12 @@ function lastSellTodayWasLoss(
 
 export interface PortfolioGateContext {
   holdings: PaperHolding[];
+  positions?: PaperPosition[];
   trades: PaperTrade[];
   settings: AppSettings;
+  /** Strategy requesting the trade — required for owner exit checks. */
+  ownerStrategyId?: string;
+  multiStrategyMode?: boolean;
   /** Symbols sold in this cron run — block immediate rebuy. */
   soldThisRun: Set<string>;
   /** Symbol → cooldown end (ms). */
@@ -157,12 +167,32 @@ export function canExecuteStrategyTrade(
   ctx: PortfolioGateContext
 ): { allowed: boolean; reason?: string } {
   const key = symKey(symbol, exchange);
+  const stateLike = {
+    balance: 0,
+    holdings: ctx.holdings,
+    positions: ctx.positions,
+    trades: ctx.trades,
+  };
+  const openPositions = getOpenPositions(stateLike, { symbol, exchange });
   const holding = ctx.holdings.find((h) => symKey(h.symbol, h.exchange) === key);
-  const hasPosition = (holding?.qty ?? 0) > 0;
+  const hasPosition =
+    openPositions.length > 0 || (holding?.qty ?? 0) > 0;
+  const ownerId = ctx.ownerStrategyId;
 
   if (action === "SELL") {
     if (!hasPosition) {
       return { allowed: false, reason: "No position to sell" };
+    }
+    if (ownerId && openPositions.length > 0) {
+      const exitCheck = canStrategyExitPosition(
+        stateLike,
+        symbol,
+        exchange,
+        ownerId
+      );
+      if (!exitCheck.allowed) {
+        return { allowed: false, reason: exitCheck.reason };
+      }
     }
     const minHold = ctx.settings.minHoldMinutesBeforeSell ?? 60;
     const lastBuy = lastBuyMs(ctx.trades, symbol, exchange);
@@ -184,7 +214,18 @@ export function canExecuteStrategyTrade(
     return { allowed: false, reason: "Symbol locked for today after sell" };
   }
 
-  if (hasPosition) {
+  if (ownerId && openPositions.length > 0) {
+    const openCheck = canStrategyOpenPosition(
+      stateLike,
+      symbol,
+      exchange,
+      ownerId,
+      ctx.multiStrategyMode
+    );
+    if (!openCheck.allowed) {
+      return { allowed: false, reason: openCheck.reason };
+    }
+  } else if (hasPosition) {
     return { allowed: false, reason: "Already holding — no add-on buy" };
   }
 

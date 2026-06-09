@@ -10,9 +10,14 @@ import {
   applyPaperRiskExits,
   canPlacePaperBuy,
 } from "@/lib/risk/paper-risk-guard";
-import { applyPaperSignal } from "@/lib/strategies/execute-paper";
 import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
-import { consolidateSignalsForExecution } from "@/lib/strategies/consolidate-signals";
+import { ensurePositions } from "@/lib/portfolio/position-manager";
+import {
+  evaluatePortfolioDecisions,
+  scanSignalToOpinion,
+} from "@/lib/portfolio/portfolio-manager";
+import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
+import { writeSystemLog } from "@/lib/core/system-log";
 import {
   canExecuteStrategyTrade,
   lockSymbolForToday,
@@ -31,7 +36,6 @@ import {
   useScanDigestEmail,
 } from "@/lib/email/notify-policy";
 import { fetchYahooQuote } from "@/lib/market-data/yahoo";
-import type { StrategySignal } from "@/types";
 import type { OrderRecord } from "@/lib/firebase";
 import {
   normalizePaperTrades,
@@ -128,12 +132,13 @@ export interface AllUsersRunResult {
 async function loadPaperState(db: Firestore, userId: string): Promise<PaperTradingState> {
   const snap = await db.doc(`users/${userId}/data/paperTrading`).get();
   if (!snap.exists) {
-    return { balance: INITIAL_BALANCE, holdings: [], trades: [] };
+    return { balance: INITIAL_BALANCE, holdings: [], positions: [], trades: [] };
   }
   const data = snap.data()!;
   return {
     balance: data.balance ?? INITIAL_BALANCE,
     holdings: data.holdings ?? [],
+    positions: data.positions ?? [],
     trades: data.trades ?? [],
   };
 }
@@ -168,6 +173,7 @@ async function persistPaperState(
       {
         balance: paperState.balance,
         holdings: paperState.holdings,
+        positions: (paperState.positions ?? []).slice(0, 200),
         trades,
         updatedAt: FieldValue.serverTimestamp(),
       },
@@ -262,11 +268,23 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       void sendOrderEmail(individual).catch(() => {});
     }
   }
-  let paperState = await loadPaperState(db, userId);
+  let paperState = ensurePositions(await loadPaperState(db, userId));
   if (paperState.holdings?.length) {
     paperState = {
       ...paperState,
       holdings: await refreshPaperHoldingsLtp(paperState.holdings),
+    };
+    const ltpMap: Record<string, number> = {};
+    for (const h of paperState.holdings) {
+      ltpMap[symKey(h.symbol, h.exchange)] = h.ltp;
+    }
+    paperState = {
+      ...paperState,
+      positions: (paperState.positions ?? []).map((p) => ({
+        ...p,
+        ltp: ltpMap[symKey(p.symbol, p.exchange)] ?? p.ltp,
+      })),
+      holdings: paperState.holdings,
     };
   }
   const recentOrders = await loadRecentOrders(db, userId);
@@ -317,16 +335,35 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     }
   }
 
-  const signals = consolidateSignalsForExecution(
-    rawSignals,
-    running,
-    paperState.holdings ?? []
-  );
+  const opinions = rawSignals
+    .map((sig) => {
+      const strat = running.find((s) => s.id === sig.strategyId);
+      if (!strat) return null;
+      return scanSignalToOpinion(sig, strat);
+    })
+    .filter((o): o is NonNullable<typeof o> => o != null);
+
+  const { decisions, conflicts } = evaluatePortfolioDecisions(opinions, {
+    state: paperState,
+    settings: userSettings,
+    todayRealizedLoss: todayRealizedLoss(paperState.trades),
+  });
+
+  for (const conflict of conflicts) {
+    writeSystemLog("WARN", "PortfolioManager", conflict.type, {
+      symbol: conflict.symbol,
+      exchange: conflict.exchange,
+      message: conflict.message,
+      buyStrategyIds: conflict.buyStrategyIds,
+      sellStrategyIds: conflict.sellStrategyIds,
+    });
+  }
 
   let tradesExecuted = 0;
   const signalStrategyIds = new Set<string>();
   const gateCtx: PortfolioGateContext = {
     holdings: paperState.holdings ?? [],
+    positions: paperState.positions,
     trades: paperState.trades ?? [],
     settings: userSettings,
     soldThisRun,
@@ -334,68 +371,72 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     symbolsLockedToday,
   };
 
-  for (const sig of signals) {
-    signalStrategyIds.add(sig.strategyId);
-    const key = executionDedupeKey(sig.symbol);
+  const executable = decisions
+    .filter((d) => d.action === "BUY" || d.action === "SELL")
+    .sort((a, b) => (a.action === "SELL" && b.action === "BUY" ? -1 : 0));
+
+  for (const decision of executable) {
+    signalStrategyIds.add(decision.ownerStrategyId);
+    const key = executionDedupeKey(decision.symbol);
     if (dedupe.has(key)) continue;
     if (
-      sig.action === "BUY" &&
-      dedupe.has(executionNoBuyTodayKey(sig.symbol))
+      decision.action === "BUY" &&
+      dedupe.has(executionNoBuyTodayKey(decision.symbol))
     ) {
       continue;
     }
 
-    const strat = running.find((s) => s.id === sig.strategyId);
+    const strat = running.find((s) => s.id === decision.ownerStrategyId);
     if (!strat) continue;
 
-    const exchange = strat.exchange || "NSE";
+    const exchange = decision.exchange || "NSE";
 
-    if (strat.mode === "paper" && (sig.action === "BUY" || sig.action === "SELL")) {
+    if (strat.mode === "paper") {
+      gateCtx.ownerStrategyId = decision.ownerStrategyId;
       const gate = canExecuteStrategyTrade(
-        sig.action as "BUY" | "SELL",
-        sig.symbol,
+        decision.action as "BUY" | "SELL",
+        decision.symbol,
         exchange,
         gateCtx
       );
       if (!gate.allowed) {
-        const qty =
-          strat.params?.quantity ?? userSettings.defaultQuantity ?? 1;
+        const qty = decision.quantity;
         queueEmail(
           "skipped",
           {
-            symbol: sig.symbol,
+            symbol: decision.symbol,
             exchange,
-            side: sig.action as "BUY" | "SELL",
+            side: decision.action as "BUY" | "SELL",
             quantity: qty,
-            price: sig.price,
+            price: decision.price,
             status: `SKIPPED — ${gate.reason}`,
-            strategyName: strat.name,
+            strategyName: decision.ownerStrategyName,
           },
           {
             mode: "PAPER",
-            symbol: sig.symbol,
+            symbol: decision.symbol,
             exchange,
-            side: sig.action as "BUY" | "SELL",
+            side: decision.action as "BUY" | "SELL",
             quantity: qty,
-            price: sig.price,
+            price: decision.price,
             orderType: "MARKET",
             product: userSettings.paperDefaultProduct,
             status: `SKIPPED — ${gate.reason}`,
-            strategyName: strat.name,
+            strategyName: decision.ownerStrategyName,
           }
         );
         dedupe.add(key);
         continue;
       }
 
-      if (sig.action === "BUY") {
-        const qty =
-          strat.params?.quantity ?? userSettings.defaultQuantity ?? 1;
-        const orderValue = qty * sig.price;
+      if (decision.action === "BUY") {
+        const orderValue = decision.quantity * decision.price;
         const buyCheck = canPlacePaperBuy({
           balance: paperState.balance ?? INITIAL_BALANCE,
           orderValue,
-          holdingsCount: (paperState.holdings ?? []).length,
+          holdingsCount: (paperState.positions ?? []).filter(
+            (p) => p.state === "OPEN" || p.state === "PARTIAL_EXIT"
+          ).length,
           settings: userSettings,
           todayRealizedLoss: todayRealizedLoss(paperState.trades),
         });
@@ -403,181 +444,166 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           queueEmail(
             "skipped",
             {
-              symbol: sig.symbol,
+              symbol: decision.symbol,
               exchange,
               side: "BUY",
-              quantity: qty,
-              price: sig.price,
+              quantity: decision.quantity,
+              price: decision.price,
               status: `SKIPPED — ${buyCheck.message}`,
-              strategyName: strat.name,
+              strategyName: decision.ownerStrategyName,
             },
             {
               mode: "PAPER",
-              symbol: sig.symbol,
+              symbol: decision.symbol,
               exchange,
               side: "BUY",
-              quantity: qty,
-              price: sig.price,
+              quantity: decision.quantity,
+              price: decision.price,
               orderType: "MARKET",
               product: userSettings.paperDefaultProduct,
               status: `SKIPPED — ${buyCheck.message}`,
-              strategyName: strat.name,
+              strategyName: decision.ownerStrategyName,
             }
           );
           dedupe.add(key);
           continue;
         }
       }
-      const signal: StrategySignal = {
-        symbol: sig.symbol,
-        action: sig.action as "BUY" | "SELL",
-        price: sig.price,
-        quantity:
-          strat.params?.quantity ?? userSettings.defaultQuantity ?? 1,
-        reason: sig.reason,
-        confidence: sig.confidence,
-        timestamp: new Date(),
-      };
-      const { state, executed, message, executedQty } = applyPaperSignal(
+
+      const { state, executed, message, executedQty } = executePortfolioDecision(
         paperState,
-        signal,
-        exchange,
-        {
-          strategyId: strat.id,
-          strategyName: strat.name,
-          reason: sig.reason,
-        },
+        decision,
         {
           simulateBrokerage: userSettings.simulateBrokerage,
           product: userSettings.paperDefaultProduct,
         }
       );
 
-      const qty =
-        strat.params?.quantity ?? userSettings.defaultQuantity ?? 1;
+      const qty = decision.quantity;
 
       if (executed) {
         const saved = await persistPaperState(db, userId, state, recentOrders);
         if (!saved) {
-          console.error(`Paper trade not saved for ${sig.symbol} ${sig.action}`);
+          console.error(
+            `Paper trade not saved for ${decision.symbol} ${decision.action}`
+          );
           continue;
         }
 
-        paperState = state;
+        paperState = ensurePositions(state);
         gateCtx.holdings = paperState.holdings ?? [];
+        gateCtx.positions = paperState.positions;
         gateCtx.trades = paperState.trades ?? [];
         dedupe.add(key);
         tradesExecuted += 1;
 
         const tradeQty = executedQty ?? qty;
-        const sk = symKey(sig.symbol, exchange);
-        if (sig.action === "SELL") {
+        const sk = symKey(decision.symbol, exchange);
+        if (decision.action === "SELL") {
           soldThisRun.add(sk);
           const cooldownMs =
             (userSettings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
           symbolCooldownUntil[sk] = Date.now() + cooldownMs;
           symbolsLockedToday = lockSymbolForToday(
             symbolsLockedToday,
-            sig.symbol,
+            decision.symbol,
             exchange
           );
           gateCtx.symbolsLockedToday = symbolsLockedToday;
-          dedupe.add(executionNoBuyTodayKey(sig.symbol));
+          dedupe.add(executionNoBuyTodayKey(decision.symbol));
         }
 
         queueEmail(
           "executed",
           {
-            symbol: sig.symbol,
+            symbol: decision.symbol,
             exchange,
-            side: sig.action as "BUY" | "SELL",
+            side: decision.action as "BUY" | "SELL",
             quantity: tradeQty,
-            price: sig.price,
+            price: decision.price,
             status: "EXECUTED",
-            strategyName: strat.name,
+            strategyName: decision.ownerStrategyName,
           },
           {
             mode: "PAPER",
-            symbol: sig.symbol,
+            symbol: decision.symbol,
             exchange,
-            side: sig.action as "BUY" | "SELL",
+            side: decision.action as "BUY" | "SELL",
             quantity: tradeQty,
-            price: sig.price,
+            price: decision.price,
             orderType: "MARKET",
             product: userSettings.paperDefaultProduct,
             status: "EXECUTED",
-            strategyName: strat.name,
+            strategyName: decision.ownerStrategyName,
           }
         );
 
-        const orderId = `strat-${Date.now()}-${sig.symbol}`;
+        const orderId = `strat-${Date.now()}-${decision.symbol}`;
         await db.doc(`users/${userId}/orders/${orderId}`).set({
           id: orderId,
           time: new Date().toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata" }),
-          symbol: sig.symbol.toUpperCase(),
+          symbol: decision.symbol.toUpperCase(),
           exchange,
-          side: sig.action,
+          side: decision.action,
           qty: tradeQty,
-          price: sig.price,
+          price: decision.price,
           orderType: "MARKET",
           product: userSettings.paperDefaultProduct,
           mode: "PAPER",
           status: "EXECUTED",
           date: todayKeyIST(),
-          reason: sig.reason,
-          strategyId: strat.id,
-          strategyName: strat.name,
+          reason: decision.signalReason,
+          strategyId: decision.ownerStrategyId,
+          strategyName: decision.ownerStrategyName,
           createdAt: FieldValue.serverTimestamp(),
         });
       } else if (message) {
         queueEmail(
           "skipped",
           {
-            symbol: sig.symbol,
+            symbol: decision.symbol,
             exchange,
-            side: sig.action as "BUY" | "SELL",
+            side: decision.action as "BUY" | "SELL",
             quantity: qty,
-            price: sig.price,
+            price: decision.price,
             status: `SKIPPED — ${message}`,
-            strategyName: strat.name,
+            strategyName: decision.ownerStrategyName,
           },
           {
             mode: "PAPER",
-            symbol: sig.symbol,
+            symbol: decision.symbol,
             exchange,
-            side: sig.action as "BUY" | "SELL",
+            side: decision.action as "BUY" | "SELL",
             quantity: qty,
-            price: sig.price,
+            price: decision.price,
             orderType: "MARKET",
             product: userSettings.paperDefaultProduct,
             status: `SKIPPED — ${message}`,
-            strategyName: strat.name,
+            strategyName: decision.ownerStrategyName,
           }
         );
         dedupe.add(key);
       }
-    } else if (strat.mode === "live" && (sig.action === "BUY" || sig.action === "SELL")) {
+    } else if (strat.mode === "live") {
       dedupe.add(key);
       queueEmail(
         "live_signal",
         {
-          symbol: sig.symbol,
+          symbol: decision.symbol,
           exchange: strat.exchange || "NSE",
-          side: sig.action as "BUY" | "SELL",
-          quantity:
-            strat.params?.quantity ?? userSettings.defaultQuantity ?? 1,
-          price: sig.price,
+          side: decision.action as "BUY" | "SELL",
+          quantity: decision.quantity,
+          price: decision.price,
           status: "LIVE SIGNAL (manual)",
           strategyName: strat.name,
         },
         {
           mode: "LIVE",
-          symbol: sig.symbol,
+          symbol: decision.symbol,
           exchange: strat.exchange || "NSE",
-          side: sig.action as "BUY" | "SELL",
-          quantity:
-            strat.params?.quantity ?? userSettings.defaultQuantity ?? 1,
-          price: sig.price,
+          side: decision.action as "BUY" | "SELL",
+          quantity: decision.quantity,
+          price: decision.price,
           orderType: "MARKET",
           product: userSettings.defaultProduct || "MIS",
           status: `SIGNAL — place manually in Live Trading`,
@@ -585,6 +611,15 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         }
       );
     }
+  }
+
+  for (const decision of decisions.filter((d) => d.action === "SKIP")) {
+    signalStrategyIds.add(decision.ownerStrategyId);
+    writeSystemLog("INFO", "PortfolioManager", "Signal skipped", {
+      symbol: decision.symbol,
+      strategy: decision.ownerStrategyName,
+      reason: decision.skipReason,
+    });
   }
 
   if (digestMode && digestLines.length > 0) {
@@ -606,7 +641,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         ...s,
         signals: (s.signals ?? 0) + 1,
         lastRunAt: now,
-        lastSignalReason: signals.find((x) => x.strategyId === s.id)?.reason,
+        lastSignalReason: rawSignals.find((x) => x.strategyId === s.id)?.reason,
       };
     }
     if (s.status === "running") {

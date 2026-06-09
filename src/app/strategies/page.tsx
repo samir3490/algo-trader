@@ -39,6 +39,7 @@ import {
 } from "@/lib/strategies/definitions";
 import BacktestPanel from "@/components/backtest-panel";
 import AuditLogsPanel from "@/components/audit-logs-panel";
+import TradeAuditPanel from "@/components/trade-audit-panel";
 import StrategiesSectionNav, {
   strategiesSectionFromParam,
   type StrategiesSection,
@@ -661,6 +662,7 @@ function StrategiesPageContent() {
 
       {pageSection === "audit" && (
         <div className="space-y-4">
+          <TradeAuditPanel />
           <AuditLogsPanel tall />
         </div>
       )}

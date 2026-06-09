@@ -42,9 +42,20 @@ function getUserId(): string {
 
 // ==================== PAPER TRADING ====================
 
+export type {
+  ExitReason,
+  PaperPosition,
+  PositionState,
+} from "@/lib/portfolio/types";
+
+import type { ExitReason, PaperPosition } from "@/lib/portfolio/types";
+
 export interface PaperTradingState {
   balance: number;
+  /** Aggregated view — synced from open positions. */
   holdings: PaperHolding[];
+  /** Authoritative owned positions (one owner per symbol by default). */
+  positions?: PaperPosition[];
   trades: PaperTrade[];
   updatedAt?: any;
 }
@@ -55,6 +66,8 @@ export interface PaperHolding {
   qty: number;
   avgPrice: number;
   ltp: number;
+  ownerStrategyId?: string;
+  ownerStrategyName?: string;
 }
 
 export interface PaperTrade {
@@ -69,6 +82,7 @@ export interface PaperTrade {
   price: number;
   date?: string;
   strategyId?: string;
+  ownerStrategyId?: string;
   strategyName?: string;
   reason?: string;
   product?: string;
@@ -78,6 +92,11 @@ export interface PaperTrade {
   gst?: number;
   netPnl?: number;
   grossAmount?: number;
+  entryTime?: string;
+  entryPrice?: number;
+  exitTime?: string;
+  exitPrice?: number;
+  exitReason?: ExitReason;
 }
 
 const INITIAL_BALANCE = 1000000;
@@ -100,6 +119,7 @@ export async function getPaperTradingState(): Promise<
       return {
         balance: data.balance ?? INITIAL_BALANCE,
         holdings: data.holdings ?? [],
+        positions: data.positions ?? [],
         trades: data.trades ?? [],
         cloudUpdatedAtMs,
       };
@@ -107,7 +127,7 @@ export async function getPaperTradingState(): Promise<
   } catch (e) {
     console.error("Error loading paper trading state:", e);
   }
-  return { balance: INITIAL_BALANCE, holdings: [], trades: [] };
+  return { balance: INITIAL_BALANCE, holdings: [], positions: [], trades: [] };
 }
 
 export async function savePaperTradingState(state: PaperTradingState): Promise<void> {
@@ -116,6 +136,7 @@ export async function savePaperTradingState(state: PaperTradingState): Promise<v
     await setDoc(ref, {
       balance: state.balance,
       holdings: state.holdings,
+      positions: (state.positions ?? []).slice(0, 200),
       trades: state.trades.slice(0, 500),
       updatedAt: serverTimestamp(),
     });
@@ -130,6 +151,7 @@ export async function resetPaperTrading(): Promise<void> {
     await setDoc(ref, {
       balance: INITIAL_BALANCE,
       holdings: [],
+      positions: [],
       trades: [],
       updatedAt: serverTimestamp(),
     });

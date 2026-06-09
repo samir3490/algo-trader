@@ -1,5 +1,11 @@
 import type { AppSettings, PaperHolding, PaperTrade, PaperTradingState } from "@/lib/firebase";
 import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
+import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
+import {
+  ensurePositions,
+  getOpenPositions,
+} from "@/lib/portfolio/position-manager";
+import { mapRiskExitToReason } from "@/lib/portfolio/types";
 import {
   cashFlowForTrade,
   computeZerodhaCharges,
@@ -239,41 +245,88 @@ export function applyPaperRiskExits(
   settings: AppSettings,
   now = new Date()
 ): { state: PaperTradingState; exits: RiskExitSignal[] } {
-  let current = state;
+  let current = ensurePositions(state);
   const exits: RiskExitSignal[] = [];
+  const open = getOpenPositions(current);
 
-  for (const signal of scanPaperHoldingsForRiskExits(
-    current.holdings ?? [],
-    settings,
-    now
-  )) {
-    const holding = (current.holdings ?? []).find(
-      (h) =>
-        h.symbol.trim().toUpperCase() === signal.symbol.trim().toUpperCase() &&
-        (h.exchange || "NSE").trim().toUpperCase() ===
-          (signal.exchange || "NSE").trim().toUpperCase()
-    );
-    if (!holding) continue;
+  for (const position of open) {
+    const holdingLike: PaperHoldingLike = {
+      symbol: position.symbol,
+      exchange: position.exchange,
+      qty: position.quantity,
+      avgPrice: position.entryPrice,
+      ltp: position.ltp,
+    };
+    const signal = evaluateHoldingRiskExit(holdingLike, settings, now);
+    if (!signal) continue;
 
-    const result = paperSellHolding(
+    const exitReason = mapRiskExitToReason(signal.reason);
+    const price = position.ltp > 0 ? position.ltp : position.entryPrice;
+    const result = executePortfolioDecision(
       current,
-      holding,
       {
-        reason: signal.message,
-        product: settings.paperDefaultProduct,
+        action: "SELL",
+        symbol: position.symbol,
+        exchange: position.exchange,
+        ownerStrategyId: position.ownerStrategyId,
+        ownerStrategyName: position.ownerStrategyName ?? "Risk guard",
+        price,
+        quantity: position.quantity,
+        signalReason: signal.message,
+        exitReason:
+          signal.reason === "mis_square_off" ? "MIS_SQUARE_OFF" : exitReason,
+        positionId: position.id,
       },
       {
         simulateBrokerage: settings.simulateBrokerage,
         product: settings.paperDefaultProduct,
       }
     );
-    if (result) {
+
+    if (result.executed && result.trade) {
       current = result.state;
       exits.push({
         ...signal,
         qty: result.trade.qty,
         price: result.trade.price,
       });
+    }
+  }
+
+  if (open.length === 0) {
+    for (const signal of scanPaperHoldingsForRiskExits(
+      current.holdings ?? [],
+      settings,
+      now
+    )) {
+      const holding = (current.holdings ?? []).find(
+        (h) =>
+          h.symbol.trim().toUpperCase() === signal.symbol.trim().toUpperCase() &&
+          (h.exchange || "NSE").trim().toUpperCase() ===
+            (signal.exchange || "NSE").trim().toUpperCase()
+      );
+      if (!holding) continue;
+
+      const result = paperSellHolding(
+        current,
+        holding,
+        {
+          reason: signal.message,
+          product: settings.paperDefaultProduct,
+        },
+        {
+          simulateBrokerage: settings.simulateBrokerage,
+          product: settings.paperDefaultProduct,
+        }
+      );
+      if (result) {
+        current = result.state;
+        exits.push({
+          ...signal,
+          qty: result.trade.qty,
+          price: result.trade.price,
+        });
+      }
     }
   }
 

@@ -36,8 +36,13 @@ import {
   applyPaperRiskExits,
   canPlacePaperBuy,
 } from "@/lib/risk/paper-risk-guard";
-import { applyPaperSignal } from "@/lib/strategies/execute-paper";
 import { canExecuteStrategyTrade } from "@/lib/strategies/portfolio-gate";
+import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
+import {
+  ensurePositions,
+  getOwnerPosition,
+} from "@/lib/portfolio/position-manager";
+import { OWNER_MANUAL } from "@/lib/portfolio/types";
 import {
   computeZerodhaCharges,
   cashFlowForTrade,
@@ -537,17 +542,25 @@ export default function PaperTradingPage() {
 
     const sym = symbol.toUpperCase().trim();
 
+    const paperBase = ensurePositions({
+      balance,
+      holdings: holdings.map((h) => ({
+        symbol: h.symbol,
+        exchange: h.exchange,
+        qty: h.qty,
+        avgPrice: h.avgPrice,
+        ltp: h.ltp,
+      })),
+      trades: trades as PaperTrade[],
+    });
+
     if (appSettings) {
       const gate = canExecuteStrategyTrade(orderSide, sym, exchange, {
-        holdings: holdings.map((h) => ({
-          symbol: h.symbol,
-          exchange: h.exchange,
-          qty: h.qty,
-          avgPrice: h.avgPrice,
-          ltp: h.ltp,
-        })),
+        holdings: paperBase.holdings ?? [],
+        positions: paperBase.positions,
         trades: trades as PaperTrade[],
         settings: appSettings,
+        ownerStrategyId: OWNER_MANUAL,
         soldThisRun: new Set(),
       });
       if (!gate.allowed) {
@@ -571,19 +584,25 @@ export default function PaperTradingPage() {
       }
     }
 
-    const { state, executed, message } = applyPaperSignal(
-      { balance, holdings, trades: trades as PaperTrade[] },
+    const manualPosition =
+      orderSide === "SELL"
+        ? getOwnerPosition(paperBase, sym, exchange, OWNER_MANUAL)
+        : undefined;
+
+    const { state, executed, message } = executePortfolioDecision(
+      paperBase,
       {
-        symbol: sym,
         action: orderSide,
+        symbol: sym,
+        exchange,
+        ownerStrategyId: OWNER_MANUAL,
+        ownerStrategyName: "Manual",
         price,
         quantity: qtyNum,
-        reason: "Manual order",
-        confidence: 1,
-        timestamp: new Date(),
+        signalReason: "Manual order",
+        exitReason: orderSide === "SELL" ? "MANUAL_EXIT" : undefined,
+        positionId: manualPosition?.id,
       },
-      exchange,
-      { strategyName: "Manual" },
       {
         simulateBrokerage: appSettings?.simulateBrokerage,
         product: appSettings?.paperDefaultProduct ?? "CNC",
@@ -617,6 +636,7 @@ export default function PaperTradingPage() {
     savePaperTradingState({
       balance: state.balance,
       holdings: state.holdings,
+      positions: state.positions,
       trades: merged,
     }).catch(() => {});
 
