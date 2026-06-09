@@ -797,7 +797,9 @@ export default function PaperTradingPage() {
     setValidationError("");
     try {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem("paperTrades");
     } catch {}
+    setOrderHistory([]);
     resetPaperTrading().catch(() => {});
   }
 

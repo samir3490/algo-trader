@@ -33,6 +33,7 @@ import {
   getZerodhaAccounts,
   saveZerodhaAccount,
   removeZerodhaAccount,
+  resetPaperTrading,
   updateZerodhaAccountLabel,
   type ZerodhaAccount,
 } from "@/lib/firebase";
@@ -441,12 +442,16 @@ function SettingsContent() {
     }
   }
 
-  function resetPaperPortfolio() {
-    localStorage.removeItem("paper_portfolio");
-    localStorage.removeItem("paper_orders");
-    localStorage.removeItem("paper_positions");
-    setResetConfirm(false);
-    setToast("Paper portfolio has been reset.");
+  async function resetPaperPortfolio() {
+    try {
+      await resetPaperTrading();
+      localStorage.removeItem("paper_trading_state");
+      localStorage.removeItem("paperTrades");
+      setResetConfirm(false);
+      setToast("Paper portfolio and order history have been reset.");
+    } catch {
+      setToast("Reset failed — please try again.");
+    }
   }
 
   function updateSettings<K extends keyof AppSettings>(
@@ -875,7 +880,7 @@ function SettingsContent() {
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 text-sm text-warning">
                   <AlertTriangle className="h-4 w-4" />
-                  This will delete all paper trades. Are you sure?
+                  This will delete all paper trades and orders. Are you sure?
                 </div>
                 <button
                   onClick={resetPaperPortfolio}

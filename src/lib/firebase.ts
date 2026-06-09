@@ -145,8 +145,26 @@ export async function savePaperTradingState(state: PaperTradingState): Promise<v
   }
 }
 
+/** Remove paper order history from Firestore (Orders page reads this collection). */
+export async function clearPaperOrders(): Promise<void> {
+  try {
+    const ref = collection(db, "users", getUserId(), "orders");
+    const snap = await getDocs(query(ref, limit(500)));
+    const deletes = snap.docs
+      .filter((d) => {
+        const mode = d.data().mode as string | undefined;
+        return !mode || mode === "PAPER";
+      })
+      .map((d) => deleteDoc(d.ref));
+    await Promise.all(deletes);
+  } catch (e) {
+    console.error("Error clearing paper orders:", e);
+  }
+}
+
 export async function resetPaperTrading(): Promise<void> {
   try {
+    await clearPaperOrders();
     const ref = doc(db, "users", getUserId(), "data", "paperTrading");
     await setDoc(ref, {
       balance: INITIAL_BALANCE,
