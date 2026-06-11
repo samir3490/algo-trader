@@ -162,9 +162,48 @@ export async function clearPaperOrders(): Promise<void> {
   }
 }
 
+export interface StrategyRunnerMeta {
+  lastRunAt?: string;
+  lastScanSummary?: {
+    ranAt: string;
+    scanned: number;
+    signalsFound: number;
+    tradesExecuted: number;
+  };
+}
+
+export async function getStrategyRunnerMeta(): Promise<StrategyRunnerMeta> {
+  try {
+    const ref = doc(db, "users", getUserId(), "data", "strategyRunner");
+    const snap = await getDoc(ref);
+    if (snap.exists()) return snap.data() as StrategyRunnerMeta;
+  } catch (e) {
+    console.error("Error loading strategy runner meta:", e);
+  }
+  return {};
+}
+
+export async function clearStrategyRunnerState(): Promise<void> {
+  try {
+    const ref = doc(db, "users", getUserId(), "data", "strategyRunner");
+    await setDoc(ref, {
+      dedupeKeys: [],
+      emailDedupeKeys: [],
+      symbolCooldownUntil: {},
+      symbolsLockedToday: {},
+      lastRunAt: null,
+      lastScanSummary: null,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (e) {
+    console.error("Error clearing strategy runner state:", e);
+  }
+}
+
 export async function resetPaperTrading(): Promise<void> {
   try {
     await clearPaperOrders();
+    await clearStrategyRunnerState();
     const ref = doc(db, "users", getUserId(), "data", "paperTrading");
     await setDoc(ref, {
       balance: INITIAL_BALANCE,

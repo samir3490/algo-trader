@@ -56,17 +56,23 @@ export function detectStrategyConflicts(
   return conflicts;
 }
 
+/**
+ * When flat on a symbol, opposing SELL signals cannot execute anyway — allow BUY.
+ * When a position is open, block both sides to avoid wash trades.
+ */
 export function opinionsBlockedByConflict(
   opinions: StrategyOpinion[],
-  conflicts: StrategyConflict[]
+  conflicts: StrategyConflict[],
+  hasOpenPosition?: (symbol: string, exchange: string) => boolean
 ): Set<string> {
   const blocked = new Set<string>();
   for (const c of conflicts) {
     const key = symKey(c.symbol, c.exchange);
+    const hasPos = hasOpenPosition?.(c.symbol, c.exchange) ?? false;
     for (const o of opinions) {
-      if (symKey(o.symbol, o.exchange) === key && o.action !== "HOLD") {
-        blocked.add(`${o.strategyId}:${key}:${o.action}`);
-      }
+      if (symKey(o.symbol, o.exchange) !== key || o.action === "HOLD") continue;
+      if (!hasPos && o.action === "BUY") continue;
+      blocked.add(`${o.strategyId}:${key}:${o.action}`);
     }
   }
   return blocked;

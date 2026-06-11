@@ -68,7 +68,9 @@ export function evaluatePortfolioDecisions(
   conflicts: StrategyConflict[];
 } {
   const conflicts = detectStrategyConflicts(opinions);
-  const blocked = opinionsBlockedByConflict(opinions, conflicts);
+  const blocked = opinionsBlockedByConflict(opinions, conflicts, (symbol, exchange) =>
+    hasOpenPositionForSymbol(ctx.state, symbol, exchange)
+  );
   const decisions: PortfolioDecision[] = [];
   const multi = ctx.multiStrategyMode === true;
 

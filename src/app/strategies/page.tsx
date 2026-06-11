@@ -25,8 +25,10 @@ import { useAuth } from "@/lib/auth-context";
 import { NSE_INSTRUMENTS } from "@/lib/instruments";
 import {
   getActiveStrategies as getFirestoreStrategies,
+  getStrategyRunnerMeta,
   saveActiveStrategies as saveFirestoreStrategies,
   type ActiveStrategy as FirestoreStrategy,
+  type StrategyRunnerMeta,
 } from "@/lib/firebase";
 import {
   STRATEGY_DEFINITIONS,
@@ -347,6 +349,10 @@ function StrategiesPageContent() {
     getDefaultParams(STRATEGY_DEFINITIONS[0])
   );
   const [lastRunnerAt, setLastRunnerAt] = useState<string | null>(null);
+  const [lastScanSummary, setLastScanSummary] = useState<
+    StrategyRunnerMeta["lastScanSummary"] | null
+  >(null);
+  const [scanFeedback, setScanFeedback] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
 
   // Load persisted strategies on mount (avoid persisting empty state before hydration)
@@ -528,11 +534,21 @@ function StrategiesPageContent() {
   const pausedCount = activeStrategies.filter((s) => s.status === "paused").length;
 
   useEffect(() => {
-    const stored = localStorage.getItem("strategy_runner_last_run");
-    if (stored) setLastRunnerAt(stored);
+    async function loadRunnerMeta() {
+      const meta = await getStrategyRunnerMeta();
+      if (meta.lastRunAt) {
+        setLastRunnerAt(meta.lastRunAt);
+        localStorage.setItem("strategy_runner_last_run", meta.lastRunAt);
+      } else {
+        const stored = localStorage.getItem("strategy_runner_last_run");
+        if (stored) setLastRunnerAt(stored);
+      }
+      if (meta.lastScanSummary) setLastScanSummary(meta.lastScanSummary);
+    }
+    void loadRunnerMeta();
+
     const onUpdate = () => {
-      const s = localStorage.getItem("strategy_runner_last_run");
-      if (s) setLastRunnerAt(s);
+      void loadRunnerMeta();
       getFirestoreStrategies().then((fs) => {
         setActiveStrategies(firestoreToLocal(fs));
       });
@@ -543,6 +559,7 @@ function StrategiesPageContent() {
 
   const handleRunScanNow = async () => {
     setIsScanning(true);
+    setScanFeedback(null);
     try {
       const { getAuth } = await import("firebase/auth");
       const { app } = await import("@/lib/firebase");
@@ -550,27 +567,41 @@ function StrategiesPageContent() {
       const token = await auth.currentUser?.getIdToken();
       if (!token) {
         window.dispatchEvent(new CustomEvent("strategy-runner-force"));
+        return;
+      }
+
+      const res = await fetch("/api/strategies/execute", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok && data.ok !== false) {
+        const now = (data.ranAt as string) ?? new Date().toISOString();
+        localStorage.setItem("strategy_runner_last_run", now);
+        setLastRunnerAt(now);
+        const summary = {
+          ranAt: now,
+          scanned: Number(data.scanned ?? 0),
+          signalsFound: Number(data.signalsFound ?? 0),
+          tradesExecuted: Number(data.tradesExecuted ?? 0),
+        };
+        setLastScanSummary(summary);
+        setScanFeedback(
+          `Scan complete: ${summary.signalsFound} signal${summary.signalsFound !== 1 ? "s" : ""}, ${summary.tradesExecuted} trade${summary.tradesExecuted !== 1 ? "s" : ""} placed.`
+        );
+        window.dispatchEvent(new CustomEvent("strategies-updated"));
+        window.dispatchEvent(new CustomEvent("paper-trading-updated"));
+        getFirestoreStrategies().then((fs) => setActiveStrategies(firestoreToLocal(fs)));
       } else {
-        const res = await fetch("/api/strategies/execute", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (res.ok) {
-          const s = localStorage.getItem("strategy_runner_last_run");
-          if (!s) localStorage.setItem("strategy_runner_last_run", new Date().toISOString());
-          setLastRunnerAt(new Date().toISOString());
-          window.dispatchEvent(new CustomEvent("strategies-updated"));
-          window.dispatchEvent(new CustomEvent("paper-trading-updated"));
-        } else {
-          window.dispatchEvent(new CustomEvent("strategy-runner-force"));
-        }
+        const msg =
+          (data.error as string) ??
+          "Scan failed — check Audit logs or server configuration.";
+        setScanFeedback(msg);
+        window.dispatchEvent(new CustomEvent("strategy-runner-force"));
       }
     } finally {
-      setTimeout(() => {
-        setIsScanning(false);
-        const s = localStorage.getItem("strategy_runner_last_run");
-        if (s) setLastRunnerAt(s);
-      }, 2000);
+      setIsScanning(false);
     }
   };
 
@@ -730,8 +761,29 @@ function StrategiesPageContent() {
               </li>
               {lastRunnerAt && (
                 <li className="text-emerald-400/90 pt-1">
-                  Last scan: {new Date(lastRunnerAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })} IST
+                  Last scan:{" "}
+                  {new Date(lastRunnerAt).toLocaleString("en-IN", {
+                    timeZone: "Asia/Kolkata",
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })}{" "}
+                  IST
+                  {lastScanSummary && (
+                    <span className="text-text-tertiary">
+                      {" "}
+                      · {lastScanSummary.signalsFound} signals,{" "}
+                      {lastScanSummary.tradesExecuted} trades
+                    </span>
+                  )}
                 </li>
+              )}
+              {scanFeedback && (
+                <li className="text-text-secondary pt-1">{scanFeedback}</li>
               )}
             </ul>
           </div>
@@ -756,10 +808,10 @@ function StrategiesPageContent() {
           <div className="rounded-xl border border-border bg-bg-secondary p-4">
             <div className="flex items-center gap-2 mb-2">
               <Signal className="h-4 w-4 text-purple-400" />
-              <span className="text-xs text-text-secondary uppercase tracking-wider">Total Signals</span>
+              <span className="text-xs text-text-secondary uppercase tracking-wider">Lifetime signals</span>
             </div>
             <p className="text-xl font-bold text-text-primary">{totalSignals}</p>
-            <p className="text-xs text-text-tertiary mt-1">Across all strategies</p>
+            <p className="text-xs text-text-tertiary mt-1">Cumulative since strategies started</p>
           </div>
           <div className="rounded-xl border border-border bg-bg-secondary p-4">
             <div className="flex items-center gap-2 mb-2">

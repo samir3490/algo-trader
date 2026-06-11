@@ -1,6 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { detectStrategyConflicts } from "./conflict-detector";
+import {
+  detectStrategyConflicts,
+  opinionsBlockedByConflict,
+} from "./conflict-detector";
 import type { StrategyOpinion } from "./types";
 
 describe("conflict-detector", () => {
@@ -61,5 +64,36 @@ describe("conflict-detector", () => {
       },
     ];
     assert.equal(detectStrategyConflicts(opinions).length, 0);
+  });
+
+  it("allows BUY when flat despite opposing SELL conflict", () => {
+    const opinions: StrategyOpinion[] = [
+      {
+        strategyId: "a",
+        strategyName: "A",
+        symbol: "RELIANCE",
+        exchange: "NSE",
+        action: "BUY",
+        price: 100,
+        quantity: 10,
+        reason: "buy",
+        confidence: 1,
+      },
+      {
+        strategyId: "b",
+        strategyName: "B",
+        symbol: "RELIANCE",
+        exchange: "NSE",
+        action: "SELL",
+        price: 90,
+        quantity: 10,
+        reason: "sell",
+        confidence: 1,
+      },
+    ];
+    const conflicts = detectStrategyConflicts(opinions);
+    const blocked = opinionsBlockedByConflict(opinions, conflicts, () => false);
+    assert.equal(blocked.has("a:RELIANCE:NSE:BUY"), false);
+    assert.equal(blocked.has("b:RELIANCE:NSE:SELL"), true);
   });
 });

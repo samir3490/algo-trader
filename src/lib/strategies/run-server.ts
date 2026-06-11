@@ -668,6 +668,12 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       symbolCooldownUntil,
       symbolsLockedToday,
       lastRunAt: now,
+      lastScanSummary: {
+        ranAt: now,
+        scanned,
+        signalsFound: rawSignals.length,
+        tradesExecuted,
+      },
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }
