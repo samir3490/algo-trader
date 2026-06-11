@@ -49,16 +49,19 @@ export async function GET(request: NextRequest) {
   }
 
   if (!isMarketOpen()) {
+    const ranAt = new Date().toISOString();
     return NextResponse.json({
       ok: true,
       skipped: true,
       reason: "Market closed (IST)",
-      ranAt: new Date().toISOString(),
+      ranAt,
+      invokedBy: "cron",
+      schedule: "Every 15 min, Mon–Fri 9:15–15:30 IST",
     });
   }
 
   try {
-    const result = await runStrategiesForAllUsers();
+    const result = await runStrategiesForAllUsers({ invokedBy: "cron" });
     return NextResponse.json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Cron run failed";

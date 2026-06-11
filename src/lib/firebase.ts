@@ -172,6 +172,8 @@ export async function clearPaperOrders(): Promise<void> {
 
 export interface StrategyRunnerMeta {
   lastRunAt?: string;
+  /** Last automated cron scan (weekdays, market hours). */
+  lastCronAt?: string;
   lastScanSummary?: {
     ranAt: string;
     scanned: number;

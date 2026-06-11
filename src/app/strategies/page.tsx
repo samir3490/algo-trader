@@ -19,6 +19,8 @@ import {
   Loader2,
   BarChart3,
   ScrollText,
+  Clock,
+  CheckCircle2,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -365,6 +367,7 @@ function StrategiesPageContent() {
     getDefaultParams(STRATEGY_DEFINITIONS[0])
   );
   const [lastRunnerAt, setLastRunnerAt] = useState<string | null>(null);
+  const [lastCronAt, setLastCronAt] = useState<string | null>(null);
   const [lastScanSummary, setLastScanSummary] = useState<
     StrategyRunnerMeta["lastScanSummary"] | null
   >(null);
@@ -558,6 +561,9 @@ function StrategiesPageContent() {
       } else {
         const stored = localStorage.getItem("strategy_runner_last_run");
         if (stored) setLastRunnerAt(stored);
+      }
+      if (meta.lastCronAt) {
+        setLastCronAt(meta.lastCronAt);
       }
       if (meta.lastScanSummary) {
         setLastScanSummary(meta.lastScanSummary);
@@ -761,6 +767,46 @@ function StrategiesPageContent() {
 
       {pageSection === "configure" && (
         <>
+      <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 mb-2">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-400 mt-0.5 shrink-0" />
+            <div>
+              <h3 className="text-sm font-semibold text-emerald-300">Automatic paper trading is ON</h3>
+              <p className="mt-1 text-xs text-text-secondary leading-relaxed">
+                Server scans run <strong className="text-text-primary">every 15 minutes</strong> on
+                weekdays during NSE hours (9:15 AM–3:30 PM IST) via GitHub Actions. Top BUY signals
+                fill up to <strong className="text-text-primary">5 positions</strong> at ~₹1L each;
+                exits use your stop-loss / take-profit settings.
+              </p>
+              {lastCronAt && (
+                <p className="mt-2 text-xs text-emerald-400/90 flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  Last auto scan:{" "}
+                  {new Date(lastCronAt).toLocaleString("en-IN", {
+                    timeZone: "Asia/Kolkata",
+                    day: "2-digit",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                  })}{" "}
+                  IST
+                </p>
+              )}
+            </div>
+          </div>
+          {runningCount > 0 ? (
+            <span className="shrink-0 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-300">
+              {runningCount} strateg{runningCount === 1 ? "y" : "ies"} running
+            </span>
+          ) : (
+            <span className="shrink-0 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-medium text-amber-300">
+              Start a strategy to enable scans
+            </span>
+          )}
+        </div>
+      </div>
       <LastScanPanel summary={lastScanSummary ?? null} className="mb-2" />
       {/* ── How Strategies Work ────────────────────────────────────────── */}
       <div className="rounded-xl border border-accent/30 bg-accent-muted p-5">
@@ -771,17 +817,16 @@ function StrategiesPageContent() {
             <ul className="space-y-1.5 text-xs text-text-secondary leading-relaxed">
               <li className="flex items-start gap-2">
                 <Signal className="h-3.5 w-3.5 text-accent mt-0.5 shrink-0" />
-                <strong className="text-text-secondary">Server cron</strong> scans every <strong className="text-text-primary">15 minutes</strong> in market hours (weekdays) via <strong className="text-emerald-400">GitHub Actions</strong> — works on Vercel Hobby. Vercel built-in cron is daily-only on Hobby; Pro can use every 15 min in <code className="text-text-tertiary">vercel.json</code>. Use <strong className="text-text-primary">Run scan now</strong> anytime. Paper auto-trades; live mode sends signal emails only.
-              </li>
-              <li className="flex items-start gap-2 text-amber-400/90">
-                <Target className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                <span>
-                  <strong>One trade per stock per day:</strong> if several strategies cover the same symbol (e.g. Nifty 50), only the strongest single BUY or SELL runs — avoids instant buy+sell at the same price.
-                </span>
+                <strong className="text-text-secondary">Auto scans</strong> run every{" "}
+                <strong className="text-text-primary">15 minutes</strong> on weekdays (GitHub Actions).
+                Use <strong className="text-text-primary">Run scan now</strong> for an immediate check.
               </li>
               <li className="flex items-start gap-2">
                 <Target className="h-3.5 w-3.5 text-accent mt-0.5 shrink-0" />
-                <strong className="text-amber-400">Paper mode:</strong> only <strong className="text-text-primary">BUY</strong> signals open positions (~₹1L per stock in Settings). Server scans always place paper trades from the ranked buy list (Live badge is for your reference only). SELL signals are ignored — positions exit via <strong className="text-text-primary">stop-loss / take-profit</strong> (Settings → Risk). Multiple strategies buying the same stock show <strong className="text-text-primary">buy strength</strong> on the Holdings table.
+                <strong className="text-amber-400">Paper mode:</strong> ranked{" "}
+                <strong className="text-text-primary">BUY</strong> signals open positions (~₹1L each,
+                max 5). SELL signals are ignored — exits use{" "}
+                <strong className="text-text-primary">stop-loss / take-profit</strong> (Settings → Risk).
               </li>
               <li className="flex items-start gap-2">
                 <Shield className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />

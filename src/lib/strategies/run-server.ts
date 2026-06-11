@@ -157,6 +157,7 @@ export interface AllUsersRunResult {
   totalTrades: number;
   results: UserRunResult[];
   error?: string;
+  invokedBy?: "cron" | "manual";
 }
 
 async function loadPaperState(db: Firestore, userId: string): Promise<PaperTradingState> {
@@ -260,7 +261,10 @@ async function loadRunnerMeta(db: Firestore, userId: string) {
   };
 }
 
-export async function runStrategiesForUser(userId: string): Promise<UserRunResult> {
+export async function runStrategiesForUser(
+  userId: string,
+  options?: { invokedBy?: "cron" | "manual" }
+): Promise<UserRunResult> {
   const db = getAdminFirestore();
 
   const strategiesSnap = await db.doc(`users/${userId}/data/strategies`).get();
@@ -690,6 +694,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       symbolCooldownUntil,
       symbolsLockedToday,
       lastRunAt: now,
+      ...(options?.invokedBy === "cron" ? { lastCronAt: now } : {}),
       lastScanSummary: {
         ranAt: now,
         scanned,
@@ -729,7 +734,9 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
   };
 }
 
-export async function runStrategiesForAllUsers(): Promise<AllUsersRunResult> {
+export async function runStrategiesForAllUsers(options?: {
+  invokedBy?: "cron" | "manual";
+}): Promise<AllUsersRunResult> {
   const ranAt = new Date().toISOString();
 
   if (!isFirebaseAdminConfigured()) {
@@ -758,7 +765,7 @@ export async function runStrategiesForAllUsers(): Promise<AllUsersRunResult> {
 
   for (const userId of userIds) {
     try {
-      const result = await runStrategiesForUser(userId);
+      const result = await runStrategiesForUser(userId, options);
       results.push(result);
       totalTrades += result.tradesExecuted;
     } catch (e) {
@@ -779,5 +786,6 @@ export async function runStrategiesForAllUsers(): Promise<AllUsersRunResult> {
     usersProcessed: userIds.size,
     totalTrades,
     results,
+    invokedBy: options?.invokedBy,
   };
 }

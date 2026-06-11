@@ -27,7 +27,9 @@ Official docs: [Vercel Cron pricing](https://vercel.com/docs/cron-jobs/usage-and
 Use **GitHub Actions** (free) — already in this repo:
 
 **File:** `.github/workflows/strategy-cron.yml`  
-**Schedule:** `*/15` UTC hours 4–10, Monday–Friday (~9:00–15:45 IST)
+**Schedule:** `*/15` UTC hours 4–10, Monday–Friday (~9:30–15:45 IST)
+
+**Vercel Hobby backup:** once per weekday at 12:00 IST (`30 6 * * 1-5` in `vercel.json`)
 
 ### One-time setup
 
