@@ -15,7 +15,7 @@ import type {
   StrategyConflict,
   StrategyOpinion,
 } from "./types";
-import { resolvePaperOrderQty } from "./paper-position-size";
+import { resolvePaperOrderQty, resolvePaperScanOrderQty } from "./paper-position-size";
 import {
   effectivePaperMaxOrderValue,
 } from "./buy-selection";
@@ -40,7 +40,7 @@ export function scanSignalToOpinion(
   const action = sig.action as "BUY" | "SELL" | "HOLD";
   const quantity =
     action === "BUY"
-      ? resolvePaperOrderQty(sig.price, settings, {
+      ? resolvePaperScanOrderQty(sig.price, settings, {
           strategyParams: strat.params,
           balance,
         })

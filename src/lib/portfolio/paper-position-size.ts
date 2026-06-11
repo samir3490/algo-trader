@@ -71,3 +71,23 @@ export function resolvePaperOrderQty(
 
   return qty;
 }
+
+/** Auto-scan sizing: use ₹ notional unless strategy sets quantity > 1 explicitly. */
+export function resolvePaperScanOrderQty(
+  price: number,
+  settings: Pick<
+    AppSettings,
+    "paperOrderNotional" | "maxOrderValue" | "defaultQuantity"
+  >,
+  options?: {
+    strategyParams?: Record<string, number>;
+    balance?: number;
+  }
+): number {
+  const explicit = options?.strategyParams?.quantity;
+  const useExplicit = explicit != null && explicit > 1;
+  return resolvePaperOrderQty(price, settings, {
+    strategyParams: useExplicit ? options?.strategyParams : undefined,
+    balance: options?.balance,
+  });
+}

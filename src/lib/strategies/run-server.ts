@@ -26,7 +26,7 @@ import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trad
 import {
   selectTopBuyDecisionsForScan,
 } from "@/lib/portfolio/buy-selection";
-import { resolvePaperOrderQty } from "@/lib/portfolio/paper-position-size";
+import { resolvePaperScanOrderQty } from "@/lib/portfolio/paper-position-size";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
 import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
@@ -165,13 +165,25 @@ function clearFlatPortfolioLocks(
   paperState: PaperTradingState,
   dedupe: Set<string>,
   symbolsLockedToday: Record<string, string>,
-  symbolCooldownUntil: Record<string, number>
+  symbolCooldownUntil: Record<string, number>,
+  maxPositions = 10
 ): {
   symbolsLockedToday: Record<string, string>;
   symbolCooldownUntil: Record<string, number>;
 } {
   const openCount = getOpenPositions(paperState).length;
   const hasHoldings = (paperState.holdings ?? []).some((h) => (h.qty ?? 0) > 0);
+  const slotsAvailable = openCount < maxPositions;
+
+  if (slotsAvailable && !hasHoldings) {
+    dedupe.clear();
+    return { symbolsLockedToday: {}, symbolCooldownUntil: {} };
+  }
+
+  if (slotsAvailable) {
+    dedupe.clear();
+  }
+
   if (openCount > 0 || hasHoldings) {
     return { symbolsLockedToday, symbolCooldownUntil };
   }
@@ -356,6 +368,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     }
   }
   let paperState = ensurePositions(await loadPaperState(db, userId));
+  const maxPositionsSetting = userSettings.maxPositions ?? 5;
   ({
     symbolsLockedToday,
     symbolCooldownUntil,
@@ -363,7 +376,8 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     paperState,
     dedupe,
     symbolsLockedToday,
-    symbolCooldownUntil
+    symbolCooldownUntil,
+    maxPositionsSetting
   ));
   if (paperState.holdings?.length) {
     paperState = {
@@ -404,8 +418,6 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         exit.symbol,
         exit.exchange
       );
-      dedupe.add(executionDedupeKey(exit.symbol));
-      dedupe.add(executionNoBuyTodayKey(exit.symbol));
       queueEmail(
         "risk_exit",
         {
@@ -508,17 +520,6 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     const baseDecision = rankedQueue[queueIndex];
     queueIndex += 1;
     signalStrategyIds.add(baseDecision.ownerStrategyId);
-    const key = executionDedupeKey(baseDecision.symbol);
-    if (dedupe.has(key)) {
-      diagnostics.dedupeBlocked += 1;
-      bumpReason(diagnostics.skipReasons, "Already attempted this 15-min window");
-      continue;
-    }
-    if (dedupe.has(executionNoBuyTodayKey(baseDecision.symbol))) {
-      diagnostics.dedupeBlocked += 1;
-      bumpReason(diagnostics.skipReasons, "No rebuy today after sell");
-      continue;
-    }
 
     const strat = running.find((s) => s.id === baseDecision.ownerStrategyId);
     if (!strat) {
@@ -527,230 +528,209 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     }
 
     const exchange = baseDecision.exchange || "NSE";
-    const mode = resolveStrategyMode(strat);
-    const freshQty = resolvePaperOrderQty(baseDecision.price, userSettings, {
+    const freshQty = resolvePaperScanOrderQty(baseDecision.price, userSettings, {
       strategyParams: strat.params,
       balance: paperState.balance ?? INITIAL_BALANCE,
     });
+    if (freshQty <= 0 || baseDecision.price <= 0) {
+      bumpReason(diagnostics.skipReasons, "Invalid price or quantity");
+      continue;
+    }
     const decision = { ...baseDecision, quantity: freshQty };
 
-    if (mode === "paper") {
-      diagnostics.paperSignals += 1;
-      gateCtx.ownerStrategyId = decision.ownerStrategyId;
-      const gate = canExecuteStrategyTrade(
-        "BUY",
-        decision.symbol,
-        exchange,
-        gateCtx
-      );
-      if (!gate.allowed) {
-        diagnostics.gateBlocked += 1;
-        bumpReason(diagnostics.skipReasons, gate.reason ?? "Gate blocked");
-        const qty = decision.quantity;
-        queueEmail(
-          "skipped",
-          {
-            symbol: decision.symbol,
-            exchange,
-            side: "BUY",
-            quantity: qty,
-            price: decision.price,
-            status: `SKIPPED — ${gate.reason}`,
-            strategyName: decision.ownerStrategyName,
-          },
-          {
-            mode: "PAPER",
-            symbol: decision.symbol,
-            exchange,
-            side: "BUY",
-            quantity: qty,
-            price: decision.price,
-            orderType: "MARKET",
-            product: userSettings.paperDefaultProduct,
-            status: `SKIPPED — ${gate.reason}`,
-            strategyName: decision.ownerStrategyName,
-          }
-        );
-        continue;
-      }
-
-      const orderValue = decision.quantity * decision.price;
-      const buyCheck = canPlacePaperBuy({
-        balance: paperState.balance ?? INITIAL_BALANCE,
-        orderValue,
-        qty: decision.quantity,
-        price: decision.price,
-        holdingsCount: getOpenPositions(paperState).length,
-        settings: userSettings,
-        todayRealizedLoss: todayRealizedLoss(paperState.trades),
-      });
-      if (!buyCheck.allowed) {
-        diagnostics.riskBlocked += 1;
-        bumpReason(diagnostics.skipReasons, buyCheck.message ?? "Risk blocked");
-        queueEmail(
-          "skipped",
-          {
-            symbol: decision.symbol,
-            exchange,
-            side: "BUY",
-            quantity: decision.quantity,
-            price: decision.price,
-            status: `SKIPPED — ${buyCheck.message}`,
-            strategyName: decision.ownerStrategyName,
-          },
-          {
-            mode: "PAPER",
-            symbol: decision.symbol,
-            exchange,
-            side: "BUY",
-            quantity: decision.quantity,
-            price: decision.price,
-            orderType: "MARKET",
-            product: userSettings.paperDefaultProduct,
-            status: `SKIPPED — ${buyCheck.message}`,
-            strategyName: decision.ownerStrategyName,
-          }
-        );
-        continue;
-      }
-
-      const { state, executed, message, executedQty } = executePortfolioDecision(
-        paperState,
-        decision,
-        {
-          simulateBrokerage: userSettings.simulateBrokerage,
-          product: userSettings.paperDefaultProduct,
-        }
-      );
-
+    diagnostics.paperSignals += 1;
+    gateCtx.ownerStrategyId = decision.ownerStrategyId;
+    const gate = canExecuteStrategyTrade(
+      "BUY",
+      decision.symbol,
+      exchange,
+      gateCtx
+    );
+    if (!gate.allowed) {
+      diagnostics.gateBlocked += 1;
+      bumpReason(diagnostics.skipReasons, gate.reason ?? "Gate blocked");
       const qty = decision.quantity;
-
-      if (executed) {
-        const saved = await persistPaperState(db, userId, state, recentOrders);
-        if (!saved) {
-          console.error(
-            `Paper trade not saved for ${decision.symbol} ${decision.action}`
-          );
-          bumpReason(diagnostics.skipReasons, "Failed to save paper state");
-          continue;
-        }
-
-        paperState = ensurePositions(state);
-        gateCtx.holdings = paperState.holdings ?? [];
-        gateCtx.positions = paperState.positions;
-        gateCtx.trades = paperState.trades ?? [];
-        dedupe.add(key);
-        tradesExecuted += 1;
-        placedThisScan += 1;
-
-        const tradeQty = executedQty ?? qty;
-        const strengthLabel =
-          decision.buySignalCount != null && decision.buySignalCount > 0
-            ? formatBuyStrength(decision.buySignalCount)
-            : undefined;
-        const execStatus = strengthLabel
-          ? `EXECUTED · ${strengthLabel}`
-          : "EXECUTED";
-
-        queueEmail(
-          "executed",
-          {
-            symbol: decision.symbol,
-            exchange,
-            side: "BUY",
-            quantity: tradeQty,
-            price: decision.price,
-            status: execStatus,
-            strategyName: decision.ownerStrategyName,
-          },
-          {
-            mode: "PAPER",
-            symbol: decision.symbol,
-            exchange,
-            side: "BUY",
-            quantity: tradeQty,
-            price: decision.price,
-            orderType: "MARKET",
-            product: userSettings.paperDefaultProduct,
-            status: execStatus,
-            strategyName: decision.ownerStrategyName,
-          }
-        );
-
-        const orderId = `strat-${Date.now()}-${decision.symbol}`;
-        await db.doc(`users/${userId}/orders/${orderId}`).set({
-          id: orderId,
-          time: nowISTDateTimeString(),
-          symbol: decision.symbol.toUpperCase(),
+      queueEmail(
+        "skipped",
+        {
+          symbol: decision.symbol,
           exchange,
           side: "BUY",
-          qty: tradeQty,
+          quantity: qty,
+          price: decision.price,
+          status: `SKIPPED — ${gate.reason}`,
+          strategyName: decision.ownerStrategyName,
+        },
+        {
+          mode: "PAPER",
+          symbol: decision.symbol,
+          exchange,
+          side: "BUY",
+          quantity: qty,
           price: decision.price,
           orderType: "MARKET",
           product: userSettings.paperDefaultProduct,
-          mode: "PAPER",
-          status: "EXECUTED",
-          date: todayKeyIST(),
-          reason: strengthLabel
-            ? `${decision.signalReason} · ${strengthLabel}`
-            : decision.signalReason,
-          strategyId: decision.ownerStrategyId,
+          status: `SKIPPED — ${gate.reason}`,
           strategyName: decision.ownerStrategyName,
-          createdAt: FieldValue.serverTimestamp(),
-        });
-      } else if (message) {
-        diagnostics.riskBlocked += 1;
-        bumpReason(diagnostics.skipReasons, message);
-        queueEmail(
-          "skipped",
-          {
-            symbol: decision.symbol,
-            exchange,
-            side: "BUY",
-            quantity: qty,
-            price: decision.price,
-            status: `SKIPPED — ${message}`,
-            strategyName: decision.ownerStrategyName,
-          },
-          {
-            mode: "PAPER",
-            symbol: decision.symbol,
-            exchange,
-            side: "BUY",
-            quantity: qty,
-            price: decision.price,
-            orderType: "MARKET",
-            product: userSettings.paperDefaultProduct,
-            status: `SKIPPED — ${message}`,
-            strategyName: decision.ownerStrategyName,
-          }
-        );
-      }
-    } else {
-      diagnostics.liveSignals += 1;
-      dedupe.add(key);
+        }
+      );
+      continue;
+    }
+
+    const orderValue = decision.quantity * decision.price;
+    const buyCheck = canPlacePaperBuy({
+      balance: paperState.balance ?? INITIAL_BALANCE,
+      orderValue,
+      qty: decision.quantity,
+      price: decision.price,
+      holdingsCount: getOpenPositions(paperState).length,
+      settings: userSettings,
+      todayRealizedLoss: todayRealizedLoss(paperState.trades),
+    });
+    if (!buyCheck.allowed) {
+      diagnostics.riskBlocked += 1;
+      bumpReason(diagnostics.skipReasons, buyCheck.message ?? "Risk blocked");
       queueEmail(
-        "live_signal",
+        "skipped",
         {
           symbol: decision.symbol,
-          exchange: strat.exchange || "NSE",
+          exchange,
           side: "BUY",
           quantity: decision.quantity,
           price: decision.price,
-          status: "LIVE SIGNAL (manual)",
-          strategyName: strat.name,
+          status: `SKIPPED — ${buyCheck.message}`,
+          strategyName: decision.ownerStrategyName,
         },
         {
-          mode: "LIVE",
+          mode: "PAPER",
           symbol: decision.symbol,
-          exchange: strat.exchange || "NSE",
+          exchange,
           side: "BUY",
           quantity: decision.quantity,
           price: decision.price,
           orderType: "MARKET",
-          product: userSettings.defaultProduct || "MIS",
-          status: `SIGNAL — place manually in Live Trading`,
-          strategyName: strat.name,
+          product: userSettings.paperDefaultProduct,
+          status: `SKIPPED — ${buyCheck.message}`,
+          strategyName: decision.ownerStrategyName,
+        }
+      );
+      continue;
+    }
+
+    const { state, executed, message, executedQty } = executePortfolioDecision(
+      paperState,
+      decision,
+      {
+        simulateBrokerage: userSettings.simulateBrokerage,
+        product: userSettings.paperDefaultProduct,
+      }
+    );
+
+    const qty = decision.quantity;
+    const key = executionDedupeKey(decision.symbol);
+
+    if (executed) {
+      const saved = await persistPaperState(db, userId, state, recentOrders);
+      if (!saved) {
+        console.error(
+          `Paper trade not saved for ${decision.symbol} ${decision.action}`
+        );
+        bumpReason(diagnostics.skipReasons, "Failed to save paper state");
+        continue;
+      }
+
+      paperState = ensurePositions(state);
+      gateCtx.holdings = paperState.holdings ?? [];
+      gateCtx.positions = paperState.positions;
+      gateCtx.trades = paperState.trades ?? [];
+      dedupe.add(key);
+      tradesExecuted += 1;
+      placedThisScan += 1;
+
+      const tradeQty = executedQty ?? qty;
+      const strengthLabel =
+        decision.buySignalCount != null && decision.buySignalCount > 0
+          ? formatBuyStrength(decision.buySignalCount)
+          : undefined;
+      const execStatus = strengthLabel
+        ? `EXECUTED · ${strengthLabel}`
+        : "EXECUTED";
+
+      queueEmail(
+        "executed",
+        {
+          symbol: decision.symbol,
+          exchange,
+          side: "BUY",
+          quantity: tradeQty,
+          price: decision.price,
+          status: execStatus,
+          strategyName: decision.ownerStrategyName,
+        },
+        {
+          mode: "PAPER",
+          symbol: decision.symbol,
+          exchange,
+          side: "BUY",
+          quantity: tradeQty,
+          price: decision.price,
+          orderType: "MARKET",
+          product: userSettings.paperDefaultProduct,
+          status: execStatus,
+          strategyName: decision.ownerStrategyName,
+        }
+      );
+
+      const orderId = `strat-${Date.now()}-${decision.symbol}`;
+      await db.doc(`users/${userId}/orders/${orderId}`).set({
+        id: orderId,
+        time: nowISTDateTimeString(),
+        symbol: decision.symbol.toUpperCase(),
+        exchange,
+        side: "BUY",
+        qty: tradeQty,
+        price: decision.price,
+        orderType: "MARKET",
+        product: userSettings.paperDefaultProduct,
+        mode: "PAPER",
+        status: "EXECUTED",
+        date: todayKeyIST(),
+        reason: strengthLabel
+          ? `${decision.signalReason} · ${strengthLabel}`
+          : decision.signalReason,
+        strategyId: decision.ownerStrategyId,
+        strategyName: decision.ownerStrategyName,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+
+      if (resolveStrategyMode(strat) === "live") {
+        diagnostics.liveSignals += 1;
+      }
+    } else if (message) {
+      diagnostics.riskBlocked += 1;
+      bumpReason(diagnostics.skipReasons, message);
+      queueEmail(
+        "skipped",
+        {
+          symbol: decision.symbol,
+          exchange,
+          side: "BUY",
+          quantity: qty,
+          price: decision.price,
+          status: `SKIPPED — ${message}`,
+          strategyName: decision.ownerStrategyName,
+        },
+        {
+          mode: "PAPER",
+          symbol: decision.symbol,
+          exchange,
+          side: "BUY",
+          quantity: qty,
+          price: decision.price,
+          orderType: "MARKET",
+          product: userSettings.paperDefaultProduct,
+          status: `SKIPPED — ${message}`,
+          strategyName: decision.ownerStrategyName,
         }
       );
     }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   paperOrderNotional,
   resolvePaperOrderQty,
+  resolvePaperScanOrderQty,
 } from "./paper-position-size";
 
 const settings = {
@@ -28,6 +29,22 @@ describe("resolvePaperOrderQty", () => {
     assert.equal(
       resolvePaperOrderQty(1000, settings, { strategyParams: { quantity: 5 } }),
       5
+    );
+  });
+});
+
+describe("resolvePaperScanOrderQty", () => {
+  it("ignores default quantity=1 and uses notional", () => {
+    assert.equal(
+      resolvePaperScanOrderQty(100, settings, { strategyParams: { quantity: 1 } }),
+      1000
+    );
+  });
+
+  it("respects explicit quantity when > 1", () => {
+    assert.equal(
+      resolvePaperScanOrderQty(100, settings, { strategyParams: { quantity: 50 } }),
+      50
     );
   });
 });

@@ -101,8 +101,7 @@ export default function LastScanPanel({
           {d.liveSignals > 0 && d.paperSignals === 0 && (
             <p className="flex items-start gap-2 text-sm text-amber-300/90">
               <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
-              All executable signals are in <strong className="font-medium">Live</strong> mode — switch strategies to{" "}
-              <strong className="font-medium">Paper</strong> (amber badge) to auto-place trades.
+              Signals were found but the buy queue did not execute — check skip reasons below.
             </p>
           )}
           {d.sellSignals > 0 && d.buySignals === 0 && (

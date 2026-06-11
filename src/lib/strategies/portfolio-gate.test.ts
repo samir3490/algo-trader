@@ -19,6 +19,18 @@ describe("canExecuteStrategyTrade", () => {
     assert.match(r.reason ?? "", /Sold this scan/);
   });
 
+  it("allows BUY when soldThisRun during paper strategy scan", () => {
+    const sold = new Set(["SAIL:NSE"]);
+    const r = canExecuteStrategyTrade("BUY", "SAIL", "NSE", {
+      holdings: [],
+      trades: [],
+      settings,
+      soldThisRun: sold,
+      paperStrategyScan: true,
+    });
+    assert.equal(r.allowed, true);
+  });
+
   it("blocks BUY after losing same-day sell", () => {
     const trades: PaperTrade[] = [
       {

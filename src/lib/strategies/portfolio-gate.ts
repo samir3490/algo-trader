@@ -207,12 +207,12 @@ export function canExecuteStrategyTrade(
     return { allowed: true };
   }
 
-  // BUY guards
-  if (ctx.soldThisRun.has(key)) {
+  // BUY guards — paper strategy scan only blocks duplicate holdings
+  const paperScan = ctx.paperStrategyScan === true;
+
+  if (!paperScan && ctx.soldThisRun.has(key)) {
     return { allowed: false, reason: "Sold this scan — no immediate rebuy" };
   }
-
-  const paperScan = ctx.paperStrategyScan === true;
 
   if (!paperScan && ctx.symbolsLockedToday?.[key] === todayIST()) {
     return { allowed: false, reason: "Symbol locked for today after sell" };
