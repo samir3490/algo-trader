@@ -139,7 +139,7 @@ export function canPlacePaperBuy(params: {
       message: `Order exceeds max order value (${maxOrder})`,
     };
   }
-  if (holdingsCount >= settings.maxPositions) {
+  if (holdingsCount >= (settings.maxPositions ?? 10)) {
     return {
       allowed: false,
       message: `Max positions (${settings.maxPositions}) reached`,

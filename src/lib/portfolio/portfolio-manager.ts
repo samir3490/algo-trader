@@ -8,7 +8,6 @@ import {
 import {
   canStrategyExitPosition,
   canStrategyOpenPosition,
-  getOpenPositions,
   hasOpenPositionForSymbol,
 } from "./position-manager";
 import type {
@@ -105,8 +104,8 @@ export function evaluatePortfolioDecisions(
   const decisions: PortfolioDecision[] = [];
   const multi = ctx.multiStrategyMode === true;
 
-  let openCount = getOpenPositions(ctx.state).length;
-  const maxPositions = ctx.settings.maxPositions ?? 10;
+  let remainingBalance = ctx.state.balance ?? 0;
+  const maxOrder = effectivePaperMaxOrderValue(ctx.settings);
 
   for (const op of mergedOpinions) {
     if (op.action === "HOLD") {
@@ -179,23 +178,8 @@ export function evaluatePortfolioDecisions(
         continue;
       }
 
-      if (openCount >= maxPositions) {
-        decisions.push({
-          action: "SKIP",
-          symbol: op.symbol,
-          exchange: op.exchange,
-          ownerStrategyId: op.strategyId,
-          ownerStrategyName: op.strategyName,
-          price: op.price,
-          quantity: op.quantity,
-          signalReason: op.reason,
-          skipReason: `Max positions (${maxPositions}) reached`,
-        });
-        continue;
-      }
-
       const orderValue = op.quantity * op.price;
-      if (orderValue > (ctx.state.balance ?? 0)) {
+      if (orderValue > remainingBalance) {
         decisions.push({
           action: "SKIP",
           symbol: op.symbol,
@@ -210,7 +194,7 @@ export function evaluatePortfolioDecisions(
         continue;
       }
 
-      if (orderValue > effectivePaperMaxOrderValue(ctx.settings)) {
+      if (orderValue > maxOrder) {
         decisions.push({
           action: "SKIP",
           symbol: op.symbol,
@@ -220,7 +204,7 @@ export function evaluatePortfolioDecisions(
           price: op.price,
           quantity: op.quantity,
           signalReason: op.reason,
-          skipReason: `Exceeds max order value (${effectivePaperMaxOrderValue(ctx.settings)})`,
+          skipReason: `Exceeds max order value (${maxOrder})`,
         });
         continue;
       }
@@ -254,7 +238,7 @@ export function evaluatePortfolioDecisions(
         signalReason: op.reason,
         buySignalCount: op.buySignalCount,
       });
-      openCount += 1;
+      remainingBalance -= orderValue;
       continue;
     }
 

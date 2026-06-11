@@ -101,6 +101,26 @@ describe("portfolio-manager", () => {
     assert.equal(buys[0].buySignalCount, 2);
   });
 
+  it("approves all unique BUY symbols — position cap enforced at scan execution", () => {
+    const opinions = Array.from({ length: 8 }, (_, i) => ({
+      strategyId: `strategy_${i}`,
+      strategyName: `S${i}`,
+      symbol: `STOCK${i}`,
+      exchange: "NSE",
+      action: "BUY" as const,
+      price: 100,
+      quantity: 10,
+      reason: "buy",
+      confidence: 0.5,
+    }));
+    const { decisions } = evaluatePortfolioDecisions(opinions, {
+      state: { ...emptyState(), balance: 10_000_000 },
+      settings: { ...settings, maxPositions: 5 },
+    });
+    const buys = decisions.filter((d) => d.action === "BUY");
+    assert.equal(buys.length, 8);
+  });
+
   it("ignores SELL opinions — paper exits use stop-loss / take-profit", () => {
     const pos = createOpenPosition({
       symbol: "RELIANCE",

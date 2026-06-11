@@ -28,11 +28,17 @@ export function formatScanAuditMessage(
   if (diagnostics.liveSignals > 0 && diagnostics.paperSignals === 0) {
     parts.push("all signals in Live mode (switch to Paper to auto-trade)");
   }
-  if (diagnostics.skippedDecisions > 0) {
-    parts.push(`${diagnostics.skippedDecisions} skipped at portfolio layer`);
+  if (diagnostics.buyDecisions > 0 && tradesExecuted === 0) {
+    parts.push(`${diagnostics.buyDecisions} BUY approved but none executed`);
   }
   if (diagnostics.gateBlocked > 0) {
     parts.push(`${diagnostics.gateBlocked} blocked by trade gates`);
+  }
+  if (diagnostics.riskBlocked > 0) {
+    parts.push(`${diagnostics.riskBlocked} blocked by risk limits`);
+  }
+  if (diagnostics.skippedDecisions > 0) {
+    parts.push(`${diagnostics.skippedDecisions} skipped at portfolio layer`);
   }
   if ((diagnostics.strengthDeferred ?? 0) > 0) {
     parts.push(`${diagnostics.strengthDeferred} deferred (top 5 by buy strength per scan)`);

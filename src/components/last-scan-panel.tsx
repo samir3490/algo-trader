@@ -79,9 +79,11 @@ export default function LastScanPanel({
             <Stat label="SELL signals" value={d.sellSignals} />
             <Stat label="Paper exec" value={d.paperSignals} />
             <Stat label="Live only" value={d.liveSignals} highlight={d.liveSignals > 0 && d.paperSignals === 0} />
+            <Stat label="BUY approved" value={d.buyDecisions} />
             <Stat label="Gate blocked" value={d.gateBlocked} />
-            <Stat label="Portfolio skip" value={d.skippedDecisions} />
+            <Stat label="Risk blocked" value={d.riskBlocked} />
             <Stat label="Deferred (rank)" value={d.strengthDeferred ?? 0} />
+            <Stat label="Portfolio skip" value={d.skippedDecisions} />
           </div>
         )}
       </div>

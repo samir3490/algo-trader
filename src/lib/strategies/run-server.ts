@@ -24,7 +24,6 @@ import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trad
 import {
   selectTopBuyDecisionsForScan,
 } from "@/lib/portfolio/buy-selection";
-import { paperOrderNotional } from "@/lib/portfolio/paper-position-size";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
 import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
@@ -146,11 +145,16 @@ function bumpReason(map: Record<string, number>, reason: string) {
 }
 
 function normalizeUserSettings(settings: AppSettings): AppSettings {
-  const notional = paperOrderNotional(settings);
+  const notional =
+    settings.paperOrderNotional ?? DEFAULT_SETTINGS.paperOrderNotional ?? 100_000;
   return {
     ...settings,
-    maxOrderValue: Math.max(settings.maxOrderValue ?? 0, notional),
     paperOrderNotional: notional,
+    maxOrderValue: Math.max(settings.maxOrderValue ?? 0, notional),
+    maxPositions:
+      settings.maxPositions && settings.maxPositions > 0
+        ? settings.maxPositions
+        : DEFAULT_SETTINGS.maxPositions,
   };
 }
 
@@ -558,9 +562,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         const buyCheck = canPlacePaperBuy({
           balance: paperState.balance ?? INITIAL_BALANCE,
           orderValue,
-          holdingsCount: (paperState.positions ?? []).filter(
-            (p) => p.state === "OPEN" || p.state === "PARTIAL_EXIT"
-          ).length,
+          holdingsCount: getOpenPositions(paperState).length,
           settings: userSettings,
           todayRealizedLoss: todayRealizedLoss(paperState.trades),
         });
@@ -679,6 +681,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           createdAt: FieldValue.serverTimestamp(),
         });
       } else if (message) {
+        diagnostics.riskBlocked += 1;
         bumpReason(diagnostics.skipReasons, message);
         queueEmail(
           "skipped",
