@@ -116,7 +116,7 @@ function firestoreToLocal(strategies: FirestoreStrategy[]): ActiveStrategy[] {
     type: inferStrategyType(s.name),
     symbol: s.symbol,
     exchange: s.exchange,
-    mode: s.mode,
+    mode: s.mode === "live" ? "live" : "paper",
     status: s.status,
     signals: s.signals,
     pnl: s.pnl,
@@ -129,6 +129,41 @@ function firestoreToLocal(strategies: FirestoreStrategy[]): ActiveStrategy[] {
 function persistStrategies(strategies: ActiveStrategy[]) {
   saveActiveStrategiesToCache(strategies);
   saveFirestoreStrategies(localToFirestore(strategies));
+}
+
+function formatScanFeedback(
+  summary: StrategyRunnerMeta["lastScanSummary"]
+): string {
+  if (!summary) return "";
+  const base = `Scan complete: ${summary.signalsFound} signal${summary.signalsFound !== 1 ? "s" : ""}, ${summary.tradesExecuted} trade${summary.tradesExecuted !== 1 ? "s" : ""} placed.`;
+  const d = summary.diagnostics;
+  if (!d || summary.tradesExecuted > 0) return base;
+
+  const parts: string[] = [];
+  if (d.buySignals > 0 || d.sellSignals > 0) {
+    parts.push(`${d.buySignals} BUY / ${d.sellSignals} SELL signals`);
+  }
+  if (d.liveSignals > 0 && d.paperSignals === 0) {
+    parts.push(
+      `${d.liveSignals} in Live mode — switch strategies to Paper to auto-trade`
+    );
+  } else if (d.liveSignals > 0) {
+    parts.push(`${d.liveSignals} live-only (no paper execution)`);
+  }
+  if (d.skippedDecisions > 0) {
+    parts.push(`${d.skippedDecisions} skipped before execution`);
+  }
+  if (d.dedupeBlocked > 0) {
+    parts.push(`${d.dedupeBlocked} already tried this 15-min window`);
+  }
+  const topReasons = Object.entries(d.skipReasons ?? {})
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([reason, count]) => `${reason} (${count})`);
+  if (topReasons.length > 0) {
+    parts.push(`Top blocks: ${topReasons.join("; ")}`);
+  }
+  return parts.length > 0 ? `${base} ${parts.join(" · ")}` : base;
 }
 
 function ActiveStrategiesTable({
@@ -585,11 +620,14 @@ function StrategiesPageContent() {
           scanned: Number(data.scanned ?? 0),
           signalsFound: Number(data.signalsFound ?? 0),
           tradesExecuted: Number(data.tradesExecuted ?? 0),
+          diagnostics: data.diagnostics as StrategyRunnerMeta["lastScanSummary"] extends {
+            diagnostics?: infer D;
+          }
+            ? D
+            : undefined,
         };
         setLastScanSummary(summary);
-        setScanFeedback(
-          `Scan complete: ${summary.signalsFound} signal${summary.signalsFound !== 1 ? "s" : ""}, ${summary.tradesExecuted} trade${summary.tradesExecuted !== 1 ? "s" : ""} placed.`
-        );
+        setScanFeedback(formatScanFeedback(summary));
         window.dispatchEvent(new CustomEvent("strategies-updated"));
         window.dispatchEvent(new CustomEvent("paper-trading-updated"));
         getFirestoreStrategies().then((fs) => setActiveStrategies(firestoreToLocal(fs)));
@@ -778,6 +816,13 @@ function StrategiesPageContent() {
                       {" "}
                       · {lastScanSummary.signalsFound} signals,{" "}
                       {lastScanSummary.tradesExecuted} trades
+                      {lastScanSummary.diagnostics && (
+                        <>
+                          {" "}
+                          ({lastScanSummary.diagnostics.buySignals} BUY /{" "}
+                          {lastScanSummary.diagnostics.sellSignals} SELL)
+                        </>
+                      )}
                     </span>
                   )}
                 </li>

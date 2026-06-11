@@ -67,6 +67,39 @@ describe("portfolio-manager", () => {
     assert.match(decisions[0].skipReason ?? "", /owned|duplicate/i);
   });
 
+  it("consolidates duplicate BUY opinions to highest confidence", () => {
+    const { decisions } = evaluatePortfolioDecisions(
+      [
+        {
+          strategyId: "strategy_a",
+          strategyName: "A",
+          symbol: "RELIANCE",
+          exchange: "NSE",
+          action: "BUY",
+          price: 100,
+          quantity: 10,
+          reason: "weak buy",
+          confidence: 0.5,
+        },
+        {
+          strategyId: "strategy_b",
+          strategyName: "B",
+          symbol: "RELIANCE",
+          exchange: "NSE",
+          action: "BUY",
+          price: 100,
+          quantity: 10,
+          reason: "strong buy",
+          confidence: 0.9,
+        },
+      ],
+      { state: emptyState(), settings }
+    );
+    const buys = decisions.filter((d) => d.action === "BUY");
+    assert.equal(buys.length, 1);
+    assert.equal(buys[0].ownerStrategyId, "strategy_b");
+  });
+
   it("rejects non-owner SELL", () => {
     const pos = createOpenPosition({
       symbol: "RELIANCE",

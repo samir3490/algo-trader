@@ -60,6 +60,22 @@ export function scanSignalToOpinion(
 /**
  * Portfolio-level decision layer: strategies advise, PortfolioManager decides.
  */
+function consolidateBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
+  const nonBuys = opinions.filter((o) => o.action !== "BUY");
+  const bestBuy = new Map<string, StrategyOpinion>();
+
+  for (const op of opinions) {
+    if (op.action !== "BUY") continue;
+    const key = symKey(op.symbol, op.exchange);
+    const existing = bestBuy.get(key);
+    if (!existing || op.confidence > existing.confidence) {
+      bestBuy.set(key, op);
+    }
+  }
+
+  return [...nonBuys, ...bestBuy.values()];
+}
+
 export function evaluatePortfolioDecisions(
   opinions: StrategyOpinion[],
   ctx: PortfolioContext
@@ -67,17 +83,18 @@ export function evaluatePortfolioDecisions(
   decisions: PortfolioDecision[];
   conflicts: StrategyConflict[];
 } {
-  const conflicts = detectStrategyConflicts(opinions);
-  const blocked = opinionsBlockedByConflict(opinions, conflicts, (symbol, exchange) =>
+  const mergedOpinions = consolidateBuyOpinions(opinions);
+  const conflicts = detectStrategyConflicts(mergedOpinions);
+  const blocked = opinionsBlockedByConflict(mergedOpinions, conflicts, (symbol, exchange) =>
     hasOpenPositionForSymbol(ctx.state, symbol, exchange)
   );
   const decisions: PortfolioDecision[] = [];
   const multi = ctx.multiStrategyMode === true;
 
-  const openCount = getOpenPositions(ctx.state).length;
+  let openCount = getOpenPositions(ctx.state).length;
   const maxPositions = ctx.settings.maxPositions ?? 10;
 
-  for (const op of opinions) {
+  for (const op of mergedOpinions) {
     if (op.action === "HOLD") {
       decisions.push({
         action: "HOLD",
@@ -222,6 +239,7 @@ export function evaluatePortfolioDecisions(
         quantity: op.quantity,
         signalReason: op.reason,
       });
+      openCount += 1;
       continue;
     }
 

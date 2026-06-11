@@ -169,6 +169,19 @@ export interface StrategyRunnerMeta {
     scanned: number;
     signalsFound: number;
     tradesExecuted: number;
+    diagnostics?: {
+      buySignals: number;
+      sellSignals: number;
+      buyDecisions: number;
+      sellDecisions: number;
+      skippedDecisions: number;
+      gateBlocked: number;
+      riskBlocked: number;
+      dedupeBlocked: number;
+      liveSignals: number;
+      paperSignals: number;
+      skipReasons: Record<string, number>;
+    };
   };
 }
 

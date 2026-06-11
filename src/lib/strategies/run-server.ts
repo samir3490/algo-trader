@@ -11,7 +11,10 @@ import {
   canPlacePaperBuy,
 } from "@/lib/risk/paper-risk-guard";
 import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
-import { ensurePositions } from "@/lib/portfolio/position-manager";
+import {
+  ensurePositions,
+  getOpenPositions,
+} from "@/lib/portfolio/position-manager";
 import {
   evaluatePortfolioDecisions,
   scanSignalToOpinion,
@@ -113,12 +116,50 @@ async function refreshPaperHoldingsLtp(
   return updated;
 }
 
+export interface ScanDiagnostics {
+  buySignals: number;
+  sellSignals: number;
+  buyDecisions: number;
+  sellDecisions: number;
+  skippedDecisions: number;
+  gateBlocked: number;
+  riskBlocked: number;
+  dedupeBlocked: number;
+  liveSignals: number;
+  paperSignals: number;
+  skipReasons: Record<string, number>;
+}
+
 export interface UserRunResult {
   userId: string;
   scanned: number;
   signalsFound: number;
   tradesExecuted: number;
+  diagnostics?: ScanDiagnostics;
   skipped?: string;
+}
+
+function resolveStrategyMode(strat: ActiveStrategy): "paper" | "live" {
+  return strat.mode === "live" ? "live" : "paper";
+}
+
+function bumpReason(map: Record<string, number>, reason: string) {
+  map[reason] = (map[reason] ?? 0) + 1;
+}
+
+function clearFlatPortfolioLocks(
+  paperState: PaperTradingState,
+  dedupe: Set<string>,
+  symbolsLockedToday: Record<string, string>
+): Record<string, string> {
+  const openCount = getOpenPositions(paperState).length;
+  const hasHoldings = (paperState.holdings ?? []).some((h) => (h.qty ?? 0) > 0);
+  if (openCount > 0 || hasHoldings) return symbolsLockedToday;
+
+  for (const key of [...dedupe]) {
+    if (key.startsWith("NO-BUY:")) dedupe.delete(key);
+  }
+  return {};
 }
 
 export interface AllUsersRunResult {
@@ -226,7 +267,9 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     return { userId, scanned: 0, signalsFound: 0, tradesExecuted: 0, skipped: "no strategies" };
   }
 
-  const items = (strategiesSnap.data()?.items ?? []) as ActiveStrategy[];
+  const items = ((strategiesSnap.data()?.items ?? []) as ActiveStrategy[]).map(
+    (s) => ({ ...s, mode: resolveStrategyMode(s) })
+  );
   const running = items.filter((s) => s.status === "running");
   if (running.length === 0) {
     return { userId, scanned: 0, signalsFound: 0, tradesExecuted: 0, skipped: "none running" };
@@ -252,6 +295,24 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
   const soldThisRun = new Set<string>();
   const digestLines: ScanDigestLine[] = [];
   const digestMode = useScanDigestEmail(userSettings);
+  const diagnostics: ScanDiagnostics = {
+    buySignals: 0,
+    sellSignals: 0,
+    buyDecisions: 0,
+    sellDecisions: 0,
+    skippedDecisions: 0,
+    gateBlocked: 0,
+    riskBlocked: 0,
+    dedupeBlocked: 0,
+    liveSignals: 0,
+    paperSignals: 0,
+    skipReasons: {},
+  };
+
+  for (const sig of rawSignals) {
+    if (sig.action === "BUY") diagnostics.buySignals += 1;
+    else if (sig.action === "SELL") diagnostics.sellSignals += 1;
+  }
 
   function queueEmail(
     category: Parameters<typeof shouldSendEmailCategory>[1],
@@ -270,6 +331,11 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     }
   }
   let paperState = ensurePositions(await loadPaperState(db, userId));
+  symbolsLockedToday = clearFlatPortfolioLocks(
+    paperState,
+    dedupe,
+    symbolsLockedToday
+  );
   if (paperState.holdings?.length) {
     paperState = {
       ...paperState,
@@ -381,14 +447,25 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     .filter((d) => d.action === "BUY" || d.action === "SELL")
     .sort((a, b) => (a.action === "SELL" && b.action === "BUY" ? -1 : 0));
 
+  for (const d of executable) {
+    if (d.action === "BUY") diagnostics.buyDecisions += 1;
+    else if (d.action === "SELL") diagnostics.sellDecisions += 1;
+  }
+
   for (const decision of executable) {
     signalStrategyIds.add(decision.ownerStrategyId);
     const key = executionDedupeKey(decision.symbol);
-    if (dedupe.has(key)) continue;
+    if (dedupe.has(key)) {
+      diagnostics.dedupeBlocked += 1;
+      bumpReason(diagnostics.skipReasons, "Already attempted this 15-min window");
+      continue;
+    }
     if (
       decision.action === "BUY" &&
       dedupe.has(executionNoBuyTodayKey(decision.symbol))
     ) {
+      diagnostics.dedupeBlocked += 1;
+      bumpReason(diagnostics.skipReasons, "No rebuy today after sell");
       continue;
     }
 
@@ -396,8 +473,10 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     if (!strat) continue;
 
     const exchange = decision.exchange || "NSE";
+    const mode = resolveStrategyMode(strat);
 
-    if (strat.mode === "paper") {
+    if (mode === "paper") {
+      diagnostics.paperSignals += 1;
       gateCtx.ownerStrategyId = decision.ownerStrategyId;
       const gate = canExecuteStrategyTrade(
         decision.action as "BUY" | "SELL",
@@ -406,6 +485,8 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         gateCtx
       );
       if (!gate.allowed) {
+        diagnostics.gateBlocked += 1;
+        bumpReason(diagnostics.skipReasons, gate.reason ?? "Gate blocked");
         const qty = decision.quantity;
         queueEmail(
           "skipped",
@@ -431,7 +512,6 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
             strategyName: decision.ownerStrategyName,
           }
         );
-        dedupe.add(key);
         continue;
       }
 
@@ -447,6 +527,8 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           todayRealizedLoss: todayRealizedLoss(paperState.trades),
         });
         if (!buyCheck.allowed) {
+          diagnostics.riskBlocked += 1;
+          bumpReason(diagnostics.skipReasons, buyCheck.message ?? "Risk blocked");
           queueEmail(
             "skipped",
             {
@@ -471,7 +553,6 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
               strategyName: decision.ownerStrategyName,
             }
           );
-          dedupe.add(key);
           continue;
         }
       }
@@ -493,6 +574,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           console.error(
             `Paper trade not saved for ${decision.symbol} ${decision.action}`
           );
+          bumpReason(diagnostics.skipReasons, "Failed to save paper state");
           continue;
         }
 
@@ -564,6 +646,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           createdAt: FieldValue.serverTimestamp(),
         });
       } else if (message) {
+        bumpReason(diagnostics.skipReasons, message);
         queueEmail(
           "skipped",
           {
@@ -588,9 +671,9 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
             strategyName: decision.ownerStrategyName,
           }
         );
-        dedupe.add(key);
       }
-    } else if (strat.mode === "live") {
+    } else {
+      diagnostics.liveSignals += 1;
       dedupe.add(key);
       queueEmail(
         "live_signal",
@@ -621,6 +704,11 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
 
   for (const decision of decisions.filter((d) => d.action === "SKIP")) {
     signalStrategyIds.add(decision.ownerStrategyId);
+    diagnostics.skippedDecisions += 1;
+    bumpReason(
+      diagnostics.skipReasons,
+      decision.skipReason ?? "Portfolio skip"
+    );
     writeSystemLog("INFO", "PortfolioManager", "Signal skipped", {
       symbol: decision.symbol,
       strategy: decision.ownerStrategyName,
@@ -673,6 +761,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         scanned,
         signalsFound: rawSignals.length,
         tradesExecuted,
+        diagnostics,
       },
       updatedAt: FieldValue.serverTimestamp(),
     },
@@ -684,6 +773,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     scanned,
     signalsFound: rawSignals.length,
     tradesExecuted,
+    diagnostics,
   };
 }
 
