@@ -781,7 +781,7 @@ function StrategiesPageContent() {
               </li>
               <li className="flex items-start gap-2">
                 <Target className="h-3.5 w-3.5 text-accent mt-0.5 shrink-0" />
-                <strong className="text-amber-400">Paper mode:</strong> auto-places trades sized to ~₹1L per stock (Settings → Paper Trading). Max one BUY and one SELL per stock per day. Each trade is tagged with the <strong className="text-text-primary">strategy name</strong> in Paper Trading → Trade History and the performance table. Screener.in uses different filters — results will not match exactly.
+                <strong className="text-amber-400">Paper mode:</strong> only <strong className="text-text-primary">BUY</strong> signals open positions (~₹1L per stock in Settings). SELL signals are ignored — positions exit via <strong className="text-text-primary">stop-loss / take-profit</strong> (Settings → Risk). Multiple strategies buying the same stock show <strong className="text-text-primary">buy strength</strong> on the Holdings table.
               </li>
               <li className="flex items-start gap-2">
                 <Shield className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />

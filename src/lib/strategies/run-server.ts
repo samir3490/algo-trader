@@ -17,8 +17,10 @@ import {
 } from "@/lib/portfolio/position-manager";
 import {
   evaluatePortfolioDecisions,
+  buyOnlyOpinions,
   scanSignalToOpinion,
 } from "@/lib/portfolio/portfolio-manager";
+import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trading/balance";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
 import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
@@ -166,11 +168,17 @@ export interface AllUsersRunResult {
 async function loadPaperState(db: Firestore, userId: string): Promise<PaperTradingState> {
   const snap = await db.doc(`users/${userId}/data/paperTrading`).get();
   if (!snap.exists) {
-    return { balance: INITIAL_BALANCE, holdings: [], positions: [], trades: [] };
+    return {
+      balance: resolvePaperStartingBalance(await loadUserSettings(db, userId)),
+      holdings: [],
+      positions: [],
+      trades: [],
+    };
   }
   const data = snap.data()!;
+  const settings = await loadUserSettings(db, userId);
   return {
-    balance: data.balance ?? INITIAL_BALANCE,
+    balance: data.balance ?? resolvePaperStartingBalance(settings),
     holdings: data.holdings ?? [],
     positions: data.positions ?? [],
     trades: data.trades ?? [],
@@ -407,11 +415,14 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     })
     .filter((o): o is NonNullable<typeof o> => o != null);
 
-  const { decisions, conflicts } = evaluatePortfolioDecisions(opinions, {
-    state: paperState,
-    settings: userSettings,
-    todayRealizedLoss: todayRealizedLoss(paperState.trades),
-  });
+  const { decisions, conflicts } = evaluatePortfolioDecisions(
+    buyOnlyOpinions(opinions),
+    {
+      state: paperState,
+      settings: userSettings,
+      todayRealizedLoss: todayRealizedLoss(paperState.trades),
+    }
+  );
 
   for (const conflict of conflicts) {
     writeSystemLog("WARN", "PortfolioManager", conflict.type, {
@@ -435,13 +446,10 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     symbolsLockedToday,
   };
 
-  const executable = decisions
-    .filter((d) => d.action === "BUY" || d.action === "SELL")
-    .sort((a, b) => (a.action === "SELL" && b.action === "BUY" ? -1 : 0));
+  const executable = decisions.filter((d) => d.action === "BUY");
 
   for (const d of executable) {
-    if (d.action === "BUY") diagnostics.buyDecisions += 1;
-    else if (d.action === "SELL") diagnostics.sellDecisions += 1;
+    diagnostics.buyDecisions += 1;
   }
 
   for (const decision of executable) {
@@ -578,42 +586,35 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         tradesExecuted += 1;
 
         const tradeQty = executedQty ?? qty;
-        const sk = symKey(decision.symbol, exchange);
-        if (decision.action === "SELL") {
-          soldThisRun.add(sk);
-          const cooldownMs =
-            (userSettings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
-          symbolCooldownUntil[sk] = Date.now() + cooldownMs;
-          symbolsLockedToday = lockSymbolForToday(
-            symbolsLockedToday,
-            decision.symbol,
-            exchange
-          );
-          gateCtx.symbolsLockedToday = symbolsLockedToday;
-          dedupe.add(executionNoBuyTodayKey(decision.symbol));
-        }
+        const strengthLabel =
+          decision.buySignalCount != null && decision.buySignalCount > 0
+            ? formatBuyStrength(decision.buySignalCount)
+            : undefined;
+        const execStatus = strengthLabel
+          ? `EXECUTED · ${strengthLabel}`
+          : "EXECUTED";
 
         queueEmail(
           "executed",
           {
             symbol: decision.symbol,
             exchange,
-            side: decision.action as "BUY" | "SELL",
+            side: "BUY",
             quantity: tradeQty,
             price: decision.price,
-            status: "EXECUTED",
+            status: execStatus,
             strategyName: decision.ownerStrategyName,
           },
           {
             mode: "PAPER",
             symbol: decision.symbol,
             exchange,
-            side: decision.action as "BUY" | "SELL",
+            side: "BUY",
             quantity: tradeQty,
             price: decision.price,
             orderType: "MARKET",
             product: userSettings.paperDefaultProduct,
-            status: "EXECUTED",
+            status: execStatus,
             strategyName: decision.ownerStrategyName,
           }
         );
@@ -624,7 +625,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           time: nowISTDateTimeString(),
           symbol: decision.symbol.toUpperCase(),
           exchange,
-          side: decision.action,
+          side: "BUY",
           qty: tradeQty,
           price: decision.price,
           orderType: "MARKET",
@@ -632,7 +633,9 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           mode: "PAPER",
           status: "EXECUTED",
           date: todayKeyIST(),
-          reason: decision.signalReason,
+          reason: strengthLabel
+            ? `${decision.signalReason} · ${strengthLabel}`
+            : decision.signalReason,
           strategyId: decision.ownerStrategyId,
           strategyName: decision.ownerStrategyName,
           createdAt: FieldValue.serverTimestamp(),

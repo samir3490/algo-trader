@@ -156,6 +156,7 @@ export function createOpenPosition(params: {
   stopLoss?: number;
   target?: number;
   product?: string;
+  buySignalCount?: number;
 }): PaperPosition {
   const now = new Date().toISOString();
   return {
@@ -173,6 +174,7 @@ export function createOpenPosition(params: {
     stopLoss: params.stopLoss,
     target: params.target,
     product: params.product,
+    buySignalCount: params.buySignalCount,
   };
 }
 

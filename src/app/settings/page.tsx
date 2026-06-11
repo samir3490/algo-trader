@@ -34,6 +34,7 @@ import {
   saveZerodhaAccount,
   removeZerodhaAccount,
   resetPaperTrading,
+  applyPaperStartingBalanceIfFlat,
   updateZerodhaAccountLabel,
   type ZerodhaAccount,
 } from "@/lib/firebase";
@@ -433,7 +434,19 @@ function SettingsContent() {
     try {
       saveSettingsToCache(flat);
       await saveFirestoreSettings(localToFirestore(settings));
-      setToast("Settings saved successfully!");
+      const balanceResult = await applyPaperStartingBalanceIfFlat();
+      if (balanceResult === "applied") {
+        setToast(
+          "Settings saved. Paper cash balance updated to your new starting amount (no open positions)."
+        );
+        window.dispatchEvent(new CustomEvent("paper-trading-updated"));
+      } else if (balanceResult === "skipped_has_positions") {
+        setToast(
+          "Settings saved. Reset paper portfolio to apply a new starting balance while you have holdings."
+        );
+      } else {
+        setToast("Settings saved successfully!");
+      }
     } catch (e) {
       console.error("Failed to save settings to Firestore:", e);
       setToastError(true);
@@ -456,8 +469,8 @@ function SettingsContent() {
       localStorage.removeItem("paper_trading_state");
       localStorage.removeItem("paperTrades");
       setResetConfirm(false);
-      const msg =
-        "Paper portfolio reset — balance ₹10,00,000, orders cleared, scan locks cleared.";
+      const starting = settings.paperTrading.startingBalance;
+      const msg = `Paper portfolio reset — balance ${formatCurrency(starting)}, orders cleared, scan locks cleared.`;
       setResetMessage({ ok: true, text: msg });
       setToast(msg);
       window.dispatchEvent(new CustomEvent("paper-trading-updated"));
@@ -825,6 +838,9 @@ function SettingsContent() {
                 }
                 className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
+              <p className="mt-1 text-[10px] text-text-tertiary">
+                Applied when you save (if no holdings) or when you reset paper portfolio.
+              </p>
             </div>
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">

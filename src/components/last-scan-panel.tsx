@@ -101,9 +101,14 @@ export default function LastScanPanel({
               <strong className="font-medium">Paper</strong> (amber badge) to auto-place trades.
             </p>
           )}
-          {d.sellSignals > 0 && d.buySignals === 0 && d.skippedDecisions > 0 && (
+          {d.sellSignals > 0 && d.buySignals === 0 && (
             <p className="text-sm text-text-secondary">
-              All signals were SELL with no open positions — nothing to sell until you hold those stocks.
+              SELL signals are not used for paper exits — holdings close on stop-loss or take-profit only.
+            </p>
+          )}
+          {d.sellSignals > 0 && d.buySignals > 0 && (
+            <p className="text-sm text-text-secondary">
+              SELL signals are ignored for paper trading; only BUY signals open positions. Exits use your profit/loss targets.
             </p>
           )}
           {reasons.length > 0 ? (

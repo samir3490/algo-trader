@@ -98,9 +98,10 @@ describe("portfolio-manager", () => {
     const buys = decisions.filter((d) => d.action === "BUY");
     assert.equal(buys.length, 1);
     assert.equal(buys[0].ownerStrategyId, "strategy_b");
+    assert.equal(buys[0].buySignalCount, 2);
   });
 
-  it("rejects non-owner SELL", () => {
+  it("ignores SELL opinions — paper exits use stop-loss / take-profit", () => {
     const pos = createOpenPosition({
       symbol: "RELIANCE",
       exchange: "NSE",
@@ -129,6 +130,6 @@ describe("portfolio-manager", () => {
       ],
       { state, settings, multiStrategyMode: false }
     );
-    assert.equal(decisions[0].action, "SKIP");
+    assert.equal(decisions.length, 0);
   });
 });

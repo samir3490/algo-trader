@@ -68,6 +68,7 @@ export interface PaperHolding {
   ltp: number;
   ownerStrategyId?: string;
   ownerStrategyName?: string;
+  buySignalCount?: number;
 }
 
 export interface PaperTrade {
@@ -97,9 +98,15 @@ export interface PaperTrade {
   exitTime?: string;
   exitPrice?: number;
   exitReason?: ExitReason;
+  buySignalCount?: number;
 }
 
-const INITIAL_BALANCE = 1000000;
+import {
+  resolvePaperStartingBalance,
+  DEFAULT_PAPER_STARTING_BALANCE,
+} from "@/lib/paper-trading/balance";
+
+const INITIAL_BALANCE = DEFAULT_PAPER_STARTING_BALANCE;
 
 export async function getPaperTradingState(): Promise<
   PaperTradingState & { cloudUpdatedAtMs?: number }
@@ -213,12 +220,35 @@ export async function clearStrategyRunnerState(): Promise<void> {
   }
 }
 
+export async function applyPaperStartingBalanceIfFlat(): Promise<
+  "applied" | "skipped_has_positions" | "error"
+> {
+  try {
+    const settings = await getSettings();
+    const starting = resolvePaperStartingBalance(settings);
+    const paper = await getPaperTradingState();
+    const open =
+      paper.positions?.filter(
+        (p) => p.state === "OPEN" || p.state === "PARTIAL_EXIT"
+      ) ?? [];
+    const hasHoldings = paper.holdings?.some((h) => (h.qty ?? 0) > 0);
+    if (open.length > 0 || hasHoldings) return "skipped_has_positions";
+    await savePaperTradingState({ ...paper, balance: starting });
+    return "applied";
+  } catch (e) {
+    console.error("Error applying paper starting balance:", e);
+    return "error";
+  }
+}
+
 export async function resetPaperTrading(): Promise<void> {
+  const settings = await getSettings();
+  const starting = resolvePaperStartingBalance(settings);
   await clearPaperOrders();
   await clearStrategyRunnerState();
   const ref = doc(db, "users", getUserId(), "data", "paperTrading");
   await setDoc(ref, {
-    balance: INITIAL_BALANCE,
+    balance: starting,
     holdings: [],
     positions: [],
     trades: [],
@@ -229,8 +259,7 @@ export async function resetPaperTrading(): Promise<void> {
     await appendUserAuditLog({
       severity: "INFO",
       source: "PaperTrading",
-      message:
-        "Paper portfolio reset — balance restored to ₹10,00,000; holdings, orders, and scan locks cleared.",
+      message: `Paper portfolio reset — balance restored to ₹${starting.toLocaleString("en-IN")}; holdings, orders, and scan locks cleared.`,
     });
   } catch (e) {
     console.error("Reset succeeded but audit log write failed:", e);

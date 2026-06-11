@@ -61,19 +61,28 @@ export function scanSignalToOpinion(
  * Portfolio-level decision layer: strategies advise, PortfolioManager decides.
  */
 function consolidateBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
-  const nonBuys = opinions.filter((o) => o.action !== "BUY");
+  const buyCounts = new Map<string, number>();
   const bestBuy = new Map<string, StrategyOpinion>();
 
   for (const op of opinions) {
     if (op.action !== "BUY") continue;
     const key = symKey(op.symbol, op.exchange);
+    buyCounts.set(key, (buyCounts.get(key) ?? 0) + 1);
     const existing = bestBuy.get(key);
     if (!existing || op.confidence > existing.confidence) {
       bestBuy.set(key, op);
     }
   }
 
-  return [...nonBuys, ...bestBuy.values()];
+  return [...bestBuy.values()].map((op) => ({
+    ...op,
+    buySignalCount: buyCounts.get(symKey(op.symbol, op.exchange)) ?? 1,
+  }));
+}
+
+/** Paper auto-trade: entries from BUY signals only; exits via stop-loss / take-profit. */
+export function buyOnlyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
+  return opinions.filter((o) => o.action === "BUY");
 }
 
 export function evaluatePortfolioDecisions(
@@ -238,6 +247,7 @@ export function evaluatePortfolioDecisions(
         price: op.price,
         quantity: op.quantity,
         signalReason: op.reason,
+        buySignalCount: op.buySignalCount,
       });
       openCount += 1;
       continue;

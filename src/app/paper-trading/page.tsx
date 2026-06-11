@@ -57,6 +57,7 @@ import {
   tradesNormalizedChanged,
 } from "@/lib/paper-trades/normalize";
 import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
+import { formatBuyStrength } from "@/lib/paper-trading/balance";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { computePortfolio } from "@/lib/portfolio/compute-portfolio";
 import {
@@ -75,6 +76,8 @@ interface Holding {
   qty: number;
   avgPrice: number;
   ltp: number;
+  buySignalCount?: number;
+  ownerStrategyName?: string;
 }
 
 interface Trade {
@@ -813,7 +816,9 @@ export default function PaperTradingPage() {
       setResetConfirm(false);
       setResetMessage({
         ok: true,
-        text: "Portfolio reset — ₹10,00,000 balance restored; orders and scan locks cleared.",
+        text: appSettings
+          ? `Portfolio reset — ${formatCurrency(appSettings.paperStartingBalance ?? 10_000_000)} balance restored; orders and scan locks cleared.`
+          : "Portfolio reset — balance restored; orders and scan locks cleared.",
       });
       window.dispatchEvent(new CustomEvent("strategies-updated"));
     } catch (e) {
@@ -1464,6 +1469,7 @@ export default function PaperTradingPage() {
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Symbol</th>
+                  <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Buy strength</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Qty</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Avg Price</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">LTP</th>
@@ -1491,6 +1497,24 @@ export default function PaperTradingPage() {
                       <td className="py-3 px-5">
                         <span className="font-medium text-text-primary">{h.symbol}</span>
                         <span className="text-text-tertiary text-xs ml-1.5">{h.exchange}</span>
+                      </td>
+                      <td className="py-3 px-5">
+                        {h.buySignalCount != null && h.buySignalCount > 0 ? (
+                          <span
+                            className={cn(
+                              "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
+                              h.buySignalCount >= 5 && "bg-emerald-500/15 text-emerald-400",
+                              h.buySignalCount >= 3 &&
+                                h.buySignalCount < 5 &&
+                                "bg-amber-500/15 text-amber-400",
+                              h.buySignalCount < 3 && "bg-border/50 text-text-tertiary"
+                            )}
+                          >
+                            {formatBuyStrength(h.buySignalCount)}
+                          </span>
+                        ) : (
+                          <span className="text-text-tertiary text-xs">—</span>
+                        )}
                       </td>
                       <td className="py-3 px-5 text-right text-text-secondary">
                         {formatNumber(h.qty)}

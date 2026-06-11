@@ -26,6 +26,7 @@ export function syncHoldingsFromPositions(
         ltp: p.ltp > 0 ? p.ltp : p.entryPrice,
         ownerStrategyId: p.ownerStrategyId,
         ownerStrategyName: p.ownerStrategyName,
+        buySignalCount: p.buySignalCount,
       });
       continue;
     }

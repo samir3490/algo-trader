@@ -38,6 +38,7 @@ export interface PaperPosition {
   exitPrice?: number;
   exitReason?: ExitReason;
   product?: string;
+  buySignalCount?: number;
 }
 
 /** Strategy opinion — advisors only; does not place orders. */
@@ -51,6 +52,8 @@ export interface StrategyOpinion {
   quantity: number;
   reason: string;
   confidence: number;
+  /** Strategies that signaled BUY on this symbol in the same scan. */
+  buySignalCount?: number;
 }
 
 export type PortfolioAction = "BUY" | "SELL" | "HOLD" | "SKIP";
@@ -68,6 +71,7 @@ export interface PortfolioDecision {
   exitReason?: ExitReason;
   skipReason?: string;
   positionId?: string;
+  buySignalCount?: number;
 }
 
 export interface StrategyConflict {

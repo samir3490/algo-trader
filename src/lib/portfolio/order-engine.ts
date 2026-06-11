@@ -12,6 +12,7 @@ import {
   ensurePositions,
 } from "./position-manager";
 import type { ExitReason, PortfolioDecision } from "./types";
+import { formatBuyStrength } from "@/lib/paper-trading/balance";
 
 const INITIAL_BALANCE = 1_000_000;
 const IST = "Asia/Kolkata";
@@ -116,12 +117,22 @@ export function executePortfolioDecision(
       ownerStrategyName: decision.ownerStrategyName,
       signalReason: decision.signalReason,
       product,
+      buySignalCount: decision.buySignalCount,
     });
+
+    const strength =
+      decision.buySignalCount != null && decision.buySignalCount > 0
+        ? formatBuyStrength(decision.buySignalCount)
+        : undefined;
 
     const newTrade = buildTrade("BUY", sym, ex, qty, price, decision, product, {
       grossAmount: turnover,
       entryTime: position.entryTime,
       entryPrice: position.entryPrice,
+      buySignalCount: decision.buySignalCount,
+      reason: strength
+        ? `${decision.signalReason} · ${strength}`
+        : decision.signalReason,
       ...(charges
         ? {
             charges: charges.total,
