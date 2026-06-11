@@ -100,13 +100,6 @@ export function buildRankedPaperBuyQueue(
   opinions: StrategyOpinion[],
   ctx: PortfolioContext
 ): PortfolioDecision[] {
-  if (
-    (ctx.settings.maxDailyLoss ?? 0) > 0 &&
-    (ctx.todayRealizedLoss ?? 0) >= (ctx.settings.maxDailyLoss ?? 0)
-  ) {
-    return [];
-  }
-
   return rankBuyOpinions(opinions)
     .filter((op) => !hasOpenPositionForSymbol(ctx.state, op.symbol, op.exchange))
     .map((op) => ({

@@ -104,7 +104,11 @@ export function resolvePaperScanOrderQty(
   price: number,
   settings: Pick<
     AppSettings,
-    "paperOrderNotional" | "maxOrderValue" | "defaultQuantity"
+    | "paperOrderNotional"
+    | "maxOrderValue"
+    | "defaultQuantity"
+    | "simulateBrokerage"
+    | "paperDefaultProduct"
   >,
   options?: {
     strategyParams?: Record<string, number>;
@@ -113,8 +117,25 @@ export function resolvePaperScanOrderQty(
 ): number {
   const explicit = options?.strategyParams?.quantity;
   const useExplicit = explicit != null && explicit > 1;
-  return resolvePaperOrderQty(price, settings, {
+  let qty = resolvePaperOrderQty(price, settings, {
     strategyParams: useExplicit ? options?.strategyParams : undefined,
     balance: options?.balance,
   });
+  if (qty < 1) return 0;
+
+  const balance = options?.balance;
+  if (balance != null && settings.simulateBrokerage) {
+    while (
+      qty >= 1 &&
+      paperBuyCashRequired(qty, price, settings) > balance
+    ) {
+      qty -= 1;
+    }
+  } else if (balance != null && balance > 0) {
+    while (qty >= 1 && qty * price > balance) {
+      qty -= 1;
+    }
+  }
+
+  return qty >= 1 ? qty : 0;
 }

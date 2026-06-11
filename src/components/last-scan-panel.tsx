@@ -79,6 +79,9 @@ export default function LastScanPanel({
             <Stat label="SELL signals" value={d.sellSignals} />
             <Stat label="Paper exec" value={d.paperSignals} />
             <Stat label="Live only" value={d.liveSignals} highlight={d.liveSignals > 0 && d.paperSignals === 0} />
+            <Stat label="Open positions" value={d.openPositions ?? 0} />
+            <Stat label="Paper balance" value={d.paperBalance ?? 0} />
+            <Stat label="Max positions" value={d.maxPositions ?? 0} />
             <Stat label="BUY approved" value={d.buyDecisions} />
             <Stat label="Slots to fill" value={d.slotsToFill ?? 0} />
             <Stat label="Gate blocked" value={d.gateBlocked} />
@@ -112,6 +115,16 @@ export default function LastScanPanel({
           {d.sellSignals > 0 && d.buySignals > 0 && (
             <p className="text-sm text-text-secondary">
               SELL signals are ignored for paper trading; only BUY signals open positions. Exits use your profit/loss targets.
+            </p>
+          )}
+          {(d.slotsToFill ?? 0) === 0 && (d.openPositions ?? 0) >= (d.maxPositions ?? 5) && d.buySignals > 0 && (
+            <p className="text-sm text-text-secondary">
+              All {d.maxPositions ?? 5} position slots are full — reset paper portfolio or wait for stop-loss / take-profit exits.
+            </p>
+          )}
+          {(d.paperBalance ?? 0) <= 0 && d.buySignals > 0 && (
+            <p className="text-sm text-amber-300/90">
+              Paper balance is ₹0 — use Reset Paper Portfolio in Settings to restore starting balance.
             </p>
           )}
           {reasons.length > 0 ? (

@@ -14,6 +14,9 @@ export interface ScanDiagnostics {
   buyQueueSize?: number;
   rankedBuyCandidates?: { symbol: string; signalCount: number }[];
   skipReasons: Record<string, number>;
+  openPositions?: number;
+  paperBalance?: number;
+  maxPositions?: number;
 }
 
 export function formatScanAuditMessage(

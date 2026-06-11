@@ -86,8 +86,14 @@ export function executePortfolioDecision(
   let current = ensurePositions(state);
   const sym = decision.symbol.trim().toUpperCase();
   const ex = (decision.exchange || "NSE").trim().toUpperCase();
-  const qty = Math.max(1, Math.floor(decision.quantity || 1));
+  const qty = Math.floor(decision.quantity ?? 0);
+  if (qty <= 0) {
+    return { state: current, executed: false, message: "Invalid quantity" };
+  }
   const price = decision.price;
+  if (!Number.isFinite(price) || price <= 0) {
+    return { state: current, executed: false, message: "Invalid price" };
+  }
   const product = (options?.product ?? "CNC") as ZerodhaProduct;
   const simulate = options?.simulateBrokerage === true;
   const balance = current.balance ?? INITIAL_BALANCE;

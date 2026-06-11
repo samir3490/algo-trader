@@ -207,14 +207,18 @@ export function canExecuteStrategyTrade(
     return { allowed: true };
   }
 
-  // BUY guards — paper strategy scan only blocks duplicate holdings
   const paperScan = ctx.paperStrategyScan === true;
 
-  if (!paperScan && ctx.soldThisRun.has(key)) {
+  // Paper auto-scan: no rebuy/cooldown/duplicate gates — queue already filters held symbols.
+  if (paperScan) {
+    return { allowed: true };
+  }
+
+  if (ctx.soldThisRun.has(key)) {
     return { allowed: false, reason: "Sold this scan — no immediate rebuy" };
   }
 
-  if (!paperScan && ctx.symbolsLockedToday?.[key] === todayIST()) {
+  if (ctx.symbolsLockedToday?.[key] === todayIST()) {
     return { allowed: false, reason: "Symbol locked for today after sell" };
   }
 
@@ -233,37 +237,35 @@ export function canExecuteStrategyTrade(
     return { allowed: false, reason: "Already holding — no add-on buy" };
   }
 
-  if (!paperScan) {
-    const noSameDayRebuy = ctx.settings.noSameDayRebuyAfterSell !== false;
-    if (noSameDayRebuy && anySellToday(ctx.trades, symbol, exchange)) {
-      return { allowed: false, reason: "Sold today — no rebuy until tomorrow" };
-    }
+  const noSameDayRebuy = ctx.settings.noSameDayRebuyAfterSell !== false;
+  if (noSameDayRebuy && anySellToday(ctx.trades, symbol, exchange)) {
+    return { allowed: false, reason: "Sold today — no rebuy until tomorrow" };
+  }
 
-    if (lastSellTodayWasLoss(ctx.trades, symbol, exchange)) {
-      return {
-        allowed: false,
-        reason: "Last sell today was at a loss — no rebuy today",
-      };
-    }
+  if (lastSellTodayWasLoss(ctx.trades, symbol, exchange)) {
+    return {
+      allowed: false,
+      reason: "Last sell today was at a loss — no rebuy today",
+    };
+  }
 
-    const cooldownEnd = ctx.symbolCooldownUntil?.[key];
-    if (cooldownEnd && Date.now() < cooldownEnd) {
-      return { allowed: false, reason: "Cooldown after recent sell" };
-    }
+  const cooldownEnd = ctx.symbolCooldownUntil?.[key];
+  if (cooldownEnd && Date.now() < cooldownEnd) {
+    return { allowed: false, reason: "Cooldown after recent sell" };
+  }
 
-    const lastSell = lastSellMs(ctx.trades, symbol, exchange);
-    const cooldownMs = (ctx.settings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
-    if (lastSell > 0 && Date.now() - lastSell < cooldownMs) {
-      return { allowed: false, reason: "Rebuy cooldown after sell" };
-    }
+  const lastSell = lastSellMs(ctx.trades, symbol, exchange);
+  const cooldownMs = (ctx.settings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
+  if (lastSell > 0 && Date.now() - lastSell < cooldownMs) {
+    return { allowed: false, reason: "Rebuy cooldown after sell" };
+  }
 
-    const maxTrips = ctx.settings.maxRoundTripsPerSymbolPerDay ?? 1;
-    if (roundTripsToday(ctx.trades, symbol, exchange) >= maxTrips) {
-      return {
-        allowed: false,
-        reason: `Max ${maxTrips} round-trip(s) per symbol today`,
-      };
-    }
+  const maxTrips = ctx.settings.maxRoundTripsPerSymbolPerDay ?? 1;
+  if (roundTripsToday(ctx.trades, symbol, exchange) >= maxTrips) {
+    return {
+      allowed: false,
+      reason: `Max ${maxTrips} round-trip(s) per symbol today`,
+    };
   }
 
   return { allowed: true };

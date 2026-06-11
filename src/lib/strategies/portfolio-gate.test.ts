@@ -93,6 +93,22 @@ describe("canExecuteStrategyTrade", () => {
     assert.equal(r.allowed, true);
   });
 
+  it("allows BUY when symbol locked during paper strategy scan", () => {
+    const r = canExecuteStrategyTrade("BUY", "POLICYBAZAAR", "NSE", {
+      holdings: [],
+      trades: [],
+      settings,
+      soldThisRun: new Set(),
+      symbolsLockedToday: {
+        "POLICYBAZAAR:NSE": new Date().toLocaleDateString("en-CA", {
+          timeZone: "Asia/Kolkata",
+        }),
+      },
+      paperStrategyScan: true,
+    });
+    assert.equal(r.allowed, true);
+  });
+
   it("allows SELL when holding exists", () => {
     const r = canExecuteStrategyTrade("SELL", "TCS", "NSE", {
       holdings: [
