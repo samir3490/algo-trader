@@ -106,6 +106,7 @@ import {
   resolvePaperStartingBalance,
   DEFAULT_PAPER_STARTING_BALANCE,
 } from "@/lib/paper-trading/balance";
+import { sanitizePaperTradingPayload } from "@/lib/paper-trading/firestore-sanitize";
 
 const INITIAL_BALANCE = DEFAULT_PAPER_STARTING_BALANCE;
 
@@ -141,15 +142,14 @@ export async function getPaperTradingState(): Promise<
 export async function savePaperTradingState(state: PaperTradingState): Promise<void> {
   try {
     const ref = doc(db, "users", getUserId(), "data", "paperTrading");
+    const payload = sanitizePaperTradingPayload(state);
     await setDoc(ref, {
-      balance: state.balance,
-      holdings: state.holdings,
-      positions: (state.positions ?? []).slice(0, 200),
-      trades: state.trades.slice(0, 500),
+      ...payload,
       updatedAt: serverTimestamp(),
     });
   } catch (e) {
     console.error("Error saving paper trading state:", e);
+    throw e;
   }
 }
 

@@ -162,14 +162,12 @@ export function normalizePaperTrades(
   trades: PaperTrade[],
   orders: OrderRecord[] = []
 ): PaperTrade[] {
-  const withMeta = trades.map((t) => ({
-    ...t,
-    executedAt:
-      t.executedAt ??
-      (tradeExecutedAtMs(t) > 0
-        ? new Date(tradeExecutedAtMs(t)).toISOString()
-        : undefined),
-  }));
+  const withMeta = trades.map((t) => {
+    if (t.executedAt) return t;
+    const ms = tradeExecutedAtMs(t);
+    if (ms > 0) return { ...t, executedAt: new Date(ms).toISOString() };
+    return t;
+  });
   const backfilled = backfillStrategyFromOrders(withMeta, orders);
   const deduped = dedupePaperTrades(backfilled);
   return sortTradesNewestFirst(deduped);

@@ -128,6 +128,7 @@ async function refreshPaperHoldingsLtp(
   return updated;
 }
 
+import { sanitizePaperTradingPayload } from "@/lib/paper-trading/firestore-sanitize";
 import type { ScanDiagnostics } from "@/lib/strategies/scan-diagnostics";
 
 export type { ScanDiagnostics };
@@ -200,25 +201,32 @@ async function persistPaperState(
   userId: string,
   paperState: PaperTradingState,
   orders: OrderRecord[] = []
-): Promise<boolean> {
+): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const raw = paperState.trades ?? [];
     const trades = normalizePaperTrades(raw, orders).slice(0, 500);
+    const payload = sanitizePaperTradingPayload({
+      balance: paperState.balance,
+      holdings: paperState.holdings,
+      positions: paperState.positions,
+      trades,
+    });
     await db.doc(`users/${userId}/data/paperTrading`).set(
       {
-        balance: paperState.balance,
-        holdings: paperState.holdings,
-        positions: (paperState.positions ?? []).slice(0, 200),
-        trades,
+        ...payload,
         updatedAt: FieldValue.serverTimestamp(),
       },
       { merge: true }
     );
-    paperState.trades = trades;
-    return true;
+    paperState.trades = payload.trades;
+    paperState.holdings = payload.holdings;
+    paperState.positions = payload.positions;
+    paperState.balance = payload.balance;
+    return { ok: true };
   } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
     console.error(`Failed to save paper state for ${userId}:`, e);
-    return false;
+    return { ok: false, error };
   }
 }
 
@@ -514,11 +522,14 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
 
     if (executed) {
       const saved = await persistPaperState(db, userId, state, recentOrders);
-      if (!saved) {
+      if (!saved.ok) {
         console.error(
-          `Paper trade not saved for ${decision.symbol} ${decision.action}`
+          `Paper trade not saved for ${decision.symbol} ${decision.action}: ${saved.error}`
         );
-        bumpReason(diagnostics.skipReasons, "Failed to save paper state");
+        bumpReason(
+          diagnostics.skipReasons,
+          `Failed to save paper state — ${saved.error.slice(0, 120)}`
+        );
         continue;
       }
 
