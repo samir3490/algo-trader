@@ -81,6 +81,7 @@ export default function LastScanPanel({
             <Stat label="Live only" value={d.liveSignals} highlight={d.liveSignals > 0 && d.paperSignals === 0} />
             <Stat label="Gate blocked" value={d.gateBlocked} />
             <Stat label="Portfolio skip" value={d.skippedDecisions} />
+            <Stat label="Deferred (rank)" value={d.strengthDeferred ?? 0} />
           </div>
         )}
       </div>

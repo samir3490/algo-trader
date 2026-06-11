@@ -164,11 +164,12 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
 }
 
 function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
+  const orderNotional = s.paperTrading.orderNotional ?? 100_000;
   return {
     defaultExchange: s.tradingPreferences.defaultExchange,
     defaultProduct: s.tradingPreferences.defaultProductType,
     defaultOrderType: s.tradingPreferences.defaultOrderType,
-    maxOrderValue: s.tradingPreferences.maxOrderValue,
+    maxOrderValue: Math.max(s.tradingPreferences.maxOrderValue ?? 0, orderNotional),
     maxDailyLoss: s.tradingPreferences.maxDailyLoss,
     paperStartingBalance: s.paperTrading.startingBalance,
     simulateBrokerage: s.paperTrading.simulateBrokerage,

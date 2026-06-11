@@ -187,6 +187,7 @@ export interface StrategyRunnerMeta {
       dedupeBlocked: number;
       liveSignals: number;
       paperSignals: number;
+      strengthDeferred?: number;
       skipReasons: Record<string, number>;
     };
   };

@@ -21,6 +21,10 @@ import {
   scanSignalToOpinion,
 } from "@/lib/portfolio/portfolio-manager";
 import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trading/balance";
+import {
+  selectTopBuyDecisionsForScan,
+} from "@/lib/portfolio/buy-selection";
+import { paperOrderNotional } from "@/lib/portfolio/paper-position-size";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
 import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
@@ -141,19 +145,32 @@ function bumpReason(map: Record<string, number>, reason: string) {
   map[reason] = (map[reason] ?? 0) + 1;
 }
 
+function normalizeUserSettings(settings: AppSettings): AppSettings {
+  const notional = paperOrderNotional(settings);
+  return {
+    ...settings,
+    maxOrderValue: Math.max(settings.maxOrderValue ?? 0, notional),
+    paperOrderNotional: notional,
+  };
+}
+
 function clearFlatPortfolioLocks(
   paperState: PaperTradingState,
   dedupe: Set<string>,
-  symbolsLockedToday: Record<string, string>
-): Record<string, string> {
+  symbolsLockedToday: Record<string, string>,
+  symbolCooldownUntil: Record<string, number>
+): {
+  symbolsLockedToday: Record<string, string>;
+  symbolCooldownUntil: Record<string, number>;
+} {
   const openCount = getOpenPositions(paperState).length;
   const hasHoldings = (paperState.holdings ?? []).some((h) => (h.qty ?? 0) > 0);
-  if (openCount > 0 || hasHoldings) return symbolsLockedToday;
-
-  for (const key of [...dedupe]) {
-    if (key.startsWith("NO-BUY:")) dedupe.delete(key);
+  if (openCount > 0 || hasHoldings) {
+    return { symbolsLockedToday, symbolCooldownUntil };
   }
-  return {};
+
+  dedupe.clear();
+  return { symbolsLockedToday: {}, symbolCooldownUntil: {} };
 }
 
 export interface AllUsersRunResult {
@@ -234,8 +251,8 @@ async function loadUserSettings(
   userId: string
 ): Promise<AppSettings> {
   const snap = await db.doc(`users/${userId}/data/settings`).get();
-  if (!snap.exists) return DEFAULT_SETTINGS;
-  return { ...DEFAULT_SETTINGS, ...snap.data() } as AppSettings;
+  if (!snap.exists) return normalizeUserSettings(DEFAULT_SETTINGS);
+  return normalizeUserSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as AppSettings);
 }
 
 async function loadRunnerMeta(db: Firestore, userId: string) {
@@ -290,7 +307,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
   } = await loadRunnerMeta(db, userId);
   const dedupe = new Set(existingKeys);
   const emailDedupe = new Set(existingEmailKeys);
-  const symbolCooldownUntil: Record<string, number> = { ...persistedCooldown };
+  let symbolCooldownUntil: Record<string, number> = { ...persistedCooldown };
   let symbolsLockedToday: Record<string, string> = { ...persistedLocks };
   const soldThisRun = new Set<string>();
   const digestLines: ScanDigestLine[] = [];
@@ -306,6 +323,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     dedupeBlocked: 0,
     liveSignals: 0,
     paperSignals: 0,
+    strengthDeferred: 0,
     skipReasons: {},
   };
 
@@ -331,11 +349,15 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     }
   }
   let paperState = ensurePositions(await loadPaperState(db, userId));
-  symbolsLockedToday = clearFlatPortfolioLocks(
+  ({
+    symbolsLockedToday,
+    symbolCooldownUntil,
+  } = clearFlatPortfolioLocks(
     paperState,
     dedupe,
-    symbolsLockedToday
-  );
+    symbolsLockedToday,
+    symbolCooldownUntil
+  ));
   if (paperState.holdings?.length) {
     paperState = {
       ...paperState,
@@ -446,10 +468,26 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     symbolsLockedToday,
   };
 
-  const executable = decisions.filter((d) => d.action === "BUY");
+  const buyDecisions = decisions.filter((d) => d.action === "BUY");
+  const openPositionCount = getOpenPositions(paperState).length;
+  const { toExecute: executable, deferred: strengthDeferredDecisions } =
+    selectTopBuyDecisionsForScan(buyDecisions, {
+      openPositionCount,
+      maxPositions: userSettings.maxPositions ?? 10,
+    });
 
-  for (const d of executable) {
-    diagnostics.buyDecisions += 1;
+  diagnostics.buyDecisions = buyDecisions.length;
+  diagnostics.strengthDeferred = strengthDeferredDecisions.length;
+  for (const d of strengthDeferredDecisions) {
+    bumpReason(
+      diagnostics.skipReasons,
+      "Lower buy strength — top 5 per scan"
+    );
+    writeSystemLog("INFO", "PortfolioManager", "Deferred buy (strength rank)", {
+      symbol: d.symbol,
+      buySignalCount: d.buySignalCount,
+      strategy: d.ownerStrategyName,
+    });
   }
 
   for (const decision of executable) {

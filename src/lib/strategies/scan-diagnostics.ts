@@ -9,6 +9,7 @@ export interface ScanDiagnostics {
   dedupeBlocked: number;
   liveSignals: number;
   paperSignals: number;
+  strengthDeferred?: number;
   skipReasons: Record<string, number>;
 }
 
@@ -32,6 +33,9 @@ export function formatScanAuditMessage(
   }
   if (diagnostics.gateBlocked > 0) {
     parts.push(`${diagnostics.gateBlocked} blocked by trade gates`);
+  }
+  if ((diagnostics.strengthDeferred ?? 0) > 0) {
+    parts.push(`${diagnostics.strengthDeferred} deferred (top 5 by buy strength per scan)`);
   }
   if (diagnostics.dedupeBlocked > 0) {
     parts.push(`${diagnostics.dedupeBlocked} already tried this 15-min window`);

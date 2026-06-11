@@ -17,6 +17,9 @@ import type {
   StrategyOpinion,
 } from "./types";
 import { resolvePaperOrderQty } from "./paper-position-size";
+import {
+  effectivePaperMaxOrderValue,
+} from "./buy-selection";
 
 export interface PortfolioContext {
   state: PaperTradingState;
@@ -92,7 +95,9 @@ export function evaluatePortfolioDecisions(
   decisions: PortfolioDecision[];
   conflicts: StrategyConflict[];
 } {
-  const mergedOpinions = consolidateBuyOpinions(opinions);
+  const mergedOpinions = consolidateBuyOpinions(opinions).sort(
+    (a, b) => (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0)
+  );
   const conflicts = detectStrategyConflicts(mergedOpinions);
   const blocked = opinionsBlockedByConflict(mergedOpinions, conflicts, (symbol, exchange) =>
     hasOpenPositionForSymbol(ctx.state, symbol, exchange)
@@ -205,7 +210,7 @@ export function evaluatePortfolioDecisions(
         continue;
       }
 
-      if (orderValue > (ctx.settings.maxOrderValue ?? Infinity)) {
+      if (orderValue > effectivePaperMaxOrderValue(ctx.settings)) {
         decisions.push({
           action: "SKIP",
           symbol: op.symbol,
@@ -215,7 +220,7 @@ export function evaluatePortfolioDecisions(
           price: op.price,
           quantity: op.quantity,
           signalReason: op.reason,
-          skipReason: `Exceeds max order value (${ctx.settings.maxOrderValue})`,
+          skipReason: `Exceeds max order value (${effectivePaperMaxOrderValue(ctx.settings)})`,
         });
         continue;
       }
