@@ -188,6 +188,7 @@ export interface StrategyRunnerMeta {
       liveSignals: number;
       paperSignals: number;
       strengthDeferred?: number;
+      rankedBuyCandidates?: { symbol: string; signalCount: number }[];
       skipReasons: Record<string, number>;
     };
   };

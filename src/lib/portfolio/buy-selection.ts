@@ -2,13 +2,20 @@ import type { AppSettings } from "@/lib/firebase";
 import type { PortfolioDecision } from "./types";
 import { paperOrderNotional } from "./paper-position-size";
 
-/** Max new BUY orders placed per strategy scan. */
-export const MAX_BUYS_PER_SCAN = 5;
-
 export function effectivePaperMaxOrderValue(
   settings: Pick<AppSettings, "maxOrderValue" | "paperOrderNotional">
 ): number {
   return Math.max(settings.maxOrderValue ?? 0, paperOrderNotional(settings));
+}
+
+/** Rank BUY candidates: most signals first, then alphabetical by symbol. */
+export function compareBuyRank(
+  a: Pick<PortfolioDecision, "symbol" | "buySignalCount">,
+  b: Pick<PortfolioDecision, "symbol" | "buySignalCount">
+): number {
+  const strength = (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0);
+  if (strength !== 0) return strength;
+  return a.symbol.localeCompare(b.symbol, "en", { sensitivity: "base" });
 }
 
 export function rankBuyDecisionsByStrength(
@@ -16,36 +23,40 @@ export function rankBuyDecisionsByStrength(
 ): PortfolioDecision[] {
   return [...decisions]
     .filter((d) => d.action === "BUY")
-    .sort((a, b) => {
-      const strength = (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0);
-      if (strength !== 0) return strength;
-      return b.price * b.quantity - a.price * a.quantity;
-    });
+    .sort(compareBuyRank);
+}
+
+export function remainingPositionSlots(
+  openPositionCount: number,
+  maxPositions: number
+): number {
+  return Math.max(0, maxPositions - openPositionCount);
 }
 
 /**
- * When more than `limit` BUYs qualify, keep the strongest symbols only.
- * Also respects remaining position slots vs maxPositions.
+ * Ranked queue capped to available position slots (from settings maxPositions).
  */
 export function selectTopBuyDecisionsForScan(
   decisions: PortfolioDecision[],
   options: {
     openPositionCount: number;
     maxPositions: number;
-    perScanLimit?: number;
   }
 ): {
+  ranked: PortfolioDecision[];
   toExecute: PortfolioDecision[];
   deferred: PortfolioDecision[];
+  slotsToFill: number;
 } {
-  const limit = options.perScanLimit ?? MAX_BUYS_PER_SCAN;
   const ranked = rankBuyDecisionsByStrength(decisions);
-  const remainingSlots = Math.max(
-    0,
-    Math.min(limit, options.maxPositions - options.openPositionCount)
+  const slotsToFill = remainingPositionSlots(
+    options.openPositionCount,
+    options.maxPositions
   );
   return {
-    toExecute: ranked.slice(0, remainingSlots),
-    deferred: ranked.slice(remainingSlots),
+    ranked,
+    slotsToFill,
+    toExecute: ranked.slice(0, slotsToFill),
+    deferred: ranked.slice(slotsToFill),
   };
 }

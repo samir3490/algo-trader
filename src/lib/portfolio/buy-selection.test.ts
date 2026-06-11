@@ -1,7 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  compareBuyRank,
   rankBuyDecisionsByStrength,
+  remainingPositionSlots,
   selectTopBuyDecisionsForScan,
 } from "./buy-selection";
 import type { PortfolioDecision } from "./types";
@@ -37,16 +39,43 @@ describe("buy-selection", () => {
     );
   });
 
-  it("selects top 5 when flat", () => {
+  it("breaks ties alphabetically by symbol", () => {
+    const ranked = rankBuyDecisionsByStrength([
+      buy("ZZZ", 3),
+      buy("AAA", 3),
+      buy("MMM", 3),
+    ]);
+    assert.deepEqual(
+      ranked.map((d) => d.symbol),
+      ["AAA", "MMM", "ZZZ"]
+    );
+    assert.equal(compareBuyRank(buy("B", 2), buy("A", 2)), 1);
+  });
+
+  it("selects up to maxPositions when flat", () => {
     const decisions = Array.from({ length: 8 }, (_, i) =>
       buy(`S${i}`, 8 - i)
     );
-    const { toExecute, deferred } = selectTopBuyDecisionsForScan(decisions, {
-      openPositionCount: 0,
-      maxPositions: 10,
-    });
+    const { toExecute, deferred, slotsToFill } = selectTopBuyDecisionsForScan(
+      decisions,
+      {
+        openPositionCount: 0,
+        maxPositions: 5,
+      }
+    );
+    assert.equal(slotsToFill, 5);
     assert.equal(toExecute.length, 5);
     assert.equal(deferred.length, 3);
     assert.equal(toExecute[0].symbol, "S0");
+  });
+
+  it("respects open positions vs maxPositions", () => {
+    assert.equal(remainingPositionSlots(3, 5), 2);
+    const { slotsToFill, toExecute } = selectTopBuyDecisionsForScan(
+      [buy("A", 1), buy("B", 1)],
+      { openPositionCount: 4, maxPositions: 5 }
+    );
+    assert.equal(slotsToFill, 1);
+    assert.equal(toExecute.length, 1);
   });
 });

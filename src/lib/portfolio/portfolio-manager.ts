@@ -87,6 +87,47 @@ export function buyOnlyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] 
   return opinions.filter((o) => o.action === "BUY");
 }
 
+export function rankBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
+  return consolidateBuyOpinions(buyOnlyOpinions(opinions)).sort((a, b) => {
+    const strength = (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0);
+    if (strength !== 0) return strength;
+    return a.symbol.localeCompare(b.symbol, "en", { sensitivity: "base" });
+  });
+}
+
+/** Fallback BUY list when portfolio evaluation produced no actionable buys. */
+export function buildBuyDecisionsFromOpinions(
+  opinions: StrategyOpinion[],
+  ctx: PortfolioContext
+): PortfolioDecision[] {
+  const maxOrder = effectivePaperMaxOrderValue(ctx.settings);
+  const balance = ctx.state.balance ?? 0;
+  if (
+    (ctx.settings.maxDailyLoss ?? 0) > 0 &&
+    (ctx.todayRealizedLoss ?? 0) >= (ctx.settings.maxDailyLoss ?? 0)
+  ) {
+    return [];
+  }
+
+  return rankBuyOpinions(opinions)
+    .filter((op) => !hasOpenPositionForSymbol(ctx.state, op.symbol, op.exchange))
+    .filter((op) => {
+      const orderValue = op.quantity * op.price;
+      return orderValue <= balance && orderValue <= maxOrder;
+    })
+    .map((op) => ({
+      action: "BUY" as const,
+      symbol: op.symbol,
+      exchange: op.exchange,
+      ownerStrategyId: op.strategyId,
+      ownerStrategyName: op.strategyName,
+      price: op.price,
+      quantity: op.quantity,
+      signalReason: op.reason,
+      buySignalCount: op.buySignalCount,
+    }));
+}
+
 export function evaluatePortfolioDecisions(
   opinions: StrategyOpinion[],
   ctx: PortfolioContext
@@ -94,9 +135,7 @@ export function evaluatePortfolioDecisions(
   decisions: PortfolioDecision[];
   conflicts: StrategyConflict[];
 } {
-  const mergedOpinions = consolidateBuyOpinions(opinions).sort(
-    (a, b) => (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0)
-  );
+  const mergedOpinions = rankBuyOpinions(opinions);
   const conflicts = detectStrategyConflicts(mergedOpinions);
   const blocked = opinionsBlockedByConflict(mergedOpinions, conflicts, (symbol, exchange) =>
     hasOpenPositionForSymbol(ctx.state, symbol, exchange)
@@ -104,7 +143,6 @@ export function evaluatePortfolioDecisions(
   const decisions: PortfolioDecision[] = [];
   const multi = ctx.multiStrategyMode === true;
 
-  let remainingBalance = ctx.state.balance ?? 0;
   const maxOrder = effectivePaperMaxOrderValue(ctx.settings);
 
   for (const op of mergedOpinions) {
@@ -179,7 +217,7 @@ export function evaluatePortfolioDecisions(
       }
 
       const orderValue = op.quantity * op.price;
-      if (orderValue > remainingBalance) {
+      if (orderValue > (ctx.state.balance ?? 0)) {
         decisions.push({
           action: "SKIP",
           symbol: op.symbol,
@@ -238,7 +276,6 @@ export function evaluatePortfolioDecisions(
         signalReason: op.reason,
         buySignalCount: op.buySignalCount,
       });
-      remainingBalance -= orderValue;
       continue;
     }
 

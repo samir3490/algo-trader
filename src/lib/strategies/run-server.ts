@@ -19,6 +19,8 @@ import {
   evaluatePortfolioDecisions,
   buyOnlyOpinions,
   scanSignalToOpinion,
+  buildBuyDecisionsFromOpinions,
+  rankBuyOpinions,
 } from "@/lib/portfolio/portfolio-manager";
 import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trading/balance";
 import {
@@ -472,29 +474,37 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     symbolsLockedToday,
   };
 
-  const buyDecisions = decisions.filter((d) => d.action === "BUY");
-  const openPositionCount = getOpenPositions(paperState).length;
-  const { toExecute: executable, deferred: strengthDeferredDecisions } =
-    selectTopBuyDecisionsForScan(buyDecisions, {
-      openPositionCount,
-      maxPositions: userSettings.maxPositions ?? 10,
+  const buyDecisions = (() => {
+    const approved = decisions.filter((d) => d.action === "BUY");
+    if (approved.length > 0) return approved;
+    return buildBuyDecisionsFromOpinions(opinions, {
+      state: paperState,
+      settings: userSettings,
+      todayRealizedLoss: todayRealizedLoss(paperState.trades),
     });
+  })();
+
+  const rankedForDisplay = rankBuyOpinions(opinions).map((op) => ({
+    symbol: op.symbol,
+    signalCount: op.buySignalCount ?? 1,
+  }));
+  const openPositionCount = getOpenPositions(paperState).length;
+  const maxPositions = userSettings.maxPositions ?? 5;
+  const { ranked: rankedQueue, slotsToFill } = selectTopBuyDecisionsForScan(
+    buyDecisions,
+    { openPositionCount, maxPositions }
+  );
 
   diagnostics.buyDecisions = buyDecisions.length;
-  diagnostics.strengthDeferred = strengthDeferredDecisions.length;
-  for (const d of strengthDeferredDecisions) {
-    bumpReason(
-      diagnostics.skipReasons,
-      "Lower buy strength — top 5 per scan"
-    );
-    writeSystemLog("INFO", "PortfolioManager", "Deferred buy (strength rank)", {
-      symbol: d.symbol,
-      buySignalCount: d.buySignalCount,
-      strategy: d.ownerStrategyName,
-    });
-  }
+  diagnostics.rankedBuyCandidates = rankedForDisplay;
 
-  for (const decision of executable) {
+  let placedThisScan = 0;
+  let queueIndex = 0;
+  const deferReason = `Lower buy rank — max ${maxPositions} positions`;
+
+  while (placedThisScan < slotsToFill && queueIndex < rankedQueue.length) {
+    const decision = rankedQueue[queueIndex];
+    queueIndex += 1;
     signalStrategyIds.add(decision.ownerStrategyId);
     const key = executionDedupeKey(decision.symbol);
     if (dedupe.has(key)) {
@@ -502,17 +512,17 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       bumpReason(diagnostics.skipReasons, "Already attempted this 15-min window");
       continue;
     }
-    if (
-      decision.action === "BUY" &&
-      dedupe.has(executionNoBuyTodayKey(decision.symbol))
-    ) {
+    if (dedupe.has(executionNoBuyTodayKey(decision.symbol))) {
       diagnostics.dedupeBlocked += 1;
       bumpReason(diagnostics.skipReasons, "No rebuy today after sell");
       continue;
     }
 
     const strat = running.find((s) => s.id === decision.ownerStrategyId);
-    if (!strat) continue;
+    if (!strat) {
+      bumpReason(diagnostics.skipReasons, "Strategy not found for signal");
+      continue;
+    }
 
     const exchange = decision.exchange || "NSE";
     const mode = resolveStrategyMode(strat);
@@ -521,7 +531,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       diagnostics.paperSignals += 1;
       gateCtx.ownerStrategyId = decision.ownerStrategyId;
       const gate = canExecuteStrategyTrade(
-        decision.action as "BUY" | "SELL",
+        "BUY",
         decision.symbol,
         exchange,
         gateCtx
@@ -535,7 +545,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           {
             symbol: decision.symbol,
             exchange,
-            side: decision.action as "BUY" | "SELL",
+            side: "BUY",
             quantity: qty,
             price: decision.price,
             status: `SKIPPED — ${gate.reason}`,
@@ -545,7 +555,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
             mode: "PAPER",
             symbol: decision.symbol,
             exchange,
-            side: decision.action as "BUY" | "SELL",
+            side: "BUY",
             quantity: qty,
             price: decision.price,
             orderType: "MARKET",
@@ -557,44 +567,42 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         continue;
       }
 
-      if (decision.action === "BUY") {
-        const orderValue = decision.quantity * decision.price;
-        const buyCheck = canPlacePaperBuy({
-          balance: paperState.balance ?? INITIAL_BALANCE,
-          orderValue,
-          holdingsCount: getOpenPositions(paperState).length,
-          settings: userSettings,
-          todayRealizedLoss: todayRealizedLoss(paperState.trades),
-        });
-        if (!buyCheck.allowed) {
-          diagnostics.riskBlocked += 1;
-          bumpReason(diagnostics.skipReasons, buyCheck.message ?? "Risk blocked");
-          queueEmail(
-            "skipped",
-            {
-              symbol: decision.symbol,
-              exchange,
-              side: "BUY",
-              quantity: decision.quantity,
-              price: decision.price,
-              status: `SKIPPED — ${buyCheck.message}`,
-              strategyName: decision.ownerStrategyName,
-            },
-            {
-              mode: "PAPER",
-              symbol: decision.symbol,
-              exchange,
-              side: "BUY",
-              quantity: decision.quantity,
-              price: decision.price,
-              orderType: "MARKET",
-              product: userSettings.paperDefaultProduct,
-              status: `SKIPPED — ${buyCheck.message}`,
-              strategyName: decision.ownerStrategyName,
-            }
-          );
-          continue;
-        }
+      const orderValue = decision.quantity * decision.price;
+      const buyCheck = canPlacePaperBuy({
+        balance: paperState.balance ?? INITIAL_BALANCE,
+        orderValue,
+        holdingsCount: getOpenPositions(paperState).length,
+        settings: userSettings,
+        todayRealizedLoss: todayRealizedLoss(paperState.trades),
+      });
+      if (!buyCheck.allowed) {
+        diagnostics.riskBlocked += 1;
+        bumpReason(diagnostics.skipReasons, buyCheck.message ?? "Risk blocked");
+        queueEmail(
+          "skipped",
+          {
+            symbol: decision.symbol,
+            exchange,
+            side: "BUY",
+            quantity: decision.quantity,
+            price: decision.price,
+            status: `SKIPPED — ${buyCheck.message}`,
+            strategyName: decision.ownerStrategyName,
+          },
+          {
+            mode: "PAPER",
+            symbol: decision.symbol,
+            exchange,
+            side: "BUY",
+            quantity: decision.quantity,
+            price: decision.price,
+            orderType: "MARKET",
+            product: userSettings.paperDefaultProduct,
+            status: `SKIPPED — ${buyCheck.message}`,
+            strategyName: decision.ownerStrategyName,
+          }
+        );
+        continue;
       }
 
       const { state, executed, message, executedQty } = executePortfolioDecision(
@@ -624,6 +632,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         gateCtx.trades = paperState.trades ?? [];
         dedupe.add(key);
         tradesExecuted += 1;
+        placedThisScan += 1;
 
         const tradeQty = executedQty ?? qty;
         const strengthLabel =
@@ -688,7 +697,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           {
             symbol: decision.symbol,
             exchange,
-            side: decision.action as "BUY" | "SELL",
+            side: "BUY",
             quantity: qty,
             price: decision.price,
             status: `SKIPPED — ${message}`,
@@ -698,7 +707,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
             mode: "PAPER",
             symbol: decision.symbol,
             exchange,
-            side: decision.action as "BUY" | "SELL",
+            side: "BUY",
             quantity: qty,
             price: decision.price,
             orderType: "MARKET",
@@ -716,7 +725,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         {
           symbol: decision.symbol,
           exchange: strat.exchange || "NSE",
-          side: decision.action as "BUY" | "SELL",
+          side: "BUY",
           quantity: decision.quantity,
           price: decision.price,
           status: "LIVE SIGNAL (manual)",
@@ -726,7 +735,7 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
           mode: "LIVE",
           symbol: decision.symbol,
           exchange: strat.exchange || "NSE",
-          side: decision.action as "BUY" | "SELL",
+          side: "BUY",
           quantity: decision.quantity,
           price: decision.price,
           orderType: "MARKET",
@@ -736,6 +745,16 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
         }
       );
     }
+  }
+
+  diagnostics.strengthDeferred = rankedQueue.length - queueIndex;
+  for (let i = queueIndex; i < rankedQueue.length; i++) {
+    bumpReason(diagnostics.skipReasons, deferReason);
+    writeSystemLog("INFO", "PortfolioManager", "Deferred buy (rank)", {
+      symbol: rankedQueue[i].symbol,
+      buySignalCount: rankedQueue[i].buySignalCount,
+      strategy: rankedQueue[i].ownerStrategyName,
+    });
   }
 
   for (const decision of decisions.filter((d) => d.action === "SKIP")) {

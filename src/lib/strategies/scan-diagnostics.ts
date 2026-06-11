@@ -10,6 +10,7 @@ export interface ScanDiagnostics {
   liveSignals: number;
   paperSignals: number;
   strengthDeferred?: number;
+  rankedBuyCandidates?: { symbol: string; signalCount: number }[];
   skipReasons: Record<string, number>;
 }
 
@@ -41,7 +42,7 @@ export function formatScanAuditMessage(
     parts.push(`${diagnostics.skippedDecisions} skipped at portfolio layer`);
   }
   if ((diagnostics.strengthDeferred ?? 0) > 0) {
-    parts.push(`${diagnostics.strengthDeferred} deferred (top 5 by buy strength per scan)`);
+    parts.push(`${diagnostics.strengthDeferred} deferred (lower rank vs max positions)`);
   }
   if (diagnostics.dedupeBlocked > 0) {
     parts.push(`${diagnostics.dedupeBlocked} already tried this 15-min window`);
