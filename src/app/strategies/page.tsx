@@ -42,6 +42,8 @@ import {
 import BacktestPanel from "@/components/backtest-panel";
 import AuditLogsPanel from "@/components/audit-logs-panel";
 import TradeAuditPanel from "@/components/trade-audit-panel";
+import LastScanPanel from "@/components/last-scan-panel";
+import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
 import StrategiesSectionNav, {
   strategiesSectionFromParam,
   type StrategiesSection,
@@ -135,35 +137,14 @@ function formatScanFeedback(
   summary: StrategyRunnerMeta["lastScanSummary"]
 ): string {
   if (!summary) return "";
-  const base = `Scan complete: ${summary.signalsFound} signal${summary.signalsFound !== 1 ? "s" : ""}, ${summary.tradesExecuted} trade${summary.tradesExecuted !== 1 ? "s" : ""} placed.`;
-  const d = summary.diagnostics;
-  if (!d || summary.tradesExecuted > 0) return base;
-
-  const parts: string[] = [];
-  if (d.buySignals > 0 || d.sellSignals > 0) {
-    parts.push(`${d.buySignals} BUY / ${d.sellSignals} SELL signals`);
-  }
-  if (d.liveSignals > 0 && d.paperSignals === 0) {
-    parts.push(
-      `${d.liveSignals} in Live mode — switch strategies to Paper to auto-trade`
-    );
-  } else if (d.liveSignals > 0) {
-    parts.push(`${d.liveSignals} live-only (no paper execution)`);
-  }
-  if (d.skippedDecisions > 0) {
-    parts.push(`${d.skippedDecisions} skipped before execution`);
-  }
-  if (d.dedupeBlocked > 0) {
-    parts.push(`${d.dedupeBlocked} already tried this 15-min window`);
-  }
-  const topReasons = Object.entries(d.skipReasons ?? {})
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 3)
-    .map(([reason, count]) => `${reason} (${count})`);
-  if (topReasons.length > 0) {
-    parts.push(`Top blocks: ${topReasons.join("; ")}`);
-  }
-  return parts.length > 0 ? `${base} ${parts.join(" · ")}` : base;
+  const detail = formatScanAuditMessage(
+    summary.signalsFound,
+    summary.tradesExecuted,
+    summary.diagnostics
+  );
+  return detail.startsWith("Scan:")
+    ? detail.replace(/^Scan:/, "Last scan:")
+    : detail;
 }
 
 function ActiveStrategiesTable({
@@ -578,7 +559,10 @@ function StrategiesPageContent() {
         const stored = localStorage.getItem("strategy_runner_last_run");
         if (stored) setLastRunnerAt(stored);
       }
-      if (meta.lastScanSummary) setLastScanSummary(meta.lastScanSummary);
+      if (meta.lastScanSummary) {
+        setLastScanSummary(meta.lastScanSummary);
+        setScanFeedback(formatScanFeedback(meta.lastScanSummary));
+      }
     }
     void loadRunnerMeta();
 
@@ -627,7 +611,11 @@ function StrategiesPageContent() {
             : undefined,
         };
         setLastScanSummary(summary);
-        setScanFeedback(formatScanFeedback(summary));
+        setScanFeedback(
+          summary.tradesExecuted === 0 && summary.signalsFound > 0
+            ? formatScanFeedback(summary)
+            : `Scan complete: ${summary.signalsFound} signal${summary.signalsFound !== 1 ? "s" : ""}, ${summary.tradesExecuted} trade${summary.tradesExecuted !== 1 ? "s" : ""} placed.`
+        );
         window.dispatchEvent(new CustomEvent("strategies-updated"));
         window.dispatchEvent(new CustomEvent("paper-trading-updated"));
         getFirestoreStrategies().then((fs) => setActiveStrategies(firestoreToLocal(fs)));
@@ -731,6 +719,7 @@ function StrategiesPageContent() {
 
       {pageSection === "audit" && (
         <div className="space-y-4">
+          <LastScanPanel summary={lastScanSummary ?? null} />
           <TradeAuditPanel />
           <AuditLogsPanel tall />
         </div>
@@ -772,6 +761,7 @@ function StrategiesPageContent() {
 
       {pageSection === "configure" && (
         <>
+      <LastScanPanel summary={lastScanSummary ?? null} className="mb-2" />
       {/* ── How Strategies Work ────────────────────────────────────────── */}
       <div className="rounded-xl border border-accent/30 bg-accent-muted p-5">
         <div className="flex items-start gap-3">
@@ -828,7 +818,18 @@ function StrategiesPageContent() {
                 </li>
               )}
               {scanFeedback && (
-                <li className="text-text-secondary pt-1">{scanFeedback}</li>
+                <li
+                  className={cn(
+                    "pt-2 text-sm rounded-lg px-3 py-2 -mx-1",
+                    lastScanSummary &&
+                      lastScanSummary.tradesExecuted === 0 &&
+                      lastScanSummary.signalsFound > 0
+                      ? "bg-amber-500/10 text-amber-200"
+                      : "text-text-secondary"
+                  )}
+                >
+                  {scanFeedback}
+                </li>
               )}
             </ul>
           </div>

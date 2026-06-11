@@ -1,39 +1,43 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ScrollText, RefreshCw } from "lucide-react";
 import { cn, formatDateTimeIST } from "@/lib/utils";
-
-interface LogRow {
-  id: string;
-  timestamp: string;
-  severity: string;
-  source: string;
-  message: string;
-}
+import { useAuth } from "@/lib/auth-context";
+import type { UserAuditEntry } from "@/lib/audit/user-audit-log";
 
 export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
-  const [logs, setLogs] = useState<LogRow[]>([]);
+  const { user } = useAuth();
+  const [logs, setLogs] = useState<UserAuditEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [source, setSource] = useState<"firestore" | "memory" | null>(null);
+  const [hint, setHint] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("/api/system/logs");
+      const headers: Record<string, string> = {};
+      if (user) {
+        const token = await user.getIdToken();
+        headers.Authorization = `Bearer ${token}`;
+      }
+      const res = await fetch("/api/system/logs", { headers });
       const data = await res.json();
       setLogs(data.logs ?? []);
+      setSource(data.source ?? null);
+      setHint(data.hint ?? null);
     } catch {
       setLogs([]);
     } finally {
       setLoading(false);
     }
-  }
+  }, [user]);
 
   useEffect(() => {
     void load();
     const t = setInterval(() => void load(), 30_000);
     return () => clearInterval(t);
-  }, []);
+  }, [load]);
 
   return (
     <section className="card">
@@ -47,7 +51,9 @@ export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
               System audit logs
             </h2>
             <p className="text-xs text-text-secondary">
-              Market data, backtests, and risk rejections (server memory)
+              {source === "firestore"
+                ? "Saved to your account — scans, resets, and trade blocks"
+                : "Sign in to persist audit history across deploys"}
             </p>
           </div>
         </div>
@@ -60,6 +66,12 @@ export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
           <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
         </button>
       </div>
+
+      {hint && (
+        <p className="mb-3 text-xs text-amber-400/90 rounded-lg bg-amber-500/10 px-3 py-2">
+          {hint}
+        </p>
+      )}
 
       <div
         className={cn(
@@ -103,7 +115,9 @@ export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
             {logs.length === 0 && (
               <tr>
                 <td colSpan={4} className="py-8 text-center text-text-tertiary">
-                  No logs yet. Run a backtest or wait for the strategy cron.
+                  {user
+                    ? "No audit entries yet. Run a strategy scan or reset paper portfolio — results appear here."
+                    : "Sign in, then run a strategy scan to populate audit logs."}
                 </td>
               </tr>
             )}

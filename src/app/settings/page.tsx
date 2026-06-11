@@ -200,6 +200,11 @@ function SettingsContent() {
   const [toast, setToast] = useState<string | null>(null);
   const [toastError, setToastError] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
 
   // Multi-account state
   const [accounts, setAccounts] = useState<(ZerodhaAccount & { connected: boolean })[]>([]);
@@ -443,14 +448,30 @@ function SettingsContent() {
   }
 
   async function resetPaperPortfolio() {
+    setResetLoading(true);
+    setResetMessage(null);
+    setToastError(false);
     try {
       await resetPaperTrading();
       localStorage.removeItem("paper_trading_state");
       localStorage.removeItem("paperTrades");
       setResetConfirm(false);
-      setToast("Paper portfolio and order history have been reset.");
-    } catch {
-      setToast("Reset failed — please try again.");
+      const msg =
+        "Paper portfolio reset — balance ₹10,00,000, orders cleared, scan locks cleared.";
+      setResetMessage({ ok: true, text: msg });
+      setToast(msg);
+      window.dispatchEvent(new CustomEvent("paper-trading-updated"));
+      window.dispatchEvent(new CustomEvent("strategies-updated"));
+    } catch (e) {
+      const msg =
+        e instanceof Error
+          ? `Reset failed: ${e.message}`
+          : "Reset failed — please try again.";
+      setResetMessage({ ok: false, text: msg });
+      setToastError(true);
+      setToast(msg);
+    } finally {
+      setResetLoading(false);
     }
   }
 
@@ -867,34 +888,54 @@ function SettingsContent() {
             </div>
           </div>
 
-          <div className="border-t border-border pt-4">
+          <div className="border-t border-border pt-4 space-y-3">
             {!resetConfirm ? (
               <button
-                onClick={() => setResetConfirm(true)}
+                onClick={() => {
+                  setResetMessage(null);
+                  setResetConfirm(true);
+                }}
                 className="flex items-center gap-2 rounded-lg bg-loss-muted px-4 py-2 text-sm font-medium text-loss transition-colors hover:bg-loss/20"
               >
                 <RefreshCw className="h-4 w-4" />
                 Reset Paper Portfolio
               </button>
             ) : (
-              <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                 <div className="flex items-center gap-2 text-sm text-warning">
-                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
                   This will delete all paper trades and orders. Are you sure?
                 </div>
-                <button
-                  onClick={resetPaperPortfolio}
-                  className="rounded-lg bg-loss px-3 py-1.5 text-xs font-medium text-white hover:bg-loss/80"
-                >
-                  Confirm Reset
-                </button>
-                <button
-                  onClick={() => setResetConfirm(false)}
-                  className="rounded-lg bg-bg-tertiary px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-hover"
-                >
-                  Cancel
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => void resetPaperPortfolio()}
+                    disabled={resetLoading}
+                    className="rounded-lg bg-loss px-3 py-1.5 text-xs font-medium text-white hover:bg-loss/80 disabled:opacity-60"
+                  >
+                    {resetLoading ? "Resetting…" : "Confirm Reset"}
+                  </button>
+                  <button
+                    onClick={() => setResetConfirm(false)}
+                    disabled={resetLoading}
+                    className="rounded-lg bg-bg-tertiary px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-hover disabled:opacity-60"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
+            )}
+            {resetMessage && (
+              <p
+                role="status"
+                className={cn(
+                  "text-sm rounded-lg px-3 py-2",
+                  resetMessage.ok
+                    ? "bg-emerald-500/10 text-emerald-300"
+                    : "bg-loss-muted text-loss"
+                )}
+              >
+                {resetMessage.text}
+              </p>
             )}
           </div>
         </div>

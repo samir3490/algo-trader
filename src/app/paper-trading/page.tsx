@@ -202,6 +202,12 @@ export default function PaperTradingPage() {
   );
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [riskToast, setRiskToast] = useState<string | null>(null);
+  const [resetConfirm, setResetConfirm] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetMessage, setResetMessage] = useState<{
+    ok: boolean;
+    text: string;
+  } | null>(null);
   const settingsRef = useRef<AppSettings | null>(null);
   const balanceRef = useRef(balance);
   const tradesRef = useRef(trades);
@@ -784,23 +790,43 @@ export default function PaperTradingPage() {
     }).catch(() => {});
   }
 
-  function handleReset() {
-    setHoldings([]);
-    setTrades([]);
-    setBalance(INITIAL_BALANCE);
-    setSymbol("");
-    setLimitPrice("");
-    setManualPrice("");
-    setOrderSide("BUY");
-    setOrderType("MARKET");
-    setQuote(null);
-    setValidationError("");
+  async function handleReset() {
+    setResetLoading(true);
+    setResetMessage(null);
     try {
-      localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem("paperTrades");
-    } catch {}
-    setOrderHistory([]);
-    resetPaperTrading().catch(() => {});
+      await resetPaperTrading();
+      setHoldings([]);
+      setTrades([]);
+      setBalance(INITIAL_BALANCE);
+      setSymbol("");
+      setLimitPrice("");
+      setManualPrice("");
+      setOrderSide("BUY");
+      setOrderType("MARKET");
+      setQuote(null);
+      setValidationError("");
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem("paperTrades");
+      } catch {}
+      setOrderHistory([]);
+      setResetConfirm(false);
+      setResetMessage({
+        ok: true,
+        text: "Portfolio reset — ₹10,00,000 balance restored; orders and scan locks cleared.",
+      });
+      window.dispatchEvent(new CustomEvent("strategies-updated"));
+    } catch (e) {
+      setResetMessage({
+        ok: false,
+        text:
+          e instanceof Error
+            ? `Reset failed: ${e.message}`
+            : "Reset failed — try Settings → Reset Paper Portfolio.",
+      });
+    } finally {
+      setResetLoading(false);
+    }
   }
 
   const portfolio = computePortfolio(holdings, balance);
@@ -909,17 +935,54 @@ export default function PaperTradingPage() {
                 {zerodhaConnected ? "Live Prices" : "Manual Prices"}
               </div>
             )}
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-tertiary border border-border
-                         text-text-secondary hover:text-text-primary hover:border-border-light
-                         transition-all duration-200 text-sm cursor-pointer"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Reset Portfolio
-            </button>
+            {resetConfirm ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => void handleReset()}
+                  disabled={resetLoading}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-loss text-white text-sm font-medium disabled:opacity-60"
+                >
+                  <RefreshCw className={cn("w-4 h-4", resetLoading && "animate-spin")} />
+                  {resetLoading ? "Resetting…" : "Confirm reset"}
+                </button>
+                <button
+                  onClick={() => setResetConfirm(false)}
+                  disabled={resetLoading}
+                  className="px-3 py-2 rounded-lg border border-border text-sm text-text-secondary hover:bg-bg-hover disabled:opacity-60"
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => {
+                  setResetMessage(null);
+                  setResetConfirm(true);
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-bg-tertiary border border-border
+                           text-text-secondary hover:text-text-primary hover:border-border-light
+                           transition-all duration-200 text-sm cursor-pointer"
+              >
+                <RefreshCw className="w-4 h-4" />
+                Reset Portfolio
+              </button>
+            )}
           </div>
         </div>
+
+        {resetMessage && (
+          <p
+            role="status"
+            className={cn(
+              "mb-4 rounded-lg px-4 py-3 text-sm",
+              resetMessage.ok
+                ? "bg-emerald-500/10 text-emerald-300 border border-emerald-500/20"
+                : "bg-loss-muted text-loss border border-loss/30"
+            )}
+          >
+            {resetMessage.text}
+          </p>
+        )}
 
         {appSettings && (appSettings.autoStopLoss || appSettings.autoTakeProfit) && (
           <div className="mb-4 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 text-xs text-text-secondary">

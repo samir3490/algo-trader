@@ -20,6 +20,8 @@ import {
   scanSignalToOpinion,
 } from "@/lib/portfolio/portfolio-manager";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
+import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
+import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
 import { writeSystemLog } from "@/lib/core/system-log";
 import { nowISTDateTimeString } from "@/lib/utils";
 import {
@@ -116,19 +118,9 @@ async function refreshPaperHoldingsLtp(
   return updated;
 }
 
-export interface ScanDiagnostics {
-  buySignals: number;
-  sellSignals: number;
-  buyDecisions: number;
-  sellDecisions: number;
-  skippedDecisions: number;
-  gateBlocked: number;
-  riskBlocked: number;
-  dedupeBlocked: number;
-  liveSignals: number;
-  paperSignals: number;
-  skipReasons: Record<string, number>;
-}
+import type { ScanDiagnostics } from "@/lib/strategies/scan-diagnostics";
+
+export type { ScanDiagnostics };
 
 export interface UserRunResult {
   userId: string;
@@ -767,6 +759,24 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     },
     { merge: true }
   );
+
+  const auditMessage = formatScanAuditMessage(
+    rawSignals.length,
+    tradesExecuted,
+    diagnostics
+  );
+  await appendUserAuditLogAdmin(db, userId, {
+    severity:
+      rawSignals.length > 0 && tradesExecuted === 0 ? "WARN" : "INFO",
+    source: "StrategyScan",
+    message: auditMessage,
+    meta: {
+      scanned,
+      signalsFound: rawSignals.length,
+      tradesExecuted,
+      diagnostics,
+    },
+  });
 
   return {
     userId,

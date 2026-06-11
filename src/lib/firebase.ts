@@ -34,7 +34,7 @@ export function setFirebaseUid(uid: string | null) {
   _overrideUid = uid;
 }
 
-function getUserId(): string {
+export function getUserId(): string {
   if (_overrideUid) return _overrideUid;
   const auth = getAuth(app);
   return auth.currentUser?.uid || "default_user";
@@ -214,20 +214,23 @@ export async function clearStrategyRunnerState(): Promise<void> {
 }
 
 export async function resetPaperTrading(): Promise<void> {
-  try {
-    await clearPaperOrders();
-    await clearStrategyRunnerState();
-    const ref = doc(db, "users", getUserId(), "data", "paperTrading");
-    await setDoc(ref, {
-      balance: INITIAL_BALANCE,
-      holdings: [],
-      positions: [],
-      trades: [],
-      updatedAt: serverTimestamp(),
-    });
-  } catch (e) {
-    console.error("Error resetting paper trading:", e);
-  }
+  const { appendUserAuditLog } = await import("@/lib/audit/user-audit-log");
+  await clearPaperOrders();
+  await clearStrategyRunnerState();
+  const ref = doc(db, "users", getUserId(), "data", "paperTrading");
+  await setDoc(ref, {
+    balance: INITIAL_BALANCE,
+    holdings: [],
+    positions: [],
+    trades: [],
+    updatedAt: serverTimestamp(),
+  });
+  await appendUserAuditLog({
+    severity: "INFO",
+    source: "PaperTrading",
+    message:
+      "Paper portfolio reset — balance restored to ₹10,00,000; holdings, orders, and scan locks cleared.",
+  });
 }
 
 // ==================== WATCHLIST ====================
