@@ -1,3 +1,4 @@
+import { normalizeAppSettings } from "@/lib/settings/normalize-settings";
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import {
@@ -355,14 +356,14 @@ export const DEFAULT_SETTINGS: AppSettings = {
   paperOrderNotional: 100_000,
   paperDefaultProduct: "CNC",
   maxOrderValue: 100_000,
-  maxDailyLoss: 5000,
+  maxDailyLoss: 0,
   paperStartingBalance: 1000000,
   simulateBrokerage: false,
   stopLossPercent: 2,
   takeProfitPercent: 5,
   autoStopLoss: true,
   autoTakeProfit: true,
-  maxPositions: 10,
+  maxPositions: 5,
   squareOffTime: "15:15",
   notifyOrders: true,
   notifyEmailDigest: true,
@@ -381,12 +382,15 @@ export async function getSettings(): Promise<AppSettings> {
     const ref = doc(db, "users", getUserId(), "data", "settings");
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      return { ...DEFAULT_SETTINGS, ...snap.data() } as AppSettings;
+      return normalizeAppSettings({
+        ...DEFAULT_SETTINGS,
+        ...snap.data(),
+      } as AppSettings);
     }
   } catch (e) {
     console.error("Error loading settings:", e);
   }
-  return DEFAULT_SETTINGS;
+  return normalizeAppSettings(DEFAULT_SETTINGS);
 }
 
 export async function saveSettings(settings: Partial<AppSettings>): Promise<void> {

@@ -1,6 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  effectivePaperOrderCap,
+  integerShareQtyForBudget,
   paperOrderNotional,
   resolvePaperOrderQty,
   resolvePaperScanOrderQty,
@@ -11,6 +13,20 @@ const settings = {
   maxOrderValue: 500_000,
   defaultQuantity: 1,
 };
+
+describe("integerShareQtyForBudget", () => {
+  it("returns whole shares up to budget", () => {
+    assert.equal(integerShareQtyForBudget(3333, 100_000), 30);
+  });
+
+  it("returns 0 when one share exceeds budget", () => {
+    assert.equal(integerShareQtyForBudget(150_000, 100_000), 0);
+  });
+
+  it("respects available balance", () => {
+    assert.equal(integerShareQtyForBudget(100, 100_000, 5000), 50);
+  });
+});
 
 describe("resolvePaperOrderQty", () => {
   it("buys ~1L notional for a ₹10 stock", () => {
@@ -23,6 +39,10 @@ describe("resolvePaperOrderQty", () => {
 
   it("respects available balance", () => {
     assert.equal(resolvePaperOrderQty(100, settings, { balance: 5000 }), 50);
+  });
+
+  it("returns 0 when share price exceeds budget", () => {
+    assert.equal(resolvePaperOrderQty(150_000, settings), 0);
   });
 
   it("uses explicit strategy quantity when set", () => {
@@ -56,11 +76,13 @@ describe("paperOrderNotional", () => {
       100_000
     );
   });
+});
 
-  it("caps at maxOrderValue when lower", () => {
+describe("effectivePaperOrderCap", () => {
+  it("is at least paper notional even when maxOrderValue is lower", () => {
     assert.equal(
-      paperOrderNotional({ paperOrderNotional: 100_000, maxOrderValue: 50_000 }),
-      50_000
+      effectivePaperOrderCap({ paperOrderNotional: 100_000, maxOrderValue: 50_000 }),
+      100_000
     );
   });
 });

@@ -3,7 +3,7 @@ import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import {
   paperBuyCashRequired,
-  paperOrderNotional,
+  effectivePaperOrderCap,
 } from "@/lib/portfolio/paper-position-size";
 import {
   ensurePositions,
@@ -146,10 +146,7 @@ export function canPlacePaperBuy(params: {
   if (cashNeeded > balance) {
     return { allowed: false, message: "Insufficient paper balance" };
   }
-  const maxOrder = Math.max(
-    settings.maxOrderValue ?? 0,
-    paperOrderNotional(settings)
-  );
+  const maxOrder = effectivePaperOrderCap(settings);
   if (maxOrder > 0 && orderValue > maxOrder) {
     return {
       allowed: false,

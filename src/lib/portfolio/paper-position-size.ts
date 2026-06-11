@@ -29,19 +29,52 @@ export function paperBuyCashRequired(
   return cashFlowForTrade("BUY", turnover, charges);
 }
 
+/** Target rupee notional per paper BUY (default ₹1L). */
 export function paperOrderNotional(settings: Pick<
   AppSettings,
   "paperOrderNotional" | "maxOrderValue"
 >): number {
-  const notional = settings.paperOrderNotional ?? DEFAULT_PAPER_NOTIONAL;
-  const cap = settings.maxOrderValue;
-  if (cap > 0 && cap < notional) return cap;
-  return notional;
+  return Math.max(
+    1000,
+    settings.paperOrderNotional ?? DEFAULT_PAPER_NOTIONAL
+  );
+}
+
+/** Max rupees allowed per order (always at least paper notional after normalize). */
+export function effectivePaperOrderCap(
+  settings: Pick<AppSettings, "paperOrderNotional" | "maxOrderValue">
+): number {
+  const notional = paperOrderNotional(settings);
+  return Math.max(settings.maxOrderValue ?? 0, notional);
 }
 
 /**
- * Paper BUY size: target rupee notional per trade (default ₹1L), not fixed share count.
- * Strategy card `quantity` overrides when explicitly set.
+ * Whole-share qty for a rupee budget. Uses floor so order value ≤ budget;
+ * returns 0 when even 1 share exceeds budget or price is invalid.
+ */
+export function integerShareQtyForBudget(
+  price: number,
+  budget: number,
+  balance?: number
+): number {
+  if (!Number.isFinite(price) || price <= 0) return 0;
+  if (!Number.isFinite(budget) || budget <= 0) return 0;
+
+  let qty = Math.floor(budget / price);
+  if (qty < 1) return 0;
+
+  if (balance != null && Number.isFinite(balance) && balance > 0) {
+    const affordable = Math.floor(balance / price);
+    if (affordable < 1) return 0;
+    qty = Math.min(qty, affordable);
+  }
+
+  return qty;
+}
+
+/**
+ * Paper BUY size: target rupee notional per trade (default ₹1L), whole shares only.
+ * Strategy card `quantity` overrides when explicitly set &gt; 1.
  */
 export function resolvePaperOrderQty(
   price: number,
@@ -54,25 +87,19 @@ export function resolvePaperOrderQty(
     balance?: number;
   }
 ): number {
-  if (price <= 0) return 1;
-
   const explicit = options?.strategyParams?.quantity;
   if (explicit != null && explicit > 0) {
     return Math.max(1, Math.floor(explicit));
   }
 
-  const budget = paperOrderNotional(settings);
-  let qty = Math.max(1, Math.floor(budget / price));
-
-  const balance = options?.balance;
-  if (balance != null && balance > 0) {
-    qty = Math.min(qty, Math.max(1, Math.floor(balance / price)));
-  }
-
-  return qty;
+  const budget = Math.min(
+    paperOrderNotional(settings),
+    effectivePaperOrderCap(settings)
+  );
+  return integerShareQtyForBudget(price, budget, options?.balance);
 }
 
-/** Auto-scan sizing: use ₹ notional unless strategy sets quantity > 1 explicitly. */
+/** Auto-scan sizing: use ₹ notional unless strategy sets quantity &gt; 1 explicitly. */
 export function resolvePaperScanOrderQty(
   price: number,
   settings: Pick<

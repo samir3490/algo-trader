@@ -27,6 +27,7 @@ import {
   selectTopBuyDecisionsForScan,
 } from "@/lib/portfolio/buy-selection";
 import { resolvePaperScanOrderQty } from "@/lib/portfolio/paper-position-size";
+import { normalizeAppSettings } from "@/lib/settings/normalize-settings";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
 import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
@@ -147,20 +148,6 @@ function bumpReason(map: Record<string, number>, reason: string) {
   map[reason] = (map[reason] ?? 0) + 1;
 }
 
-function normalizeUserSettings(settings: AppSettings): AppSettings {
-  const notional =
-    settings.paperOrderNotional ?? DEFAULT_SETTINGS.paperOrderNotional ?? 100_000;
-  return {
-    ...settings,
-    paperOrderNotional: notional,
-    maxOrderValue: Math.max(settings.maxOrderValue ?? 0, notional),
-    maxPositions:
-      settings.maxPositions && settings.maxPositions > 0
-        ? settings.maxPositions
-        : DEFAULT_SETTINGS.maxPositions,
-  };
-}
-
 function clearFlatPortfolioLocks(
   paperState: PaperTradingState,
   dedupe: Set<string>,
@@ -270,8 +257,8 @@ async function loadUserSettings(
   userId: string
 ): Promise<AppSettings> {
   const snap = await db.doc(`users/${userId}/data/settings`).get();
-  if (!snap.exists) return normalizeUserSettings(DEFAULT_SETTINGS);
-  return normalizeUserSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as AppSettings);
+  if (!snap.exists) return normalizeAppSettings(DEFAULT_SETTINGS);
+  return normalizeAppSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as AppSettings);
 }
 
 async function loadRunnerMeta(db: Firestore, userId: string) {
@@ -533,7 +520,12 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       balance: paperState.balance ?? INITIAL_BALANCE,
     });
     if (freshQty <= 0 || baseDecision.price <= 0) {
-      bumpReason(diagnostics.skipReasons, "Invalid price or quantity");
+      bumpReason(
+        diagnostics.skipReasons,
+        baseDecision.price <= 0
+          ? "Invalid price"
+          : "Share price exceeds order budget (whole shares only)"
+      );
       continue;
     }
     const decision = { ...baseDecision, quantity: freshQty };

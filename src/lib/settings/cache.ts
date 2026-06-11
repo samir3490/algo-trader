@@ -1,5 +1,6 @@
 import type { AppSettings } from "@/lib/firebase";
 import { DEFAULT_SETTINGS } from "@/lib/firebase";
+import { normalizeAppSettings } from "@/lib/settings/normalize-settings";
 
 const CACHE_KEY = "algotrader_settings";
 
@@ -51,17 +52,23 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
 }
 
 export function loadSettingsFromCache(): AppSettings {
-  if (typeof window === "undefined") return DEFAULT_SETTINGS;
+  if (typeof window === "undefined") return normalizeAppSettings(DEFAULT_SETTINGS);
   try {
     const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
+    if (!raw) return normalizeAppSettings(DEFAULT_SETTINGS);
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     if (isNestedCache(parsed)) {
-      return { ...DEFAULT_SETTINGS, ...nestedCacheToFlat(parsed) };
+      return normalizeAppSettings({
+        ...DEFAULT_SETTINGS,
+        ...nestedCacheToFlat(parsed),
+      } as AppSettings);
     }
-    return { ...DEFAULT_SETTINGS, ...parsed } as AppSettings;
+    return normalizeAppSettings({
+      ...DEFAULT_SETTINGS,
+      ...parsed,
+    } as AppSettings);
   } catch {}
-  return DEFAULT_SETTINGS;
+  return normalizeAppSettings(DEFAULT_SETTINGS);
 }
 
 export function saveSettingsToCache(settings: Partial<AppSettings>): void {
