@@ -1,5 +1,6 @@
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import type { UserAuditEntry, UserAuditSeverity } from "./user-audit-log";
+import { sanitizeAuditEntries } from "./sanitize-audit";
 
 const MAX_ENTRIES = 200;
 
@@ -23,11 +24,11 @@ export async function appendUserAuditLogAdmin(
     severity: entry.severity,
     source: entry.source,
     message: entry.message,
-    meta: entry.meta,
+    ...(entry.meta != null ? { meta: entry.meta } : {}),
   };
   await ref.set(
     {
-      entries: [row, ...existing].slice(0, MAX_ENTRIES),
+      entries: sanitizeAuditEntries([row, ...existing]).slice(0, MAX_ENTRIES),
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }

@@ -214,7 +214,6 @@ export async function clearStrategyRunnerState(): Promise<void> {
 }
 
 export async function resetPaperTrading(): Promise<void> {
-  const { appendUserAuditLog } = await import("@/lib/audit/user-audit-log");
   await clearPaperOrders();
   await clearStrategyRunnerState();
   const ref = doc(db, "users", getUserId(), "data", "paperTrading");
@@ -225,12 +224,17 @@ export async function resetPaperTrading(): Promise<void> {
     trades: [],
     updatedAt: serverTimestamp(),
   });
-  await appendUserAuditLog({
-    severity: "INFO",
-    source: "PaperTrading",
-    message:
-      "Paper portfolio reset — balance restored to ₹10,00,000; holdings, orders, and scan locks cleared.",
-  });
+  try {
+    const { appendUserAuditLog } = await import("@/lib/audit/user-audit-log");
+    await appendUserAuditLog({
+      severity: "INFO",
+      source: "PaperTrading",
+      message:
+        "Paper portfolio reset — balance restored to ₹10,00,000; holdings, orders, and scan locks cleared.",
+    });
+  } catch (e) {
+    console.error("Reset succeeded but audit log write failed:", e);
+  }
 }
 
 // ==================== WATCHLIST ====================

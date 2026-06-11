@@ -5,6 +5,7 @@ import {
   setDoc,
 } from "firebase/firestore";
 import { db, getUserId } from "@/lib/firebase";
+import { sanitizeAuditEntries } from "./sanitize-audit";
 
 export type UserAuditSeverity = "INFO" | "WARN" | "ERROR" | "RISK_REJECTION";
 
@@ -31,12 +32,12 @@ export async function appendUserAuditLog(
     severity: entry.severity,
     source: entry.source,
     message: entry.message,
-    meta: entry.meta,
+    ...(entry.meta != null ? { meta: entry.meta } : {}),
   };
   await setDoc(
     ref,
     {
-      entries: [row, ...existing].slice(0, MAX_ENTRIES),
+      entries: sanitizeAuditEntries([row, ...existing]).slice(0, MAX_ENTRIES),
       updatedAt: serverTimestamp(),
     },
     { merge: true }
