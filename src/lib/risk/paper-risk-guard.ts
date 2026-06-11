@@ -1,7 +1,10 @@
 import type { AppSettings, PaperHolding, PaperTrade, PaperTradingState } from "@/lib/firebase";
 import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
-import { paperOrderNotional } from "@/lib/portfolio/paper-position-size";
+import {
+  paperBuyCashRequired,
+  paperOrderNotional,
+} from "@/lib/portfolio/paper-position-size";
 import {
   ensurePositions,
   getOpenPositions,
@@ -122,11 +125,25 @@ export function canPlacePaperBuy(params: {
   holdingsCount: number;
   settings: AppSettings;
   todayRealizedLoss?: number;
+  qty?: number;
+  price?: number;
 }): { allowed: boolean; message?: string } {
-  const { balance, orderValue, holdingsCount, settings, todayRealizedLoss = 0 } =
-    params;
+  const {
+    balance,
+    orderValue,
+    holdingsCount,
+    settings,
+    todayRealizedLoss = 0,
+    qty,
+    price,
+  } = params;
 
-  if (orderValue > balance) {
+  const cashNeeded =
+    qty != null && price != null
+      ? paperBuyCashRequired(qty, price, settings)
+      : orderValue;
+
+  if (cashNeeded > balance) {
     return { allowed: false, message: "Insufficient paper balance" };
   }
   const maxOrder = Math.max(

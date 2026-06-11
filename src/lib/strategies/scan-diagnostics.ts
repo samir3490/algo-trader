@@ -10,6 +10,8 @@ export interface ScanDiagnostics {
   liveSignals: number;
   paperSignals: number;
   strengthDeferred?: number;
+  slotsToFill?: number;
+  buyQueueSize?: number;
   rankedBuyCandidates?: { symbol: string; signalCount: number }[];
   skipReasons: Record<string, number>;
 }
@@ -29,8 +31,11 @@ export function formatScanAuditMessage(
   if (diagnostics.liveSignals > 0 && diagnostics.paperSignals === 0) {
     parts.push("all signals in Live mode (switch to Paper to auto-trade)");
   }
+  if ((diagnostics.slotsToFill ?? 0) === 0 && diagnostics.buySignals > 0) {
+    parts.push("max positions already full");
+  }
   if (diagnostics.buyDecisions > 0 && tradesExecuted === 0) {
-    parts.push(`${diagnostics.buyDecisions} BUY approved but none executed`);
+    parts.push(`${diagnostics.buyDecisions} in buy queue but none executed`);
   }
   if (diagnostics.gateBlocked > 0) {
     parts.push(`${diagnostics.gateBlocked} blocked by trade gates`);

@@ -56,6 +56,31 @@ describe("canExecuteStrategyTrade", () => {
     assert.match(r.reason ?? "", /locked/);
   });
 
+  it("allows BUY after same-day sell when paperStrategyScan", () => {
+    const trades: PaperTrade[] = [
+      {
+        id: "1",
+        time: "x",
+        symbol: "SAIL",
+        exchange: "NSE",
+        side: "SELL",
+        qty: 1,
+        price: 90,
+        netPnl: -50,
+        date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+        executedAt: new Date().toISOString(),
+      },
+    ];
+    const r = canExecuteStrategyTrade("BUY", "SAIL", "NSE", {
+      holdings: [],
+      trades,
+      settings,
+      soldThisRun: new Set(),
+      paperStrategyScan: true,
+    });
+    assert.equal(r.allowed, true);
+  });
+
   it("allows SELL when holding exists", () => {
     const r = canExecuteStrategyTrade("SELL", "TCS", "NSE", {
       holdings: [

@@ -1,6 +1,33 @@
 import type { AppSettings } from "@/lib/firebase";
+import {
+  cashFlowForTrade,
+  computeZerodhaCharges,
+  type ZerodhaProduct,
+} from "@/lib/brokerage/zerodha-charges";
 
 const DEFAULT_PAPER_NOTIONAL = 100_000;
+
+/** Cash required for a paper BUY (includes simulated charges when enabled). */
+export function paperBuyCashRequired(
+  qty: number,
+  price: number,
+  settings: Pick<
+    AppSettings,
+    "simulateBrokerage" | "paperDefaultProduct"
+  >,
+  product?: ZerodhaProduct
+): number {
+  const turnover = qty * price;
+  if (!settings.simulateBrokerage) return turnover;
+  const prod = (product ?? settings.paperDefaultProduct ?? "CNC") as ZerodhaProduct;
+  const charges = computeZerodhaCharges({
+    side: "BUY",
+    qty,
+    price,
+    product: prod,
+  });
+  return cashFlowForTrade("BUY", turnover, charges);
+}
 
 export function paperOrderNotional(settings: Pick<
   AppSettings,

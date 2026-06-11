@@ -19,13 +19,14 @@ import {
   evaluatePortfolioDecisions,
   buyOnlyOpinions,
   scanSignalToOpinion,
-  buildBuyDecisionsFromOpinions,
+  buildRankedPaperBuyQueue,
   rankBuyOpinions,
 } from "@/lib/portfolio/portfolio-manager";
 import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trading/balance";
 import {
   selectTopBuyDecisionsForScan,
 } from "@/lib/portfolio/buy-selection";
+import { resolvePaperOrderQty } from "@/lib/portfolio/paper-position-size";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
 import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
@@ -472,60 +473,66 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
     soldThisRun,
     symbolCooldownUntil,
     symbolsLockedToday,
+    paperStrategyScan: true,
   };
 
-  const buyDecisions = (() => {
-    const approved = decisions.filter((d) => d.action === "BUY");
-    if (approved.length > 0) return approved;
-    return buildBuyDecisionsFromOpinions(opinions, {
-      state: paperState,
-      settings: userSettings,
-      todayRealizedLoss: todayRealizedLoss(paperState.trades),
-    });
-  })();
+  const portfolioCtx = {
+    state: paperState,
+    settings: userSettings,
+    todayRealizedLoss: todayRealizedLoss(paperState.trades),
+  };
 
   const rankedForDisplay = rankBuyOpinions(opinions).map((op) => ({
     symbol: op.symbol,
     signalCount: op.buySignalCount ?? 1,
   }));
+
+  const buyQueue = buildRankedPaperBuyQueue(opinions, portfolioCtx);
   const openPositionCount = getOpenPositions(paperState).length;
   const maxPositions = userSettings.maxPositions ?? 5;
   const { ranked: rankedQueue, slotsToFill } = selectTopBuyDecisionsForScan(
-    buyDecisions,
+    buyQueue,
     { openPositionCount, maxPositions }
   );
 
-  diagnostics.buyDecisions = buyDecisions.length;
+  diagnostics.buyDecisions = buyQueue.length;
   diagnostics.rankedBuyCandidates = rankedForDisplay;
+  diagnostics.slotsToFill = slotsToFill;
+  diagnostics.buyQueueSize = rankedQueue.length;
 
   let placedThisScan = 0;
   let queueIndex = 0;
   const deferReason = `Lower buy rank — max ${maxPositions} positions`;
 
   while (placedThisScan < slotsToFill && queueIndex < rankedQueue.length) {
-    const decision = rankedQueue[queueIndex];
+    const baseDecision = rankedQueue[queueIndex];
     queueIndex += 1;
-    signalStrategyIds.add(decision.ownerStrategyId);
-    const key = executionDedupeKey(decision.symbol);
+    signalStrategyIds.add(baseDecision.ownerStrategyId);
+    const key = executionDedupeKey(baseDecision.symbol);
     if (dedupe.has(key)) {
       diagnostics.dedupeBlocked += 1;
       bumpReason(diagnostics.skipReasons, "Already attempted this 15-min window");
       continue;
     }
-    if (dedupe.has(executionNoBuyTodayKey(decision.symbol))) {
+    if (dedupe.has(executionNoBuyTodayKey(baseDecision.symbol))) {
       diagnostics.dedupeBlocked += 1;
       bumpReason(diagnostics.skipReasons, "No rebuy today after sell");
       continue;
     }
 
-    const strat = running.find((s) => s.id === decision.ownerStrategyId);
+    const strat = running.find((s) => s.id === baseDecision.ownerStrategyId);
     if (!strat) {
       bumpReason(diagnostics.skipReasons, "Strategy not found for signal");
       continue;
     }
 
-    const exchange = decision.exchange || "NSE";
+    const exchange = baseDecision.exchange || "NSE";
     const mode = resolveStrategyMode(strat);
+    const freshQty = resolvePaperOrderQty(baseDecision.price, userSettings, {
+      strategyParams: strat.params,
+      balance: paperState.balance ?? INITIAL_BALANCE,
+    });
+    const decision = { ...baseDecision, quantity: freshQty };
 
     if (mode === "paper") {
       diagnostics.paperSignals += 1;
@@ -571,6 +578,8 @@ export async function runStrategiesForUser(userId: string): Promise<UserRunResul
       const buyCheck = canPlacePaperBuy({
         balance: paperState.balance ?? INITIAL_BALANCE,
         orderValue,
+        qty: decision.quantity,
+        price: decision.price,
         holdingsCount: getOpenPositions(paperState).length,
         settings: userSettings,
         todayRealizedLoss: todayRealizedLoss(paperState.trades),

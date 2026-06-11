@@ -95,13 +95,11 @@ export function rankBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] 
   });
 }
 
-/** Fallback BUY list when portfolio evaluation produced no actionable buys. */
-export function buildBuyDecisionsFromOpinions(
+/** Ranked paper BUY queue — matches display list; skips symbols already held. */
+export function buildRankedPaperBuyQueue(
   opinions: StrategyOpinion[],
   ctx: PortfolioContext
 ): PortfolioDecision[] {
-  const maxOrder = effectivePaperMaxOrderValue(ctx.settings);
-  const balance = ctx.state.balance ?? 0;
   if (
     (ctx.settings.maxDailyLoss ?? 0) > 0 &&
     (ctx.todayRealizedLoss ?? 0) >= (ctx.settings.maxDailyLoss ?? 0)
@@ -111,10 +109,6 @@ export function buildBuyDecisionsFromOpinions(
 
   return rankBuyOpinions(opinions)
     .filter((op) => !hasOpenPositionForSymbol(ctx.state, op.symbol, op.exchange))
-    .filter((op) => {
-      const orderValue = op.quantity * op.price;
-      return orderValue <= balance && orderValue <= maxOrder;
-    })
     .map((op) => ({
       action: "BUY" as const,
       symbol: op.symbol,
@@ -126,6 +120,14 @@ export function buildBuyDecisionsFromOpinions(
       signalReason: op.reason,
       buySignalCount: op.buySignalCount,
     }));
+}
+
+/** @deprecated Use buildRankedPaperBuyQueue */
+export function buildBuyDecisionsFromOpinions(
+  opinions: StrategyOpinion[],
+  ctx: PortfolioContext
+): PortfolioDecision[] {
+  return buildRankedPaperBuyQueue(opinions, ctx);
 }
 
 export function evaluatePortfolioDecisions(
