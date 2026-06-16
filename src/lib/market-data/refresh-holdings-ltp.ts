@@ -1,4 +1,6 @@
 /** Client-side: refresh LTP on paper/local holdings via market quote API */
+import { isMarketOpen } from "@/lib/utils";
+
 export interface HoldingWithLtp {
   symbol: string;
   exchange: string;
@@ -8,9 +10,11 @@ export interface HoldingWithLtp {
 }
 
 export async function refreshHoldingsLtpClient<T extends HoldingWithLtp>(
-  holdings: T[]
+  holdings: T[],
+  options?: { force?: boolean }
 ): Promise<T[]> {
   if (holdings.length === 0) return holdings;
+  if (!options?.force && !isMarketOpen()) return holdings;
 
   const updated = await Promise.all(
     holdings.map(async (h) => {

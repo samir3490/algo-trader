@@ -11,7 +11,6 @@ import {
   Clock,
   ArrowUpRight,
   ArrowDownRight,
-  Zap,
   Inbox,
   PackageOpen,
   Search,
@@ -19,7 +18,6 @@ import {
   Loader2,
   Plus,
   ExternalLink,
-  Shield,
 } from "lucide-react";
 import {
   ResponsiveContainer,
@@ -36,11 +34,8 @@ import {
   getOrders,
   getWatchlist,
   saveWatchlist,
-  getActiveStrategies,
   getSettings,
-  type PaperTradingState,
   type WatchlistItem,
-  type ActiveStrategy,
   type PaperTrade,
 } from "@/lib/firebase";
 import { enrichTradesWithStrategy } from "@/lib/strategies/strategy-performance";
@@ -49,9 +44,7 @@ import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp
 import { loadSettingsFromCache } from "@/lib/settings/cache";
 import {
   buildPortfolioChart,
-  computeAllTimePnl,
-  computePortfolio,
-  computeTodayPnl,
+  computePnlBreakdown,
 } from "@/lib/portfolio/compute-portfolio";
 
 // ── Types ────────────────────────────────────────────────────────────────
@@ -100,7 +93,6 @@ interface InstrumentResult {
 
 const PAPER_STORAGE_KEY = "paper_trading_state";
 const WATCHLIST_KEY = "dashboard_watchlist";
-const ACTIVE_STRATEGIES_KEY = "activeStrategies";
 const INITIAL_BALANCE = 1000000;
 const REFRESH_INTERVAL = 15_000;
 
@@ -136,15 +128,6 @@ function loadWatchlistFromCache(): WatchlistItem[] {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
-  } catch {}
-  return [];
-}
-
-function loadActiveStrategiesFromCache(): ActiveStrategy[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(ACTIVE_STRATEGIES_KEY);
-    if (raw) return JSON.parse(raw);
   } catch {}
   return [];
 }
@@ -187,9 +170,6 @@ export default function DashboardPage() {
   // Zerodha connection
   const [zerodhaConnected, setZerodhaConnected] = useState(false);
 
-  // Active strategies
-  const [activeStrategies, setActiveStrategies] = useState<ActiveStrategy[]>([]);
-
   // Load everything on mount (after auth is ready)
   useEffect(() => {
     if (!user) return;
@@ -197,16 +177,14 @@ export default function DashboardPage() {
     // Instant load from localStorage cache
     setPaperState(loadPaperStateFromCache());
     setWatchlist(loadWatchlistFromCache());
-    setActiveStrategies(loadActiveStrategiesFromCache());
     const cachedSettings = loadSettingsFromCache();
     setStartingBalance(cachedSettings.paperStartingBalance ?? INITIAL_BALANCE);
 
     async function loadFromFirestore() {
       try {
-        const [fsState, fsWatchlist, fsStrategies, orders, fsSettings] = await Promise.all([
+        const [fsState, fsWatchlist, orders, fsSettings] = await Promise.all([
           getPaperTradingState(),
           getWatchlist(),
-          getActiveStrategies(),
           getOrders(500),
           getSettings(),
         ]);
@@ -223,9 +201,6 @@ export default function DashboardPage() {
 
         setWatchlist(fsWatchlist);
         localStorage.setItem(WATCHLIST_KEY, JSON.stringify(fsWatchlist));
-
-        setActiveStrategies(fsStrategies);
-        localStorage.setItem(ACTIVE_STRATEGIES_KEY, JSON.stringify(fsStrategies));
       } catch (e) {
         console.error("Failed to load from Firestore, using localStorage cache:", e);
       }
@@ -295,9 +270,9 @@ export default function DashboardPage() {
     .map((h) => `${h.symbol}:${h.qty}:${h.avgPrice}`)
     .join("|");
 
-  // Refresh holdings LTP so portfolio / P&L are not zeroed when quotes were never fetched
+  // Refresh holdings LTP during market hours only (avoids flicker when closed)
   useEffect(() => {
-    if (!mounted || holdingsRef.current.length === 0) return;
+    if (!mounted || holdingsRef.current.length === 0 || !marketOpen) return;
 
     let cancelled = false;
     async function refresh() {
@@ -316,7 +291,23 @@ export default function DashboardPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [mounted, holdingsRefreshKey]);
+  }, [mounted, marketOpen, holdingsRefreshKey]);
+
+  useEffect(() => {
+    if (!mounted || !user) return;
+    const resync = () => {
+      void getPaperTradingState().then((fsState) => {
+        setPaperState((prev) => ({
+          ...prev,
+          balance: fsState.balance ?? prev.balance,
+          holdings: fsState.holdings?.length ? fsState.holdings : prev.holdings,
+          trades: fsState.trades?.length ? fsState.trades : prev.trades,
+        }));
+      });
+    };
+    window.addEventListener("paper-trading-updated", resync);
+    return () => window.removeEventListener("paper-trading-updated", resync);
+  }, [mounted, user]);
 
   // Watchlist search
   const handleSearchChange = (value: string) => {
@@ -374,28 +365,26 @@ export default function DashboardPage() {
     saveWatchlist(updated);
   };
 
-  // Computed values
-  const portfolio = computePortfolio(paperState.holdings, paperState.balance);
-  const portfolioValue = portfolio.portfolioValue;
-  const invested = portfolio.invested;
-  const allTimePnl = computeAllTimePnl(portfolioValue, startingBalance);
-  const allTimePnlPercent =
-    startingBalance > 0 ? (allTimePnl / startingBalance) * 100 : 0;
-
   const normalizedTradesForPnl = normalizePaperTrades(
     paperState.trades as PaperTrade[]
   );
-  const todayPnlResult = computeTodayPnl(
+  const pnl = computePnlBreakdown(
     normalizedTradesForPnl,
-    paperState.holdings
+    paperState.holdings,
+    paperState.balance,
+    startingBalance
   );
-  const todayPnl = todayPnlResult.pnl;
+  const { portfolio, unrealizedPnl, realizedPnl, allTimePnl, allTimePnlPercent, today } =
+    pnl;
+  const portfolioValue = portfolio.portfolioValue;
+  const invested = portfolio.invested;
+  const todayPnl = today.pnl;
+  const isProfit = allTimePnl >= 0;
 
   const recentTradesEnriched = useMemo(() => {
     const normalized = normalizePaperTrades(paperState.trades as PaperTrade[]);
     return enrichTradesWithStrategy(normalized).slice(0, 10);
   }, [paperState.trades]);
-  const runningStrategies = activeStrategies.filter((s) => s.status === "running");
 
   const chartData = buildPortfolioChart(
     normalizedTradesForPnl,
@@ -406,7 +395,6 @@ export default function DashboardPage() {
   const chartHasData = chartData.length > 1;
   const chartMin = chartHasData ? Math.min(...chartData.map((d) => d.value)) * 0.998 : 990000;
   const chartMax = chartHasData ? Math.max(...chartData.map((d) => d.value)) * 1.002 : 1010000;
-  const isProfit = allTimePnl >= 0;
 
   if (!mounted) {
     return (
@@ -438,7 +426,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ── Section 1: Summary Cards ──────────────────────────────────── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Portfolio Value */}
         <div className="card glow-accent">
           <div className="flex items-center justify-between mb-3">
@@ -464,13 +452,57 @@ export default function DashboardPage() {
           {invested > 0 && (
             <p className="text-xs text-text-tertiary mt-1">
               Invested {formatCurrency(invested)}
-              <span className="mx-1">·</span>
-              <span className={portfolio.pnl >= 0 ? "text-profit" : "text-loss"}>
-                Unrealized {portfolio.pnl >= 0 ? "+" : ""}
-                {formatCurrency(portfolio.pnl)}
-              </span>
             </p>
           )}
+        </div>
+
+        {/* Unrealized P&L (open positions) */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm text-text-secondary">Unrealized P&amp;L</span>
+            <div className="rounded-lg bg-bg-tertiary p-2">
+              {unrealizedPnl >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-profit" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-loss" />
+              )}
+            </div>
+          </div>
+          <p
+            className={cn(
+              "text-2xl font-bold",
+              unrealizedPnl >= 0 ? "text-profit" : "text-loss"
+            )}
+          >
+            {formatCurrency(unrealizedPnl)}
+          </p>
+          <p className="text-xs text-text-tertiary mt-1">
+            Open positions · mark-to-market
+            {!marketOpen && " · prices frozen after close"}
+          </p>
+        </div>
+
+        {/* Realized P&L (closed trades) */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm text-text-secondary">Realized P&amp;L</span>
+            <div className="rounded-lg bg-bg-tertiary p-2">
+              {realizedPnl >= 0 ? (
+                <TrendingUp className="h-4 w-4 text-profit" />
+              ) : (
+                <TrendingDown className="h-4 w-4 text-loss" />
+              )}
+            </div>
+          </div>
+          <p
+            className={cn(
+              "text-2xl font-bold",
+              realizedPnl >= 0 ? "text-profit" : "text-loss"
+            )}
+          >
+            {formatCurrency(realizedPnl)}
+          </p>
+          <p className="text-xs text-text-tertiary mt-1">From closed sell trades</p>
         </div>
 
         {/* Today's P&L */}
@@ -488,7 +520,7 @@ export default function DashboardPage() {
           <p
             className={cn(
               "text-2xl font-bold",
-              todayPnlResult.tradeCount > 0 || todayPnlResult.mode === "unrealized"
+              today.tradeCount > 0 || today.mode === "unrealized"
                 ? todayPnl >= 0
                   ? "text-profit"
                   : "text-loss"
@@ -497,33 +529,15 @@ export default function DashboardPage() {
           >
             {formatCurrency(todayPnl)}
           </p>
-          <div className="flex items-center gap-1 mt-1">
-            <span className="text-sm text-text-secondary">
-              {todayPnlResult.tradeCount > 0
-                ? `${todayPnlResult.tradeCount} trade${todayPnlResult.tradeCount > 1 ? "s" : ""} today`
-                : todayPnlResult.mode === "unrealized"
-                  ? "Mark-to-market (no trades today)"
-                  : "No trades today"}
-            </span>
-          </div>
-        </div>
-
-        {/* Active Strategies */}
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-text-secondary">Active Strategies</span>
-            <div className="rounded-lg bg-accent-muted p-2">
-              <Zap className="h-4 w-4 text-accent" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-text-primary">{runningStrategies.length}</p>
-          <div className="flex items-center gap-1 mt-1">
-            <span className="text-sm text-text-secondary">
-              {runningStrategies.length > 0
-                ? `${activeStrategies.length} total configured`
-                : "No strategies active"}
-            </span>
-          </div>
+          <p className="text-xs text-text-tertiary mt-1">
+            {today.mode === "realized"
+              ? `${today.tradeCount} trade${today.tradeCount !== 1 ? "s" : ""} closed today`
+              : today.mode === "unrealized"
+                ? "Unrealized (no sells today)"
+                : today.tradeCount > 0
+                  ? `${today.tradeCount} buy${today.tradeCount !== 1 ? "s" : ""} today`
+                  : "No activity today"}
+          </p>
         </div>
 
         {/* Market Status */}
@@ -820,101 +834,6 @@ export default function DashboardPage() {
             </div>
           )}
         </div>
-      </div>
-
-      {/* ── Section 4: Active Strategies ────────────────────────────── */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-text-primary">
-            Active Strategies
-          </h2>
-          {activeStrategies.length > 0 && (
-            <Link
-              href="/strategies"
-              className="flex items-center gap-1 text-xs text-accent hover:text-accent-hover transition-colors"
-            >
-              Manage <ExternalLink className="h-3 w-3" />
-            </Link>
-          )}
-        </div>
-
-        {activeStrategies.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {activeStrategies.map((s) => (
-              <div
-                key={s.id}
-                className={cn(
-                  "card flex flex-col gap-3",
-                  s.status === "running" && "border-l-2 border-l-profit"
-                )}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Zap className={cn(
-                      "h-4 w-4",
-                      s.status === "running" ? "text-accent" : "text-text-tertiary"
-                    )} />
-                    <span className="text-sm font-semibold text-text-primary">
-                      {s.name}
-                    </span>
-                  </div>
-                  <span className={cn(
-                    "inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full",
-                    s.status === "running"
-                      ? "bg-profit/10 text-profit"
-                      : s.status === "paused"
-                        ? "bg-amber-500/10 text-amber-400"
-                        : "bg-loss/10 text-loss"
-                  )}>
-                    <span className={cn(
-                      "w-1.5 h-1.5 rounded-full",
-                      s.status === "running" ? "bg-profit" : s.status === "paused" ? "bg-amber-400" : "bg-loss"
-                    )} />
-                    {s.status === "running" ? "Running" : s.status === "paused" ? "Paused" : "Stopped"}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-xs">
-                  <div>
-                    <span className="text-text-tertiary block">Symbol</span>
-                    <span className="text-text-primary font-medium">{s.symbol}</span>
-                  </div>
-                  <div>
-                    <span className="text-text-tertiary block">Mode</span>
-                    <span className={cn(
-                      "inline-flex items-center gap-1 font-medium",
-                      s.mode === "paper" ? "text-amber-400" : "text-loss"
-                    )}>
-                      {s.mode === "paper" ? <Shield className="h-3 w-3" /> : <Zap className="h-3 w-3" />}
-                      {s.mode === "paper" ? "Paper" : "Live"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-text-tertiary block">Signals</span>
-                    <span className="text-text-primary font-medium">{s.signals}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-2 border-t border-border text-xs">
-                  <span className="text-text-tertiary">{s.timeframe}</span>
-                  <span className={cn("font-medium", s.pnl >= 0 ? "text-profit" : "text-loss")}>
-                    {formatCurrency(s.pnl)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="card flex flex-col items-center justify-center py-12 text-center">
-            <Inbox className="h-10 w-10 text-text-tertiary mb-3" />
-            <p className="text-sm text-text-secondary">
-              No active strategies.{" "}
-              <Link href="/strategies" className="text-accent hover:underline">
-                Create one
-              </Link>
-            </p>
-          </div>
-        )}
       </div>
     </div>
   );

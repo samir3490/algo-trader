@@ -19,7 +19,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { cn, formatCurrency, formatPercent, formatNumber } from "@/lib/utils";
+import { cn, formatCurrency, formatPercent, formatNumber, isMarketOpen } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
   getPaperTradingState,
@@ -59,7 +59,7 @@ import {
 import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
 import { formatBuyStrength } from "@/lib/paper-trading/balance";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
-import { computePortfolio } from "@/lib/portfolio/compute-portfolio";
+import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
 import {
   paperOrderNotional,
   resolvePaperOrderQty,
@@ -315,9 +315,9 @@ export default function PaperTradingPage() {
     };
   }, [mounted, user, syncFromCloud]);
 
-  // Refresh LTP / P&L and run stop-loss / take-profit from Settings
+  // Refresh LTP / P&L during market hours only (avoids flicker after close)
   useEffect(() => {
-    if (!mounted || holdings.length === 0) return;
+    if (!mounted || holdings.length === 0 || !isMarketOpen()) return;
 
     let cancelled = false;
     async function refreshLtps() {
@@ -834,12 +834,28 @@ export default function PaperTradingPage() {
     }
   }
 
-  const portfolio = computePortfolio(holdings, balance);
+  const startingBalance =
+    appSettings.paperStartingBalance && appSettings.paperStartingBalance > 0
+      ? appSettings.paperStartingBalance
+      : INITIAL_BALANCE;
 
   const normalizedTrades = useMemo(
     () => normalizePaperTrades(trades as PaperTrade[], orderHistory),
     [trades, orderHistory]
   );
+
+  const pnlBreakdown = useMemo(
+    () =>
+      computePnlBreakdown(
+        normalizedTrades,
+        holdings,
+        balance,
+        startingBalance
+      ),
+    [normalizedTrades, holdings, balance, startingBalance]
+  );
+  const portfolio = pnlBreakdown.portfolio;
+
   const enrichedTrades = useMemo(
     () => enrichTradesWithStrategy(normalizedTrades),
     [normalizedTrades]
@@ -882,24 +898,28 @@ export default function PaperTradingPage() {
       value: formatCurrency(portfolio.balance),
       icon: Wallet,
       color: "text-blue-400",
+      hint: "Available cash",
     },
     {
-      label: "Invested",
-      value: formatCurrency(portfolio.invested),
-      icon: IndianRupee,
-      color: "text-text-primary",
+      label: "Unrealized P&L",
+      value: `${pnlBreakdown.unrealizedPnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.unrealizedPnl)} (${formatPercent(pnlBreakdown.unrealizedPnlPercent)})`,
+      icon: pnlBreakdown.unrealizedPnl >= 0 ? ArrowUpRight : ArrowDownRight,
+      color: pnlBreakdown.unrealizedPnl >= 0 ? "text-profit" : "text-loss",
+      hint: isMarketOpen() ? "Open positions · live prices" : "Open positions · frozen after close",
     },
     {
-      label: "Current Value",
-      value: formatCurrency(portfolio.currentValue),
-      icon: TrendingUp,
-      color: "text-cyan-400",
+      label: "Realized P&L",
+      value: `${pnlBreakdown.realizedPnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.realizedPnl)}`,
+      icon: pnlBreakdown.realizedPnl >= 0 ? TrendingUp : TrendingDown,
+      color: pnlBreakdown.realizedPnl >= 0 ? "text-profit" : "text-loss",
+      hint: "Closed sell trades",
     },
     {
-      label: "P&L",
-      value: `${portfolio.pnl >= 0 ? "+" : ""}${formatCurrency(portfolio.pnl)} (${formatPercent(portfolio.pnlPercent)})`,
-      icon: portfolio.pnl >= 0 ? ArrowUpRight : ArrowDownRight,
-      color: portfolio.pnl >= 0 ? "text-profit" : "text-loss",
+      label: "All-time P&L",
+      value: `${pnlBreakdown.allTimePnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.allTimePnl)} (${formatPercent(pnlBreakdown.allTimePnlPercent)})`,
+      icon: pnlBreakdown.allTimePnl >= 0 ? ArrowUpRight : ArrowDownRight,
+      color: pnlBreakdown.allTimePnl >= 0 ? "text-profit" : "text-loss",
+      hint: "Portfolio vs starting balance",
     },
   ];
 
@@ -1030,6 +1050,9 @@ export default function PaperTradingPage() {
                 <p className={cn("text-sm md:text-base font-semibold truncate", item.color)}>
                   {item.value}
                 </p>
+                {"hint" in item && item.hint && (
+                  <p className="text-[10px] text-text-tertiary mt-0.5 truncate">{item.hint}</p>
+                )}
               </div>
             </div>
           ))}
@@ -1458,7 +1481,7 @@ export default function PaperTradingPage() {
                 <span>Invested: {formatCurrency(portfolio.invested)}</span>
                 <span className="mx-2">·</span>
                 <span className={portfolio.pnl >= 0 ? "text-profit" : "text-loss"}>
-                  P&L: {portfolio.pnl >= 0 ? "+" : ""}{formatCurrency(portfolio.pnl)} ({formatPercent(portfolio.pnlPercent)})
+                  Unrealized: {portfolio.pnl >= 0 ? "+" : ""}{formatCurrency(portfolio.pnl)} ({formatPercent(portfolio.pnlPercent)})
                 </span>
               </div>
             )}

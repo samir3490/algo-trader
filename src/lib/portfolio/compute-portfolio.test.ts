@@ -4,6 +4,8 @@ import {
   computeInvested,
   computePortfolio,
   computeTodayPnl,
+  computeRealizedPnl,
+  computePnlBreakdown,
   isTradeTodayIST,
   todayDateKeyIST,
 } from "./compute-portfolio";
@@ -89,6 +91,69 @@ describe("isTradeTodayIST", () => {
       price: 100,
     };
     assert.equal(isTradeTodayIST(trade, today), true);
+  });
+});
+
+describe("computeRealizedPnl", () => {
+  it("sums netPnl from sell trades only", () => {
+    const trades: PaperTrade[] = [
+      {
+        id: "1",
+        time: "x",
+        symbol: "TCS",
+        exchange: "NSE",
+        side: "SELL",
+        qty: 10,
+        price: 4000,
+        netPnl: 1500,
+      },
+      {
+        id: "2",
+        time: "x",
+        symbol: "INFY",
+        exchange: "NSE",
+        side: "SELL",
+        qty: 5,
+        price: 1800,
+        netPnl: -200,
+      },
+      {
+        id: "3",
+        time: "x",
+        symbol: "RELIANCE",
+        exchange: "NSE",
+        side: "BUY",
+        qty: 1,
+        price: 2500,
+      },
+    ];
+    assert.equal(computeRealizedPnl(trades), 1300);
+  });
+});
+
+describe("computePnlBreakdown", () => {
+  it("aligns unrealized, realized, and all-time figures", () => {
+    const trades: PaperTrade[] = [
+      {
+        id: "s1",
+        time: "x",
+        symbol: "TCS",
+        exchange: "NSE",
+        side: "SELL",
+        qty: 5,
+        price: 4200,
+        netPnl: 1000,
+      },
+    ];
+    const breakdown = computePnlBreakdown(
+      trades,
+      [{ symbol: "INFY", exchange: "NSE", qty: 10, avgPrice: 1500, ltp: 1550 }],
+      900_000,
+      1_000_000
+    );
+    assert.equal(breakdown.realizedPnl, 1000);
+    assert.equal(breakdown.unrealizedPnl, 500);
+    assert.equal(breakdown.allTimePnl, breakdown.portfolio.portfolioValue - 1_000_000);
   });
 });
 

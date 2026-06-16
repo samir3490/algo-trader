@@ -63,6 +63,46 @@ export function computePortfolio(
   };
 }
 
+/** Sum of net P&L from all closed (SELL) trades. */
+export function computeRealizedPnl(trades: PaperTrade[]): number {
+  return trades.reduce((sum, t) => {
+    if (t.side !== "SELL" || typeof t.netPnl !== "number") return sum;
+    return sum + t.netPnl;
+  }, 0);
+}
+
+export interface PnlBreakdown {
+  portfolio: PortfolioSummary;
+  unrealizedPnl: number;
+  unrealizedPnlPercent: number;
+  realizedPnl: number;
+  allTimePnl: number;
+  allTimePnlPercent: number;
+  today: ReturnType<typeof computeTodayPnl>;
+}
+
+export function computePnlBreakdown(
+  trades: PaperTrade[],
+  holdings: PortfolioHolding[],
+  balance: number,
+  startingBalance: number
+): PnlBreakdown {
+  const portfolio = computePortfolio(holdings, balance);
+  const realizedPnl = computeRealizedPnl(trades);
+  const allTimePnl = computeAllTimePnl(portfolio.portfolioValue, startingBalance);
+  const allTimePnlPercent =
+    startingBalance > 0 ? (allTimePnl / startingBalance) * 100 : 0;
+  return {
+    portfolio,
+    unrealizedPnl: portfolio.pnl,
+    unrealizedPnlPercent: portfolio.pnlPercent,
+    realizedPnl,
+    allTimePnl,
+    allTimePnlPercent,
+    today: computeTodayPnl(trades, holdings),
+  };
+}
+
 export function computeAllTimePnl(portfolioValue: number, startingBalance: number): number {
   return portfolioValue - startingBalance;
 }
