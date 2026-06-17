@@ -47,6 +47,7 @@ import {
   computePnlBreakdown,
 } from "@/lib/portfolio/compute-portfolio";
 import PaperHealthPanel from "@/components/paper-health-panel";
+import StrategyBadges from "@/components/strategy-badges";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -802,8 +803,12 @@ export default function DashboardPage() {
                           {formatTradeDateTime(t)}
                         </td>
                         <td className="py-2.5 px-5 font-medium text-text-primary">{t.symbol}</td>
-                        <td className="py-2.5 px-5 text-text-tertiary truncate max-w-[100px]" title={t.displayStrategyName}>
-                          {t.displayStrategyName}
+                        <td className="py-2.5 px-5">
+                          <StrategyBadges
+                            names={t.displayStrategyNames}
+                            unknownCount={t.unknownStrategyCount}
+                            size="sm"
+                          />
                         </td>
                         <td className="py-2.5 px-5">
                           <span className={cn(

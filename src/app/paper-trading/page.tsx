@@ -27,6 +27,7 @@ import {
   saveOrder,
   getOrders,
   getSettings,
+  getActiveStrategies,
   type AppSettings,
 } from "@/lib/firebase";
 import type { OrderRecord, PaperTrade, PaperTradingState } from "@/lib/firebase";
@@ -55,11 +56,14 @@ import {
 import {
   enrichTradesWithStrategy,
   computeStrategyDetailBundles,
+  buildStrategyNamesBySymbol,
 } from "@/lib/strategies/strategy-performance";
+import StrategyBadges from "@/components/strategy-badges";
 import {
   formatTradeDateTime,
   normalizePaperTrades,
   tradesNormalizedChanged,
+  tradeExecutedAtMs,
 } from "@/lib/paper-trades/normalize";
 import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
 import { formatBuyStrength, resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
@@ -245,6 +249,9 @@ export default function PaperTradingPage() {
     text: string;
   } | null>(null);
   const [orderPanelOpen, setOrderPanelOpen] = useState(false);
+  const [strategyNamesBySymbol, setStrategyNamesBySymbol] = useState<
+    Map<string, string[]>
+  >(new Map());
   const settingsRef = useRef<AppSettings | null>(null);
   const balanceRef = useRef(balance);
   const tradesRef = useRef(trades);
@@ -358,6 +365,18 @@ export default function PaperTradingPage() {
       clearInterval(interval);
     };
   }, [mounted, user, syncFromCloud]);
+
+  useEffect(() => {
+    if (!user) return;
+    const load = () => {
+      void getActiveStrategies().then((strategies) => {
+        setStrategyNamesBySymbol(buildStrategyNamesBySymbol(strategies));
+      });
+    };
+    load();
+    window.addEventListener("strategies-updated", load);
+    return () => window.removeEventListener("strategies-updated", load);
+  }, [user]);
 
   // Refresh LTP / P&L during market hours only (avoids flicker after close)
   useEffect(() => {
@@ -911,9 +930,14 @@ export default function PaperTradingPage() {
   );
   const portfolio = pnlBreakdown.portfolio;
 
+  const enrichOptions = useMemo(
+    () => ({ strategyNamesBySymbol }),
+    [strategyNamesBySymbol]
+  );
+
   const enrichedTrades = useMemo(
-    () => enrichTradesWithStrategy(normalizedTrades),
-    [normalizedTrades]
+    () => enrichTradesWithStrategy(normalizedTrades, enrichOptions),
+    [normalizedTrades, enrichOptions]
   );
   const strategyDetails = useMemo(
     () =>
@@ -925,10 +949,29 @@ export default function PaperTradingPage() {
           qty: h.qty,
           avgPrice: h.avgPrice,
           ltp: h.ltp,
-        }))
+        })),
+        enrichOptions
       ),
-    [normalizedTrades, holdings]
+    [normalizedTrades, holdings, enrichOptions]
   );
+  const buyStrategiesBySymbol = useMemo(() => {
+    const map = new Map<string, { names: string[]; unknown: number }>();
+    const chronological = [...enrichedTrades].sort(
+      (a, b) => tradeExecutedAtMs(a) - tradeExecutedAtMs(b)
+    );
+    for (const t of chronological) {
+      if (t.side === "BUY") {
+        map.set(
+          `${t.symbol.toUpperCase()}:${(t.exchange || "NSE").toUpperCase()}`,
+          {
+            names: t.displayStrategyNames,
+            unknown: t.unknownStrategyCount ?? 0,
+          }
+        );
+      }
+    }
+    return map;
+  }, [enrichedTrades]);
   const holdingsNotInHistory = useMemo(() => {
     const traded = new Set(
       normalizedTrades.map(
@@ -1169,7 +1212,7 @@ export default function PaperTradingPage() {
                       Symbol
                     </th>
                     <th className="hidden py-3 px-2 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell">
-                      Strength
+                      Strategies
                     </th>
                     <th className="py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">
                       Qty
@@ -1209,6 +1252,8 @@ export default function PaperTradingPage() {
                       h,
                       normalizedTrades
                     );
+                    const symKey = `${h.symbol.toUpperCase()}:${(h.exchange || "NSE").toUpperCase()}`;
+                    const stratInfo = buyStrategiesBySymbol.get(symKey);
 
                     return (
                       <tr
@@ -1220,16 +1265,16 @@ export default function PaperTradingPage() {
                           <span className="ml-1 text-xs text-text-tertiary">{h.exchange}</span>
                         </td>
                         <td className="hidden py-3 px-2 sm:table-cell">
-                          {signalCount != null && signalCount > 0 ? (
+                          {stratInfo && stratInfo.names.length > 0 ? (
+                            <StrategyBadges
+                              names={stratInfo.names}
+                              unknownCount={stratInfo.unknown}
+                              size="sm"
+                            />
+                          ) : signalCount != null && signalCount > 0 ? (
                             <span
-                              className={cn(
-                                "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
-                                signalCount >= 5 && "bg-emerald-500/15 text-emerald-400",
-                                signalCount >= 3 &&
-                                  signalCount < 5 &&
-                                  "bg-amber-500/15 text-amber-400",
-                                signalCount < 3 && "bg-border/50 text-text-tertiary"
-                              )}
+                              className="text-xs text-text-tertiary"
+                              title={formatBuyStrength(signalCount)}
                             >
                               {formatBuyStrength(signalCount)}
                             </span>
@@ -1352,7 +1397,7 @@ export default function PaperTradingPage() {
                           )}
                         </td>
                         <td className="py-3 px-5 font-medium text-text-primary">
-                          {s.strategyName}
+                          <StrategyBadges names={[s.strategyName]} size="sm" />
                         </td>
                         <td className="py-3 px-5 text-right text-text-secondary">{s.trades}</td>
                         <td className="py-3 px-5 text-right text-text-secondary">{stockCount}</td>
@@ -1433,6 +1478,7 @@ export default function PaperTradingPage() {
                                         <thead>
                                           <tr className="text-text-tertiary uppercase tracking-wider border-b border-border/40">
                                             <th className="text-left py-2 px-4 font-medium">Date &amp; time</th>
+                                            <th className="text-left py-2 px-4 font-medium">Strategies</th>
                                             <th className="text-left py-2 px-4 font-medium">Side</th>
                                             <th className="text-right py-2 px-4 font-medium">Qty</th>
                                             <th className="text-right py-2 px-4 font-medium">Price</th>
@@ -1450,6 +1496,17 @@ export default function PaperTradingPage() {
                                               >
                                                 <td className="py-2 px-4 text-text-secondary font-mono whitespace-nowrap">
                                                   {ev.dateTimeLabel}
+                                                </td>
+                                                <td className="py-2 px-4">
+                                                  {ev.strategyNames && ev.strategyNames.length > 0 ? (
+                                                    <StrategyBadges
+                                                      names={ev.strategyNames}
+                                                      unknownCount={ev.unknownStrategyCount}
+                                                      size="sm"
+                                                    />
+                                                  ) : (
+                                                    <span className="text-text-tertiary">—</span>
+                                                  )}
                                                 </td>
                                                 <td className="py-2 px-4">
                                                   <span
@@ -1570,10 +1627,6 @@ export default function PaperTradingPage() {
                   t.displayStrategyName === "Manual" &&
                   !t.id?.startsWith("strat-");
                 const charges = resolveTradeCharges(t);
-                const strategyLabels =
-                  t.displayStrategyNames?.length > 0
-                    ? t.displayStrategyNames
-                    : [t.displayStrategyName];
                 return (
                   <tr
                     key={t.id}
@@ -1591,23 +1644,13 @@ export default function PaperTradingPage() {
                       {t.symbol}
                       <span className="text-text-tertiary text-xs ml-1">{t.exchange}</span>
                     </td>
-                    <td className="py-3 px-5 max-w-[220px]">
-                      <div className="flex flex-wrap gap-1">
-                        {strategyLabels.map((name) => (
-                          <span
-                            key={`${t.id}-${name}`}
-                            className={cn(
-                              "inline-block text-xs font-medium px-2 py-0.5 rounded max-w-full",
-                              isManual
-                                ? "bg-border/40 text-text-tertiary"
-                                : "bg-accent/15 text-accent"
-                            )}
-                            title={t.reason || name}
-                          >
-                            {name}
-                          </span>
-                        ))}
-                      </div>
+                    <td className="py-3 px-5 max-w-[120px]">
+                      <StrategyBadges
+                        names={t.displayStrategyNames}
+                        unknownCount={t.unknownStrategyCount}
+                        manual={isManual}
+                        size="sm"
+                      />
                     </td>
                     <td className="py-3 px-5">
                       <span className={cn(

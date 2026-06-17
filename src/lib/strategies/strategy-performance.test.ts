@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   computeStrategyDetailBundles,
   computeStrategyPerformance,
+  enrichTradesWithStrategy,
+  buildStrategyNamesBySymbol,
 } from "./strategy-performance";
 import type { PaperTrade } from "@/lib/firebase";
 
@@ -97,5 +99,53 @@ describe("computeStrategyDetailBundles", () => {
     const bundles = computeStrategyDetailBundles(trades);
     assert.equal(bundles.length, 1);
     assert.equal(bundles[0].symbols.length, 2);
+  });
+});
+
+describe("enrichTradesWithStrategy", () => {
+  it("shows separate strategy names for multi-signal buys", () => {
+    const trades: PaperTrade[] = [
+      trade({
+        id: "1",
+        side: "BUY",
+        symbol: "RELIANCE",
+        qty: 10,
+        price: 100,
+        strategyName: "MA Crossover",
+        buySignalCount: 2,
+        signalStrategyNames: ["MA Crossover", "RSI Reversal"],
+      }),
+    ];
+    const enriched = enrichTradesWithStrategy(trades);
+    assert.deepEqual(enriched[0].displayStrategyNames, [
+      "MA Crossover",
+      "RSI Reversal",
+    ]);
+    assert.equal(enriched[0].unknownStrategyCount, 0);
+  });
+
+  it("infers names from active strategies on symbol when not stored", () => {
+    const trades: PaperTrade[] = [
+      trade({
+        id: "1",
+        side: "BUY",
+        symbol: "TCS",
+        qty: 5,
+        price: 3000,
+        strategyName: "MA Crossover",
+        buySignalCount: 2,
+      }),
+    ];
+    const bySymbol = buildStrategyNamesBySymbol([
+      { symbol: "TCS", exchange: "NSE", name: "MA Crossover" },
+      { symbol: "TCS", exchange: "NSE", name: "RSI Reversal" },
+    ]);
+    const enriched = enrichTradesWithStrategy(trades, {
+      strategyNamesBySymbol: bySymbol,
+    });
+    assert.deepEqual(enriched[0].displayStrategyNames, [
+      "MA Crossover",
+      "RSI Reversal",
+    ]);
   });
 });
