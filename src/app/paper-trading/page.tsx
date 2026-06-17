@@ -1139,25 +1139,61 @@ export default function PaperTradingPage() {
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-border">
-              {holdings.map((h) => {
-                const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
-                const currentVal = h.qty * mark;
-                const investedVal = h.qty * h.avgPrice;
-                const pnl = currentVal - investedVal;
-                const pnlPct = investedVal > 0 ? (pnl / investedVal) * 100 : 0;
-                const isProfit = pnl >= 0;
+            <div className="overflow-x-auto -mx-5">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th className="py-3 pl-5 pr-2 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                      Symbol
+                    </th>
+                    <th className="hidden py-3 px-2 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell">
+                      Strength
+                    </th>
+                    <th className="py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                      Qty
+                    </th>
+                    <th className="py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                      Avg
+                    </th>
+                    <th className="py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                      LTP
+                    </th>
+                    <th className="hidden py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell">
+                      Invested
+                    </th>
+                    <th className="hidden py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell">
+                      Value
+                    </th>
+                    <th className="py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                      P&amp;L
+                    </th>
+                    <th className="hidden py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell">
+                      P&amp;L %
+                    </th>
+                    <th className="py-3 pl-2 pr-5 text-center text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                      Action
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {holdings.map((h) => {
+                    const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
+                    const currentVal = h.qty * mark;
+                    const investedVal = h.qty * h.avgPrice;
+                    const pnl = currentVal - investedVal;
+                    const pnlPct = investedVal > 0 ? (pnl / investedVal) * 100 : 0;
+                    const isProfit = pnl >= 0;
 
-                return (
-                  <div
-                    key={`${h.symbol}-${h.exchange}`}
-                    className="py-4 first:pt-0 last:pb-0"
-                  >
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-semibold text-text-primary">{h.symbol}</span>
-                          <span className="text-xs text-text-tertiary">{h.exchange}</span>
+                    return (
+                      <tr
+                        key={`${h.symbol}-${h.exchange}`}
+                        className="border-b border-border/50 transition-colors hover:bg-bg-hover/50"
+                      >
+                        <td className="py-3 pl-5 pr-2">
+                          <span className="font-medium text-text-primary">{h.symbol}</span>
+                          <span className="ml-1 text-xs text-text-tertiary">{h.exchange}</span>
+                        </td>
+                        <td className="hidden py-3 px-2 sm:table-cell">
                           {h.buySignalCount != null && h.buySignalCount > 0 ? (
                             <span
                               className={cn(
@@ -1171,50 +1207,74 @@ export default function PaperTradingPage() {
                             >
                               {formatBuyStrength(h.buySignalCount)}
                             </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 text-sm text-text-secondary">
-                          {formatNumber(h.qty)} shares · Avg {formatCurrency(h.avgPrice)} · LTP{" "}
+                          ) : (
+                            <span className="text-xs text-text-tertiary">—</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-2 text-right text-text-secondary tabular-nums">
+                          {formatNumber(h.qty)}
+                        </td>
+                        <td className="py-3 px-2 text-right text-text-secondary tabular-nums whitespace-nowrap">
+                          {formatCurrency(h.avgPrice)}
+                        </td>
+                        <td className="py-3 px-2 text-right font-medium text-text-primary tabular-nums whitespace-nowrap">
                           {formatCurrency(h.ltp)}
-                        </p>
-                        <p className="mt-0.5 text-xs text-text-tertiary">
-                          Invested {formatCurrency(investedVal)} · Value {formatCurrency(currentVal)}
-                        </p>
-                      </div>
-
-                      <div className="flex shrink-0 items-center justify-between gap-4 sm:flex-col sm:items-end sm:justify-center">
-                        <div className="text-left sm:text-right">
-                          <p className={cn("font-semibold", isProfit ? "text-profit" : "text-loss")}>
+                        </td>
+                        <td className="hidden py-3 px-2 text-right text-text-secondary tabular-nums whitespace-nowrap sm:table-cell">
+                          {formatCurrency(investedVal)}
+                        </td>
+                        <td className="hidden py-3 px-2 text-right text-text-primary tabular-nums whitespace-nowrap sm:table-cell">
+                          {formatCurrency(currentVal)}
+                        </td>
+                        <td
+                          className={cn(
+                            "py-3 px-2 text-right font-medium tabular-nums whitespace-nowrap",
+                            isProfit ? "text-profit" : "text-loss"
+                          )}
+                        >
+                          <span className="inline-flex items-center justify-end gap-0.5">
+                            {isProfit ? (
+                              <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
+                            ) : (
+                              <ArrowDownRight className="h-3.5 w-3.5 shrink-0" />
+                            )}
                             {isProfit ? "+" : ""}
                             {formatCurrency(pnl)}
-                          </p>
-                          <p className={cn("text-xs font-medium", isProfit ? "text-profit" : "text-loss")}>
-                            {formatPercent(pnlPct)}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => handleExit(h)}
-                            className="px-2.5 py-1 text-xs font-medium rounded bg-loss/10 text-loss hover:bg-loss/20 transition-colors cursor-pointer border border-loss/20"
-                            title="Pre-fill sell order"
-                          >
-                            Exit
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSquareOff(h)}
-                            className="px-2.5 py-1 text-xs font-medium rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors cursor-pointer border border-amber-500/20"
-                            title="Sell all at LTP immediately"
-                          >
-                            <LogOut className="h-3 w-3" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+                          </span>
+                        </td>
+                        <td
+                          className={cn(
+                            "hidden py-3 px-2 text-right font-medium tabular-nums sm:table-cell",
+                            isProfit ? "text-profit" : "text-loss"
+                          )}
+                        >
+                          {formatPercent(pnlPct)}
+                        </td>
+                        <td className="py-3 pl-2 pr-5 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => handleExit(h)}
+                              className="rounded border border-loss/20 bg-loss/10 px-2 py-1 text-xs font-medium text-loss transition-colors hover:bg-loss/20"
+                              title="Pre-fill sell order"
+                            >
+                              Exit
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleSquareOff(h)}
+                              className="rounded border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-xs font-medium text-amber-400 transition-colors hover:bg-amber-500/20"
+                              title="Sell all at LTP immediately"
+                            >
+                              <LogOut className="h-3 w-3" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
           )}
       </div>
