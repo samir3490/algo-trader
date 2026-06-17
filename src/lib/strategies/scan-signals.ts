@@ -1,5 +1,6 @@
 import type { OHLC } from "@/types";
 import { fetchYahooHistory, type ChartTimeframe } from "@/lib/market-data/history";
+import { resolvePaperExecutionPrice } from "@/lib/market-data/resolve-execution-price";
 import { evaluateStrategyByType } from "@/lib/strategies/evaluate-by-type";
 import { inferStrategyType, type StrategyType } from "@/lib/strategies/definitions";
 
@@ -44,11 +45,19 @@ export async function scanStrategiesForSignals(
 
     const signal = evaluateStrategyByType(type, bars, strat.params ?? {}, strat.symbol);
     if (signal && signal.action !== "HOLD") {
+      const resolved = await resolvePaperExecutionPrice(
+        strat.symbol,
+        strat.exchange || "NSE",
+        signal.price,
+        { requireLive: true }
+      );
+      if (!resolved) continue;
+
       results.push({
         strategyId: strat.id,
         symbol: strat.symbol,
         action: signal.action,
-        price: signal.price,
+        price: resolved.price,
         reason: signal.reason,
         confidence: signal.confidence,
       });

@@ -59,6 +59,10 @@ import {
   useScanDigestEmail,
 } from "@/lib/email/notify-policy";
 import { fetchYahooQuote } from "@/lib/market-data/yahoo";
+import {
+  resolvePaperExecutionPrice,
+  MAX_EXECUTION_HINT_DEVIATION_PCT,
+} from "@/lib/market-data/resolve-execution-price";
 import type { OrderRecord } from "@/lib/firebase";
 import {
   normalizePaperTrades,
@@ -551,15 +555,29 @@ export async function runStrategiesForUser(
     }
 
     let price = baseDecision.price;
-    if (!Number.isFinite(price) || price <= 0) {
-      try {
-        const quote = await fetchYahooQuote(baseDecision.symbol, exchange);
-        if (quote?.lastPrice && quote.lastPrice > 0) {
-          price = quote.lastPrice;
-        }
-      } catch {
-        /* use signal price */
-      }
+    const resolvedPrice = await resolvePaperExecutionPrice(
+      baseDecision.symbol,
+      exchange,
+      price,
+      { requireLive: true }
+    );
+    if (!resolvedPrice) {
+      bumpReason(diagnostics.skipReasons, "Could not resolve live market price");
+      continue;
+    }
+    price = resolvedPrice.price;
+    if (
+      resolvedPrice.deviationPct != null &&
+      resolvedPrice.deviationPct > MAX_EXECUTION_HINT_DEVIATION_PCT &&
+      resolvedPrice.hintPrice != null
+    ) {
+      writeSystemLog("WARN", "StrategyScan", "execution_price_corrected", {
+        symbol: baseDecision.symbol,
+        exchange,
+        hintPrice: resolvedPrice.hintPrice,
+        livePrice: resolvedPrice.livePrice,
+        deviationPct: Math.round(resolvedPrice.deviationPct * 100) / 100,
+      });
     }
 
     const freshQty = resolvePaperScanOrderQty(price, userSettings, {
