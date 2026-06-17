@@ -32,6 +32,7 @@ import {
   prunePaperStateForScan,
 } from "@/lib/portfolio/paper-state-cleanup";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
+import { persistNewPaperTradesAsOrdersAdmin } from "@/lib/portfolio/paper-order-record-server";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
 import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
 import { writeSystemLog } from "@/lib/core/system-log";
@@ -368,10 +369,18 @@ export async function runStrategiesForUser(
     await persistPaperState(db, userId, paperState, recentOrders);
   }
 
+  const tradesBeforeRisk = paperState.trades ?? [];
   const riskResult = applyPaperRiskExits(paperState, userSettings);
   if (riskResult.exits.length > 0) {
     paperState = riskResult.state;
     await persistPaperState(db, userId, paperState, recentOrders);
+    await persistNewPaperTradesAsOrdersAdmin(
+      db,
+      userId,
+      tradesBeforeRisk,
+      paperState.trades ?? [],
+      { product: userSettings.paperDefaultProduct }
+    );
     const cooldownMs = (userSettings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
     for (const exit of riskResult.exits) {
       const key = symKey(exit.symbol, exit.exchange);

@@ -31,6 +31,10 @@ import {
   type AppSettings,
 } from "@/lib/firebase";
 import type { OrderRecord, PaperTrade } from "@/lib/firebase";
+import {
+  newTradeIds,
+  paperTradeToOrderRecord,
+} from "@/lib/portfolio/paper-order-record";
 import { loadSettingsFromCache, saveSettingsToCache } from "@/lib/settings/cache";
 import {
   applyPaperRiskExits,
@@ -335,10 +339,21 @@ export default function PaperTradingPage() {
           settings
         );
         if (exits.length > 0) {
+          const tradesBefore = tradesRef.current as PaperTrade[];
           setBalance(state.balance ?? balanceRef.current);
           setHoldings((state.holdings ?? []) as Holding[]);
           setTrades((state.trades ?? []) as Trade[]);
           savePaperTradingState(state).catch(() => {});
+          for (const trade of newTradeIds(
+            tradesBefore,
+            (state.trades ?? []) as PaperTrade[]
+          )) {
+            saveOrder(
+              paperTradeToOrderRecord(trade, {
+                product: settings?.paperDefaultProduct,
+              })
+            ).catch(() => {});
+          }
           const msg = exits
             .map((e) => `${e.symbol}: ${e.message}`)
             .join("; ");

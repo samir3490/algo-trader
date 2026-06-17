@@ -3,7 +3,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { formatCurrency, formatDateTimeIST, parseDateTimeMs } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { getOrders as getFirestoreOrders, getZerodhaAccounts, type OrderRecord, type ZerodhaAccount } from "@/lib/firebase";
+import {
+  getOrders as getFirestoreOrders,
+  getPaperTradingState,
+  type OrderRecord,
+} from "@/lib/firebase";
+import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
+import { paperTradeToOrderRecord } from "@/lib/portfolio/paper-order-record";
 import {
   ClipboardList,
   Search,
@@ -149,20 +155,27 @@ export default function OrdersPage() {
       }
     } catch { /* Zerodha may not be connected */ }
 
-    // Load orders from Firestore (with localStorage fallback)
+    // Paper orders: merge Firestore order history with paper trades (includes SELL exits).
     try {
-      const fsOrders = await getFirestoreOrders(100);
-      if (fsOrders.length > 0) {
-        allOrders.push(...fsOrders.map(mapFirestoreOrder));
-      } else {
-        const raw = localStorage.getItem("paperTrades");
-        if (raw) {
-          const parsed: PaperTrade[] = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            allOrders.push(...parsed.map(mapPaperTrade));
-          }
+      const [fsOrders, paperState] = await Promise.all([
+        getFirestoreOrders(500),
+        getPaperTradingState(),
+      ]);
+
+      const byId = new Map<string, Order>();
+      for (const o of fsOrders.map(mapFirestoreOrder)) {
+        byId.set(o.id, o);
+      }
+
+      const paperTrades = normalizePaperTrades(paperState?.trades ?? [], fsOrders);
+      for (const trade of paperTrades) {
+        const record = paperTradeToOrderRecord(trade);
+        if (!byId.has(record.id)) {
+          byId.set(record.id, mapFirestoreOrder(record));
         }
       }
+
+      allOrders.push(...byId.values());
     } catch {
       try {
         const raw = localStorage.getItem("paperTrades");
