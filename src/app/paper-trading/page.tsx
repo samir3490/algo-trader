@@ -75,6 +75,8 @@ import PaperHealthPanel from "@/components/paper-health-panel";
 import {
   resolveTradeCharges,
   formatChargesTooltip,
+  chargeOtherFees,
+  formatOtherFeesTooltip,
 } from "@/lib/brokerage/trade-charges";
 import {
   paperOrderNotional,
@@ -1584,7 +1586,7 @@ export default function PaperTradingPage() {
             )}
             {holdings.length} holding{holdings.length !== 1 ? "s" : ""}
             <span className="block mt-1 text-text-tertiary/90">
-              Charges use Zerodha CNC/MIS schedule (brokerage, STT, GST, exchange, stamp duty).
+              Charges use Zerodha CNC/MIS schedule — total = brokerage + STT + GST + other (exchange, SEBI, stamp duty).
               Enable <em>Simulate brokerage</em> in Settings to deduct from paper balance.
             </span>
             {holdingsNotInHistory.length > 0 && (
@@ -1613,9 +1615,15 @@ export default function PaperTradingPage() {
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-3">GST</th>
                 <th
                   className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-3"
-                  title="Brokerage + STT + GST + exchange + SEBI + stamp duty"
+                  title="Exchange transaction charge + SEBI fees + stamp duty"
                 >
-                  Charges
+                  Other
+                </th>
+                <th
+                  className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-3"
+                  title="Brokerage + STT + GST + Other"
+                >
+                  Total fees
                 </th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Net P&amp;L</th>
               </tr>
@@ -1675,6 +1683,12 @@ export default function PaperTradingPage() {
                     </td>
                     <td
                       className="py-3 px-3 text-right text-text-tertiary text-xs tabular-nums"
+                      title={formatOtherFeesTooltip(charges)}
+                    >
+                      {formatCurrency(chargeOtherFees(charges))}
+                    </td>
+                    <td
+                      className="py-3 px-3 text-right text-text-tertiary text-xs tabular-nums font-medium"
                       title={formatChargesTooltip(charges)}
                     >
                       {formatCurrency(charges.total)}
@@ -1696,7 +1710,7 @@ export default function PaperTradingPage() {
               })}
               {enrichedTrades.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-text-tertiary">
+                  <td colSpan={12} className="py-12 text-center text-text-tertiary">
                     No trades yet.
                   </td>
                 </tr>

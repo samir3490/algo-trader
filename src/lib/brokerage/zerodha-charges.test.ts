@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { computeZerodhaCharges, cashFlowForTrade } from "./zerodha-charges";
+import { computeZerodhaCharges, cashFlowForTrade, sumChargeBreakdown } from "./zerodha-charges";
 
 describe("computeZerodhaCharges", () => {
   it("CNC buy has stamp duty and STT, zero brokerage", () => {
@@ -14,6 +14,7 @@ describe("computeZerodhaCharges", () => {
     assert.ok(c.stt > 0);
     assert.ok(c.stampDuty > 0);
     assert.ok(c.total > 0);
+    assert.equal(sumChargeBreakdown(c), c.total);
   });
 
   it("MIS sell has brokerage cap and STT", () => {
@@ -26,6 +27,7 @@ describe("computeZerodhaCharges", () => {
     assert.ok(c.brokerage > 0);
     assert.ok(c.stt > 0);
     assert.ok(c.brokerage <= 20);
+    assert.equal(sumChargeBreakdown(c), c.total);
   });
 });
 

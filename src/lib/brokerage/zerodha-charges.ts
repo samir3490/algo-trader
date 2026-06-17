@@ -68,17 +68,37 @@ export function computeZerodhaCharges(input: ChargeInput): ChargeBreakdown {
   const exchangeCharges = turnover * EXCHANGE_PCT;
   const sebiFees = turnover * SEBI_PCT;
   const gst = (brokerage + exchangeCharges + sebiFees) * GST_RATE;
-  const total = round2(brokerage + stt + exchangeCharges + sebiFees + stampDuty + gst);
 
-  return {
+  const breakdown = {
     brokerage: round2(brokerage),
     stt: round2(stt),
     exchangeCharges: round2(exchangeCharges),
     sebiFees: round2(sebiFees),
     stampDuty: round2(stampDuty),
     gst: round2(gst),
-    total,
+    total: 0,
   };
+  breakdown.total = sumChargeBreakdown(breakdown);
+  return breakdown;
+}
+
+/** Exchange + SEBI + stamp duty (everything except brokerage, STT, GST). */
+export function chargeOtherFees(
+  c: Pick<ChargeBreakdown, "exchangeCharges" | "sebiFees" | "stampDuty">
+): number {
+  return round2(c.exchangeCharges + c.sebiFees + c.stampDuty);
+}
+
+/** Sum of all charge line items — must match `total`. */
+export function sumChargeBreakdown(
+  c: Omit<ChargeBreakdown, "total"> | ChargeBreakdown
+): number {
+  return round2(
+    c.brokerage +
+      c.stt +
+      c.gst +
+      chargeOtherFees(c)
+  );
 }
 
 /** Cash impact: positive = money leaves wallet (buy), negative = money in (sell). */
