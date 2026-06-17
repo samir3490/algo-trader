@@ -84,6 +84,20 @@ function anySellToday(
   );
 }
 
+function anyBuyToday(
+  trades: PaperTrade[],
+  symbol: string,
+  exchange: string
+): boolean {
+  const key = symKey(symbol, exchange);
+  return trades.some(
+    (t) =>
+      t.side === "BUY" &&
+      symKey(t.symbol, t.exchange) === key &&
+      tradeOnToday(t)
+  );
+}
+
 function lastSellToday(
   trades: PaperTrade[],
   symbol: string,
@@ -138,8 +152,6 @@ export interface PortfolioGateContext {
   symbolCooldownUntil?: Record<string, number>;
   /** Symbol locked for rest of IST day (persisted in strategyRunner). */
   symbolsLockedToday?: Record<string, string>;
-  /** Paper strategy scan — allow new entries; skip same-day rebuy locks. */
-  paperStrategyScan?: boolean;
 }
 
 export function lockSymbolForToday(
@@ -207,13 +219,6 @@ export function canExecuteStrategyTrade(
     return { allowed: true };
   }
 
-  const paperScan = ctx.paperStrategyScan === true;
-
-  // Paper auto-scan: no rebuy/cooldown/duplicate gates — queue already filters held symbols.
-  if (paperScan) {
-    return { allowed: true };
-  }
-
   if (ctx.soldThisRun.has(key)) {
     return { allowed: false, reason: "Sold this scan — no immediate rebuy" };
   }
@@ -235,6 +240,13 @@ export function canExecuteStrategyTrade(
     }
   } else if (hasPosition) {
     return { allowed: false, reason: "Already holding — no add-on buy" };
+  }
+
+  if (anyBuyToday(ctx.trades, symbol, exchange)) {
+    return {
+      allowed: false,
+      reason: "Already bought this symbol today — no duplicate entry",
+    };
   }
 
   const noSameDayRebuy = ctx.settings.noSameDayRebuyAfterSell !== false;

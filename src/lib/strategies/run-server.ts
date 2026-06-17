@@ -13,6 +13,7 @@ import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
 import {
   ensurePositions,
   getOpenPositions,
+  hasOpenPositionForSymbol,
 } from "@/lib/portfolio/position-manager";
 import {
   evaluatePortfolioDecisions,
@@ -42,6 +43,7 @@ import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
 import { writeSystemLog } from "@/lib/core/system-log";
 import { nowISTDateTimeString } from "@/lib/utils";
 import {
+  canExecuteStrategyTrade,
   lockSymbolForToday,
   pruneSymbolLocksForToday,
 } from "@/lib/strategies/portfolio-gate";
@@ -294,11 +296,14 @@ export async function runStrategiesForUser(
   const userSettings = await loadUserSettings(db, userId);
   const {
     emailDedupeKeys: existingEmailKeys,
+    dedupeKeys: existingDedupeKeys,
+    symbolCooldownUntil: persistedCooldown,
+    symbolsLockedToday: persistedLocks,
   } = await loadRunnerMeta(db, userId);
-  const dedupe = new Set<string>();
+  const dedupe = new Set(existingDedupeKeys);
   const emailDedupe = new Set(existingEmailKeys);
-  let symbolCooldownUntil: Record<string, number> = {};
-  let symbolsLockedToday: Record<string, string> = {};
+  let symbolCooldownUntil: Record<string, number> = { ...persistedCooldown };
+  let symbolsLockedToday: Record<string, string> = { ...persistedLocks };
   const soldThisRun = new Set<string>();
   const digestLines: ScanDigestLine[] = [];
   const digestMode = useScanDigestEmail(userSettings);
@@ -347,7 +352,6 @@ export async function runStrategiesForUser(
       userSettings
     )
   );
-  dedupe.clear();
   if (paperState.holdings?.length) {
     paperState = {
       ...paperState,
@@ -395,6 +399,7 @@ export async function runStrategiesForUser(
         exit.symbol,
         exit.exchange
       );
+      dedupe.add(executionNoBuyTodayKey(exit.symbol));
       queueEmail(
         "risk_exit",
         {
@@ -497,6 +502,54 @@ export async function runStrategiesForUser(
     }
 
     const exchange = baseDecision.exchange || "NSE";
+
+    if (hasOpenPositionForSymbol(paperState, baseDecision.symbol, exchange)) {
+      bumpReason(diagnostics.skipReasons, "Already holding — no add-on buy");
+      diagnostics.gateBlocked += 1;
+      continue;
+    }
+
+    const noBuyKey = executionNoBuyTodayKey(baseDecision.symbol);
+    const buyTodayKey = `BUY-TODAY:${baseDecision.symbol.toUpperCase()}:${todayKeyIST()}`;
+    const slotKey = executionDedupeKey(baseDecision.symbol);
+    if (dedupe.has(noBuyKey)) {
+      bumpReason(diagnostics.skipReasons, "Sold today — no rebuy until tomorrow");
+      diagnostics.dedupeBlocked += 1;
+      continue;
+    }
+    if (dedupe.has(buyTodayKey)) {
+      bumpReason(
+        diagnostics.skipReasons,
+        "Already bought this symbol today — no duplicate entry"
+      );
+      diagnostics.dedupeBlocked += 1;
+      continue;
+    }
+    if (dedupe.has(slotKey)) {
+      bumpReason(
+        diagnostics.skipReasons,
+        "Already traded this symbol in this 15-minute window"
+      );
+      diagnostics.dedupeBlocked += 1;
+      continue;
+    }
+
+    const gate = canExecuteStrategyTrade("BUY", baseDecision.symbol, exchange, {
+      holdings: paperState.holdings ?? [],
+      positions: paperState.positions,
+      trades: paperState.trades ?? [],
+      settings: userSettings,
+      soldThisRun,
+      symbolCooldownUntil,
+      symbolsLockedToday,
+      ownerStrategyId: baseDecision.ownerStrategyId,
+    });
+    if (!gate.allowed) {
+      bumpReason(diagnostics.skipReasons, gate.reason ?? "Blocked by trade gate");
+      diagnostics.gateBlocked += 1;
+      continue;
+    }
+
     let price = baseDecision.price;
     if (!Number.isFinite(price) || price <= 0) {
       try {
@@ -552,6 +605,7 @@ export async function runStrategiesForUser(
 
       paperState = ensurePositions(state);
       dedupe.add(executionDedupeKey(decision.symbol));
+      dedupe.add(`BUY-TODAY:${decision.symbol.toUpperCase()}:${todayKeyIST()}`);
       tradesExecuted += 1;
       placedThisScan += 1;
 

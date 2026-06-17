@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS } from "@/lib/firebase";
 import type { PaperTrade } from "@/lib/firebase";
 
 const settings = { ...DEFAULT_SETTINGS, rebuyCooldownMinutes: 240 };
+const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
 describe("canExecuteStrategyTrade", () => {
   it("blocks BUY when soldThisRun", () => {
@@ -19,18 +20,6 @@ describe("canExecuteStrategyTrade", () => {
     assert.match(r.reason ?? "", /Sold this scan/);
   });
 
-  it("allows BUY when soldThisRun during paper strategy scan", () => {
-    const sold = new Set(["SAIL:NSE"]);
-    const r = canExecuteStrategyTrade("BUY", "SAIL", "NSE", {
-      holdings: [],
-      trades: [],
-      settings,
-      soldThisRun: sold,
-      paperStrategyScan: true,
-    });
-    assert.equal(r.allowed, true);
-  });
-
   it("blocks BUY after losing same-day sell", () => {
     const trades: PaperTrade[] = [
       {
@@ -42,7 +31,7 @@ describe("canExecuteStrategyTrade", () => {
         qty: 1,
         price: 90,
         netPnl: -50,
-        date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+        date: today,
         executedAt: new Date().toISOString(),
       },
     ];
@@ -62,51 +51,69 @@ describe("canExecuteStrategyTrade", () => {
       trades: [],
       settings,
       soldThisRun: new Set(),
-      symbolsLockedToday: { "POLICYBAZAAR:NSE": new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }) },
+      symbolsLockedToday: { "POLICYBAZAAR:NSE": today },
     });
     assert.equal(r.allowed, false);
     assert.match(r.reason ?? "", /locked/);
   });
 
-  it("allows BUY after same-day sell when paperStrategyScan", () => {
+  it("blocks duplicate BUY on same symbol same day", () => {
     const trades: PaperTrade[] = [
       {
         id: "1",
         time: "x",
-        symbol: "SAIL",
+        symbol: "HINDALCO",
         exchange: "NSE",
-        side: "SELL",
-        qty: 1,
-        price: 90,
-        netPnl: -50,
-        date: new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" }),
+        side: "BUY",
+        qty: 10,
+        price: 700,
+        date: today,
         executedAt: new Date().toISOString(),
       },
     ];
-    const r = canExecuteStrategyTrade("BUY", "SAIL", "NSE", {
+    const r = canExecuteStrategyTrade("BUY", "HINDALCO", "NSE", {
       holdings: [],
       trades,
       settings,
       soldThisRun: new Set(),
-      paperStrategyScan: true,
     });
-    assert.equal(r.allowed, true);
+    assert.equal(r.allowed, false);
+    assert.match(r.reason ?? "", /Already bought this symbol today/);
   });
 
-  it("allows BUY when symbol locked during paper strategy scan", () => {
-    const r = canExecuteStrategyTrade("BUY", "POLICYBAZAAR", "NSE", {
+  it("blocks same-day rebuy after sell", () => {
+    const trades: PaperTrade[] = [
+      {
+        id: "1",
+        time: "x",
+        symbol: "HINDALCO",
+        exchange: "NSE",
+        side: "BUY",
+        qty: 10,
+        price: 700,
+        date: today,
+        executedAt: new Date(Date.now() - 3_600_000).toISOString(),
+      },
+      {
+        id: "2",
+        time: "y",
+        symbol: "HINDALCO",
+        exchange: "NSE",
+        side: "SELL",
+        qty: 10,
+        price: 710,
+        date: today,
+        executedAt: new Date().toISOString(),
+      },
+    ];
+    const r = canExecuteStrategyTrade("BUY", "HINDALCO", "NSE", {
       holdings: [],
-      trades: [],
+      trades,
       settings,
       soldThisRun: new Set(),
-      symbolsLockedToday: {
-        "POLICYBAZAAR:NSE": new Date().toLocaleDateString("en-CA", {
-          timeZone: "Asia/Kolkata",
-        }),
-      },
-      paperStrategyScan: true,
     });
-    assert.equal(r.allowed, true);
+    assert.equal(r.allowed, false);
+    assert.match(r.reason ?? "", /Sold today|rebuy|Already bought this symbol today/);
   });
 
   it("allows SELL when holding exists", () => {
