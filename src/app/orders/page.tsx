@@ -13,6 +13,7 @@ import {
   normalizePaperTrades,
 } from "@/lib/paper-trades/normalize";
 import { paperTradeToOrderRecord } from "@/lib/portfolio/paper-order-record";
+import PaperExportMenu from "@/components/paper-export-menu";
 import {
   ClipboardList,
   Search,
@@ -229,7 +230,9 @@ export default function OrdersPage() {
             <p className="text-sm text-text-secondary">Track and manage all your trading orders</p>
           </div>
         </div>
-        <button
+        <div className="flex items-center gap-2">
+          <PaperExportMenu variant="compact" />
+          <button
           onClick={fetchAllOrders}
           disabled={isLoading}
           className="flex items-center gap-2 rounded-lg bg-bg-secondary px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary border border-border disabled:opacity-50"
@@ -237,6 +240,7 @@ export default function OrdersPage() {
           {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
           Refresh
         </button>
+        </div>
       </div>
 
       {/* Tabs */}

@@ -1,4 +1,5 @@
-import { sendHealthAlertEmail } from "@/lib/email";
+import { sendHealthAlertEmail, type ScanDigestLine } from "@/lib/email";
+import { countScanDigestLines } from "@/lib/export/scan-email-status";
 import {
   isCronStale,
   isMarketHoursIST,
@@ -27,6 +28,7 @@ export async function maybeSendCronHealthAlerts(input: {
   diagnostics: ScanDiagnostics;
   emailDedupe: Set<string>;
   userId: string;
+  digestLines?: ScanDigestLine[];
 }): Promise<void> {
   if (input.invokedBy !== "cron") return;
 
@@ -50,11 +52,12 @@ export async function maybeSendCronHealthAlerts(input: {
   }
 
   const paperSignals = input.diagnostics.paperSignals ?? 0;
-  if (
-    input.signalsFound > 0 &&
-    input.tradesExecuted === 0 &&
-    paperSignals > 0
-  ) {
+  const digestCounts = countScanDigestLines(input.digestLines ?? []);
+  const hadPlacements =
+    input.tradesExecuted > 0 ||
+    digestCounts.executed > 0 ||
+    digestCounts.risk > 0;
+  if (input.signalsFound > 0 && paperSignals > 0 && !hadPlacements) {
     const key = healthAlertKey("scan_zero_trades", input.userId);
     if (!input.emailDedupe.has(key)) {
       input.emailDedupe.add(key);

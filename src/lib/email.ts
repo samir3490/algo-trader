@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { countScanDigestLines } from "@/lib/export/scan-email-status";
 
 const transporter = nodemailer.createTransport({
   service: "gmail",
@@ -134,9 +135,7 @@ export async function sendScanDigestEmail(lines: ScanDigestLine[]) {
   }
 
   const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-  const executed = lines.filter((l) => l.status === "EXECUTED").length;
-  const risk = lines.filter((l) => l.status.startsWith("RISK")).length;
-  const skipped = lines.filter((l) => l.status.startsWith("SKIPPED")).length;
+  const { executed, risk, skipped } = countScanDigestLines(lines);
 
   const rows = lines
     .map((l) => {

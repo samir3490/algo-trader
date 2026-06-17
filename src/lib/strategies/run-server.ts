@@ -780,6 +780,7 @@ export async function runStrategiesForUser(
     diagnostics,
     emailDedupe,
     userId,
+    digestLines,
   });
 
   await db.doc(`users/${userId}/data/strategyRunner`).set(

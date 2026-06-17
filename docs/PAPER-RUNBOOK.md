@@ -1,6 +1,117 @@
 # Paper Trading Runbook
 
-Operational guide for running AlgoTrader paper auto-trading reliably before promoting any strategy to live money.
+Operational guide for running AlgoTrader paper auto-trading reliably, plus the full product roadmap from paper → live.
+
+---
+
+## Algo trading roadmap
+
+High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 1 is stable and Phase 3 prerequisites are met.
+
+| Phase | Goal | Timeline | Status |
+|-------|------|----------|--------|
+| **1** | Stabilize & trust paper auto-trading | 2–4 weeks | **In progress** — mostly shipped |
+| **2** | Smarter entries & exits (paper only) | 3–5 weeks | Not started |
+| **3** | Live trading automation (real money) | 4–8 weeks | Not started |
+| **4** | Analytics & optimization | Ongoing | Not started |
+| **5** | Product & ops polish | Ongoing | Partial (email alerts, drawer UI) |
+
+**Suggested order:** Phase 1 → Phase 2.1–2.3 → 4+ weeks stable paper → Phase 3 → Phase 4 in parallel.
+
+### Where you are today
+
+| Area | Status |
+|------|--------|
+| Paper auto-trading (15-min cron) | Working |
+| 12 strategies, multi-symbol, strength ranking | Working |
+| Portfolio gates (no duplicate buy, no same-day rebuy) | Working |
+| Risk exits (SL/TP), brokerage simulation | Working |
+| Backtest on Strategies page | Working |
+| Live Zerodha (manual orders) | Working |
+| Live auto from cron | **Email only** — no server-side orders |
+| Market data for cron | Yahoo (~15 min delayed) |
+| Strategy SELL signals | **Not used** — exits are SL/TP only |
+
+---
+
+### Phase 1 — Stabilize & trust (2–4 weeks)
+
+**Goal:** Run paper auto-trading for weeks without surprises.
+
+- [x] Paper trading health dashboard (**Dashboard → Paper trading health**)
+- [x] Cron / scan health email alerts (failures, stale cron, zero trades, price corrections)
+- [x] Price correction tracking in scan diagnostics
+- [ ] Zerodha quotes preferred in cron when connected (Yahoo still used for automated scans)
+- [x] Portfolio reconciliation (drift detection + **Reconcile** button + API)
+- [x] Paper runbook (this document)
+- [x] Per-strategy paper P&L on Dashboard (compare with Strategies backtest)
+
+**Ops sections below** (schedule, health dashboard, reconciliation, daily checklist) support Phase 1.
+
+---
+
+### Phase 2 — Smarter entries & exits (3–5 weeks)
+
+**Goal:** Better signals and exits — still **paper only**.
+
+- [ ] **Universe scanning** — one strategy instance scans Nifty 50 / Bank Nifty / custom list; pick top N by signal strength
+- [ ] **Volatility-based sizing** — position size from ATR or % of portfolio, not fixed ~₹1L only
+- [ ] **Trailing stop-loss** — move SL up as price rises (trail % in Settings)
+- [ ] **Time-based exits** — max hold days, square-off before 3:15 PM for MIS, optional “no progress in X days”
+- [ ] **Strategy performance loop** — auto-pause strategies with negative realized P&L over N days; leaderboard (win rate, avg hold, drawdown)
+- [ ] **Optional strategy SELL signals** — today: BUY from strategies, SELL only via SL/TP; add strategy SELL as exit or combine with SL (whichever hits first)
+
+---
+
+### Phase 3 — Live trading automation (4–8 weeks)
+
+**Goal:** Same automation as paper, but with **real money** — safely.
+
+- [ ] **Server-side Zerodha tokens** — encrypted refresh tokens in Firestore so cron can place live orders (today Live mode = email alert only)
+- [ ] **Live execution path** — mirror `run-server.ts` paper path for live via Kite API
+- [ ] **Hard failsafes** — `ENABLE_LIVE_TRADING`, max daily loss, max order value, max positions
+- [ ] **Paper → live promotion** — strategy must run in paper X days with minimum metrics; explicit “Go live” with smaller size cap
+- [ ] **Order lifecycle** — market vs limit, slippage tracking, partial fills, rejections, retries
+- [ ] **Pre-market checks** — token valid, margin sufficient, market open, no stale quotes
+
+**Gate:** Only after **4–8 weeks** of stable paper auto-trading (see Promotion checklist below).
+
+---
+
+### Phase 4 — Analytics & optimization (ongoing)
+
+**Goal:** Know what works before scaling capital.
+
+- [ ] **Portfolio analytics** — Sharpe, max drawdown, profit factor, by strategy / symbol / month
+- [ ] **Walk-forward / out-of-sample backtest** — e.g. train on 2023, test on 2024
+- [ ] **Parameter tuning** — grid search RSI period, MA lengths per symbol (with overfitting warnings)
+- [ ] **Trade journal** — why each trade happened (signal, strength, gate passed); CSV export
+- [ ] **Benchmark** — paper P&L vs Nifty 50 buy-and-hold on same dates
+
+Can run in parallel once you have enough paper trade history.
+
+---
+
+### Phase 5 — Product & ops polish (ongoing)
+
+**Goal:** Production-grade UX and operations.
+
+- [ ] **Telegram bot** — buys, sells, risk exits, cron failures (email exists today)
+- [x] **Mobile-friendly UI** — partial (drawer order panel, responsive holdings)
+- [ ] **Multi-account** — separate paper portfolios or tags per strategy bundle
+- [ ] **PostgreSQL cache** — faster backtests, historical candle store (`DATABASE_URL` optional)
+- [ ] **Audit & compliance** — full trade audit trail, daily P&L email, 3 PM square-off enforcement
+
+---
+
+### Risks to keep in mind
+
+- Yahoo-delayed prices can cause bad fills — monitor price corrections on Dashboard
+- Backtest win rates are not guarantees (overfitting)
+- Live auto needs token security, margin checks, and a kill switch
+- Vercel Hobby limits cron; GitHub Actions is fine for 15-min scans
+
+---
 
 ## Prerequisites
 

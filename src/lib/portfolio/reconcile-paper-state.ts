@@ -159,6 +159,7 @@ export function reconcilePaperState(
   const issues = detectPaperStateIssues(raw, orders);
   const changes: string[] = [];
   let state = ensurePositions(raw);
+  const rawHoldingsBefore = raw.holdings ?? [];
 
   const beforePositions = state.positions?.length ?? 0;
   state = prunePaperStateForScan(state);
@@ -167,15 +168,13 @@ export function reconcilePaperState(
     changes.push(`Removed ${beforePositions - afterPositions} stale position row(s)`);
   }
 
-  const beforeHoldings = state.holdings?.length ?? 0;
   state = withSyncedHoldings(state);
-  const afterHoldings = state.holdings?.length ?? 0;
-  if (beforeHoldings !== afterHoldings) {
+  const syncedHoldings = state.holdings ?? [];
+  if (rawHoldingsBefore.length !== syncedHoldings.length) {
     changes.push("Rebuilt holdings from open positions");
   } else {
-    const synced = syncHoldingsFromPositions(state.positions ?? []);
-    const drift = (state.holdings ?? []).some((h) => {
-      const exp = synced.find((s) => holdingKey(s) === holdingKey(h));
+    const drift = rawHoldingsBefore.some((h) => {
+      const exp = syncedHoldings.find((s) => holdingKey(s) === holdingKey(h));
       return !exp || exp.qty !== h.qty || Math.abs(exp.avgPrice - h.avgPrice) > 0.02;
     });
     if (drift) {

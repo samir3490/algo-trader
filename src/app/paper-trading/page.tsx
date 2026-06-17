@@ -64,6 +64,7 @@ import { formatBuyStrength, resolvePaperStartingBalance } from "@/lib/paper-trad
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
 import { PaperOrderPanel } from "@/app/paper-trading/order-panel";
+import PaperExportMenu from "@/components/paper-export-menu";
 import {
   paperOrderNotional,
   resolvePaperOrderQty,
@@ -994,6 +995,7 @@ export default function PaperTradingPage() {
                 {zerodhaConnected ? "Live Prices" : "Manual Prices"}
               </div>
             )}
+            <PaperExportMenu settings={appSettings} />
             {resetConfirm ? (
               <div className="flex flex-wrap items-center gap-2">
                 <button
