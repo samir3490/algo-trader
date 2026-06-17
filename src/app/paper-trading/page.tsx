@@ -1081,9 +1081,9 @@ export default function PaperTradingPage() {
       </div>
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-6 lg:items-start">
         {/* Order Form + Quote Panel */}
-        <div className="lg:col-span-1 space-y-4">
+        <div className="lg:col-span-1 space-y-4 order-2 lg:order-1 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-5rem)] lg:overflow-y-auto lg:overscroll-contain">
           {/* Order Form */}
           <div className="card">
             <h2 className="text-lg font-semibold text-text-primary mb-4">
@@ -1487,7 +1487,7 @@ export default function PaperTradingPage() {
         </div>
 
         {/* Holdings Table */}
-        <div className="lg:col-span-2 card">
+        <div className="lg:col-span-2 card order-1 lg:order-2 flex flex-col min-h-0">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-text-primary">
               Holdings
@@ -1508,7 +1508,7 @@ export default function PaperTradingPage() {
             )}
           </div>
 
-          <div className="overflow-x-auto -mx-5">
+          <div className="overflow-x-auto overflow-y-auto -mx-5 flex-1 min-h-0 max-h-[min(70vh,calc(100dvh-14rem))] lg:max-h-[calc(100dvh-11rem)]">
             <table className="w-full text-sm min-w-[800px]">
               <thead>
                 <tr className="border-b border-border">
