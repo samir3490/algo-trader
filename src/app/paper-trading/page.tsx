@@ -57,7 +57,7 @@ import {
   tradesNormalizedChanged,
 } from "@/lib/paper-trades/normalize";
 import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
-import { formatBuyStrength } from "@/lib/paper-trading/balance";
+import { formatBuyStrength, resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
 import {
@@ -834,10 +834,7 @@ export default function PaperTradingPage() {
     }
   }
 
-  const startingBalance =
-    appSettings.paperStartingBalance && appSettings.paperStartingBalance > 0
-      ? appSettings.paperStartingBalance
-      : INITIAL_BALANCE;
+  const startingBalance = resolvePaperStartingBalance(appSettings);
 
   const normalizedTrades = useMemo(
     () => normalizePaperTrades(trades as PaperTrade[], orderHistory),
