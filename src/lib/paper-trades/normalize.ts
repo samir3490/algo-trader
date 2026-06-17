@@ -80,7 +80,7 @@ function pickBetterTrade(a: PaperTrade, b: PaperTrade): PaperTrade {
   return tradeExecutedAtMs(b) >= tradeExecutedAtMs(a) ? b : a;
 }
 
-function orderFingerprint(o: OrderRecord): string {
+export function orderFingerprint(o: OrderRecord): string {
   return [
     normSymbol(o.symbol),
     normExchange(o.exchange),
@@ -89,6 +89,64 @@ function orderFingerprint(o: OrderRecord): string {
     String(o.qty),
     String(o.price),
   ].join("|");
+}
+
+export function isStrategyOrder(o: OrderRecord): boolean {
+  return !!(
+    o.strategyId ||
+    o.strategyName?.trim() ||
+    o.id?.startsWith("strat-")
+  );
+}
+
+function strategyDayOrderKey(o: OrderRecord): string {
+  return [
+    normSymbol(o.symbol),
+    normExchange(o.exchange),
+    o.side,
+    o.date ?? "",
+  ].join("|");
+}
+
+function pickBetterOrder(a: OrderRecord, b: OrderRecord): OrderRecord {
+  const score = (o: OrderRecord) =>
+    (o.strategyName ? 4 : 0) + (o.strategyId ? 2 : 0) + (o.reason ? 1 : 0);
+  const aScore = score(a);
+  const bScore = score(b);
+  if (bScore !== aScore) return bScore > aScore ? b : a;
+  const aMs = Date.parse(a.time ?? "") || 0;
+  const bMs = Date.parse(b.time ?? "") || 0;
+  return bMs >= aMs ? b : a;
+}
+
+/** Collapse duplicate Firestore rows and order/trade pairs (different ids, same fill). */
+export function dedupeOrderRecords(orders: OrderRecord[]): OrderRecord[] {
+  const byId = new Map<string, OrderRecord>();
+  for (const o of orders) {
+    const prev = byId.get(o.id);
+    byId.set(o.id, prev ? pickBetterOrder(prev, o) : o);
+  }
+
+  const exactMap = new Map<string, OrderRecord>();
+  for (const o of byId.values()) {
+    const fp = orderFingerprint(o);
+    const prev = exactMap.get(fp);
+    exactMap.set(fp, prev ? pickBetterOrder(prev, o) : o);
+  }
+
+  const strategyDayMap = new Map<string, OrderRecord>();
+  const manual: OrderRecord[] = [];
+  for (const o of exactMap.values()) {
+    if (!isStrategyOrder(o)) {
+      manual.push(o);
+      continue;
+    }
+    const key = strategyDayOrderKey(o);
+    const prev = strategyDayMap.get(key);
+    strategyDayMap.set(key, prev ? pickBetterOrder(prev, o) : o);
+  }
+
+  return [...manual, ...strategyDayMap.values()];
 }
 
 /** Fill strategyId / strategyName from Firestore order history. */

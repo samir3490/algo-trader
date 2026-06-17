@@ -32,7 +32,11 @@ import {
   prunePaperStateForScan,
 } from "@/lib/portfolio/paper-state-cleanup";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
-import { persistNewPaperTradesAsOrdersAdmin } from "@/lib/portfolio/paper-order-record-server";
+import {
+  persistNewPaperTradesAsOrdersAdmin,
+  persistPaperOrderAdmin,
+} from "@/lib/portfolio/paper-order-record-server";
+import { paperTradeToOrderRecord } from "@/lib/portfolio/paper-order-record";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
 import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
 import { writeSystemLog } from "@/lib/core/system-log";
@@ -522,7 +526,7 @@ export async function runStrategiesForUser(
 
     diagnostics.paperSignals += 1;
 
-    const { state, executed, message, executedQty } = executePortfolioDecision(
+    const { state, executed, message, executedQty, trade } = executePortfolioDecision(
       paperState,
       decision,
       {
@@ -585,27 +589,22 @@ export async function runStrategiesForUser(
         }
       );
 
-      const orderId = `strat-${Date.now()}-${decision.symbol}`;
-      await db.doc(`users/${userId}/orders/${orderId}`).set({
-        id: orderId,
-        time: nowISTDateTimeString(),
-        symbol: decision.symbol.toUpperCase(),
-        exchange,
-        side: "BUY",
-        qty: tradeQty,
-        price: decision.price,
-        orderType: "MARKET",
-        product: userSettings.paperDefaultProduct,
-        mode: "PAPER",
-        status: "EXECUTED",
-        date: todayKeyIST(),
-        reason: strengthLabel
-          ? `${decision.signalReason} · ${strengthLabel}`
-          : decision.signalReason,
-        strategyId: decision.ownerStrategyId,
-        strategyName: decision.ownerStrategyName,
-        createdAt: FieldValue.serverTimestamp(),
-      });
+      if (trade) {
+        await persistPaperOrderAdmin(
+          db,
+          userId,
+          paperTradeToOrderRecord(
+            {
+              ...trade,
+              qty: tradeQty,
+              reason: strengthLabel
+                ? `${decision.signalReason} · ${strengthLabel}`
+                : trade.reason,
+            },
+            { product: userSettings.paperDefaultProduct, mode: "PAPER" }
+          )
+        );
+      }
 
       if (resolveStrategyMode(strat) === "live") {
         diagnostics.liveSignals += 1;

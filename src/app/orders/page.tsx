@@ -8,7 +8,10 @@ import {
   getPaperTradingState,
   type OrderRecord,
 } from "@/lib/firebase";
-import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
+import {
+  dedupeOrderRecords,
+  normalizePaperTrades,
+} from "@/lib/paper-trades/normalize";
 import { paperTradeToOrderRecord } from "@/lib/portfolio/paper-order-record";
 import {
   ClipboardList,
@@ -162,20 +165,13 @@ export default function OrdersPage() {
         getPaperTradingState(),
       ]);
 
-      const byId = new Map<string, Order>();
-      for (const o of fsOrders.map(mapFirestoreOrder)) {
-        byId.set(o.id, o);
-      }
-
       const paperTrades = normalizePaperTrades(paperState?.trades ?? [], fsOrders);
-      for (const trade of paperTrades) {
-        const record = paperTradeToOrderRecord(trade);
-        if (!byId.has(record.id)) {
-          byId.set(record.id, mapFirestoreOrder(record));
-        }
-      }
-
-      allOrders.push(...byId.values());
+      const paperRecords: OrderRecord[] = [
+        ...fsOrders,
+        ...paperTrades.map((trade) => paperTradeToOrderRecord(trade)),
+      ];
+      const deduped = dedupeOrderRecords(paperRecords);
+      allOrders.push(...deduped.map(mapFirestoreOrder));
     } catch {
       try {
         const raw = localStorage.getItem("paperTrades");
