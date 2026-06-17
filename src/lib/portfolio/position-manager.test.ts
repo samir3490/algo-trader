@@ -9,6 +9,7 @@ import {
   ensurePositions,
 } from "./position-manager";
 import type { PaperTradingState } from "@/lib/firebase";
+import { OWNER_MANUAL } from "./types";
 
 function emptyState(): PaperTradingState {
   return { balance: 100_000, holdings: [], trades: [], positions: [] };
@@ -68,6 +69,28 @@ describe("position-manager", () => {
       canStrategyExitPosition(state, "RELIANCE", "NSE", "strategy_b").allowed,
       false
     );
+  });
+
+  it("manual override can exit strategy-owned position", () => {
+    const pos = createOpenPosition({
+      symbol: "HINDALCO",
+      exchange: "NSE",
+      quantity: 10,
+      entryPrice: 700,
+      ltp: 710,
+      ownerStrategyId: "macd-1",
+      ownerStrategyName: "MACD Crossover",
+      signalReason: "buy",
+    });
+    const state = addPositionToState(emptyState(), pos);
+    const check = canStrategyExitPosition(
+      state,
+      "HINDALCO",
+      "NSE",
+      OWNER_MANUAL
+    );
+    assert.equal(check.allowed, true);
+    assert.equal(check.position?.ownerStrategyName, "MACD Crossover");
   });
 
   it("closes with exit reason", () => {

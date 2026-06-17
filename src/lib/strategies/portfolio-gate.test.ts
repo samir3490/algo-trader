@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { canExecuteStrategyTrade } from "./portfolio-gate";
 import { DEFAULT_SETTINGS } from "@/lib/firebase";
 import type { PaperTrade } from "@/lib/firebase";
+import { OWNER_MANUAL } from "@/lib/portfolio/types";
 
 const settings = { ...DEFAULT_SETTINGS, rebuyCooldownMinutes: 240 };
 const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
@@ -114,6 +115,33 @@ describe("canExecuteStrategyTrade", () => {
     });
     assert.equal(r.allowed, false);
     assert.match(r.reason ?? "", /Sold today|rebuy|Already bought this symbol today/);
+  });
+
+  it("allows manual SELL on strategy-owned position", () => {
+    const r = canExecuteStrategyTrade("SELL", "HINDALCO", "NSE", {
+      holdings: [
+        { symbol: "HINDALCO", exchange: "NSE", qty: 10, avgPrice: 700, ltp: 710 },
+      ],
+      positions: [
+        {
+          id: "p1",
+          symbol: "HINDALCO",
+          exchange: "NSE",
+          quantity: 10,
+          entryPrice: 700,
+          ltp: 710,
+          state: "OPEN",
+          ownerStrategyId: "macd-1",
+          ownerStrategyName: "MACD Crossover",
+          entryTime: new Date().toISOString(),
+        },
+      ],
+      trades: [],
+      settings,
+      ownerStrategyId: OWNER_MANUAL,
+      soldThisRun: new Set(),
+    });
+    assert.equal(r.allowed, true);
   });
 
   it("allows SELL when holding exists", () => {

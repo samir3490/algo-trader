@@ -4,6 +4,7 @@ import {
   type ExitReason,
   type PaperPosition,
   type PositionState,
+  OWNER_MANUAL,
 } from "./types";
 import { migrateHoldingsToPositions } from "./migrate";
 import { syncHoldingsFromPositions } from "./sync-holdings";
@@ -112,7 +113,7 @@ export function canStrategyOpenPosition(
   return { allowed: true };
 }
 
-/** Only owner strategy may exit its position. */
+/** Only owner strategy may exit its position; manual override can close any. */
 export function canStrategyExitPosition(
   state: PaperTradingState,
   symbol: string,
@@ -122,6 +123,10 @@ export function canStrategyExitPosition(
   const open = getOpenPositions(state, { symbol, exchange });
   if (open.length === 0) {
     return { allowed: false, reason: "No open position" };
+  }
+
+  if (requestingStrategyId === OWNER_MANUAL) {
+    return { allowed: true, position: open[0] };
   }
 
   const owned = open.find((p) => p.ownerStrategyId === requestingStrategyId);
@@ -134,6 +139,15 @@ export function canStrategyExitPosition(
   }
 
   return { allowed: true, position: owned };
+}
+
+/** Open position to close for a manual paper exit (any owner). */
+export function getManualExitPosition(
+  state: PaperTradingState,
+  symbol: string,
+  exchange: string
+): PaperPosition | undefined {
+  return getOpenPositions(state, { symbol, exchange })[0];
 }
 
 export function transitionPosition(

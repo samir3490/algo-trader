@@ -44,7 +44,7 @@ import { canExecuteStrategyTrade } from "@/lib/strategies/portfolio-gate";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import {
   ensurePositions,
-  getOwnerPosition,
+  getManualExitPosition,
 } from "@/lib/portfolio/position-manager";
 import { OWNER_MANUAL } from "@/lib/portfolio/types";
 import {
@@ -639,7 +639,7 @@ export default function PaperTradingPage() {
 
     const manualPosition =
       orderSide === "SELL"
-        ? getOwnerPosition(paperBase, sym, exchange, OWNER_MANUAL)
+        ? getManualExitPosition(paperBase, sym, exchange)
         : undefined;
 
     const { state, executed, message } = executePortfolioDecision(
@@ -748,64 +748,73 @@ export default function PaperTradingPage() {
 
   function handleSquareOff(holding: Holding) {
     const price = holding.ltp;
-    const totalValue = price * holding.qty;
-    const sym = holding.symbol;
+    if (!price || price <= 0) {
+      setValidationError("Unable to square off — invalid price");
+      return;
+    }
 
-    const now = new Date();
-    const executedAt = now.toISOString();
-    const timeStr = nowISTDateTimeString(now);
-    const dateStr = now.toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+    const sym = holding.symbol.toUpperCase().trim();
+    const paperBase = ensurePositions({
+      balance,
+      holdings: holdings.map((h) => ({
+        symbol: h.symbol,
+        exchange: h.exchange,
+        qty: h.qty,
+        avgPrice: h.avgPrice,
+        ltp: h.ltp,
+      })),
+      trades: trades as PaperTrade[],
+    });
 
-    const newTrade: Trade = {
-      id: `t${Date.now()}`,
-      time: timeStr,
-      executedAt,
-      symbol: sym,
-      exchange: holding.exchange,
-      side: "SELL",
-      qty: holding.qty,
-      price,
-      date: dateStr,
-    };
-
-    const merged = normalizePaperTrades(
-      [newTrade as PaperTrade, ...(trades as PaperTrade[])],
-      orderHistory
+    const position = getManualExitPosition(paperBase, sym, holding.exchange);
+    const { state, executed, message, trade } = executePortfolioDecision(
+      paperBase,
+      {
+        action: "SELL",
+        symbol: sym,
+        exchange: holding.exchange,
+        ownerStrategyId: OWNER_MANUAL,
+        ownerStrategyName: "Manual",
+        price,
+        quantity: holding.qty,
+        signalReason: "Manual square-off",
+        exitReason: "MANUAL_EXIT",
+        positionId: position?.id,
+      },
+      {
+        simulateBrokerage: appSettings?.simulateBrokerage,
+        product: appSettings?.paperDefaultProduct ?? "CNC",
+      }
     );
-    const newBalance = balance + totalValue;
-    const newHoldings = holdings.filter(
-      (h) => !(h.symbol === sym && h.exchange === holding.exchange)
-    );
 
+    if (!executed || !trade) {
+      setValidationError(message ?? "Square-off could not be executed");
+      return;
+    }
+
+    const merged = normalizePaperTrades(state.trades ?? [], orderHistory);
+    setBalance(state.balance ?? balance);
+    setHoldings((state.holdings ?? []) as Holding[]);
     setTrades(merged as Trade[]);
-    setBalance(newBalance);
-    setHoldings(newHoldings);
     saveStateToLocalStorage({
-      balance: newBalance,
-      holdings: newHoldings,
+      balance: state.balance ?? balance,
+      holdings: (state.holdings ?? []) as Holding[],
       trades: merged as Trade[],
       cloudSyncedAtMs: Date.now(),
     });
     savePaperTradingState({
-      balance: newBalance,
-      holdings: newHoldings,
+      balance: state.balance,
+      holdings: state.holdings,
+      positions: state.positions,
       trades: merged,
     }).catch(() => {});
 
-    saveOrder({
-      id: newTrade.id,
-      time: newTrade.time,
-      symbol: sym,
-      exchange: holding.exchange,
-      side: "SELL",
-      qty: holding.qty,
-      price,
-      orderType: "MARKET",
-      product: appSettings?.paperDefaultProduct ?? "CNC",
-      mode: "PAPER",
-      status: "EXECUTED",
-      date: new Date().toISOString().split("T")[0],
-    }).catch(() => {});
+    saveOrder(
+      paperTradeToOrderRecord(trade, {
+        product: appSettings?.paperDefaultProduct,
+      })
+    ).catch(() => {});
+    setValidationError("");
   }
 
   async function handleReset() {

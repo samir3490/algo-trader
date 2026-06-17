@@ -5,6 +5,7 @@ import {
   canStrategyOpenPosition,
   getOpenPositions,
 } from "@/lib/portfolio/position-manager";
+import { OWNER_MANUAL } from "@/lib/portfolio/types";
 import type { PaperPosition } from "@/lib/portfolio/types";
 
 function symKey(symbol: string, exchange: string): string {
@@ -209,8 +210,13 @@ export function canExecuteStrategyTrade(
       }
     }
     const minHold = ctx.settings.minHoldMinutesBeforeSell ?? 60;
+    const manualExit = ownerId === OWNER_MANUAL;
     const lastBuy = lastBuyMs(ctx.trades, symbol, exchange);
-    if (lastBuy > 0 && Date.now() - lastBuy < minHold * 60 * 1000) {
+    if (
+      !manualExit &&
+      lastBuy > 0 &&
+      Date.now() - lastBuy < minHold * 60 * 1000
+    ) {
       return {
         allowed: false,
         reason: `Min hold ${minHold}m before strategy sell`,
