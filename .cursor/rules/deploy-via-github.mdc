@@ -8,7 +8,7 @@ alwaysApply: true
 After completing meaningful changes to this project:
 
 1. **Commit** all relevant changes with a clear message (do not commit secrets like `.env`).
-2. **Push** to `origin` on the default branch (`master`).
+2. **Push** to `origin` on the default branch (`master`) — **always**, without waiting for the user to ask.
 3. Do **not** use `vercel --prod` CLI unless GitHub push is impossible — Vercel is connected to the repo and deploys automatically on push.
 
-If the user asks to deploy, commit + push is the expected workflow.
+If the user asks to deploy, commit + push is the expected workflow. When the user says "push" or finishes a task, push immediately.
