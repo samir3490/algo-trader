@@ -29,7 +29,7 @@ import {
   getSettings,
   type AppSettings,
 } from "@/lib/firebase";
-import type { OrderRecord, PaperTrade } from "@/lib/firebase";
+import type { OrderRecord, PaperTrade, PaperTradingState } from "@/lib/firebase";
 import {
   newTradeIds,
   paperTradeToOrderRecord,
@@ -45,6 +45,8 @@ import {
   ensurePositions,
   getManualExitPosition,
 } from "@/lib/portfolio/position-manager";
+import type { PaperPosition } from "@/lib/portfolio/types";
+import { resolveHoldingBuySignalCount } from "@/lib/portfolio/holding-strength";
 import { OWNER_MANUAL } from "@/lib/portfolio/types";
 import {
   computeZerodhaCharges,
@@ -202,6 +204,27 @@ export default function PaperTradingPage() {
   const searchTimeout = useRef<NodeJS.Timeout | null>(null);
   const holdingsRef = useRef(holdings);
   holdingsRef.current = holdings;
+  const positionsRef = useRef<PaperPosition[]>([]);
+
+  function buildPaperBase(
+    balanceValue: number,
+    holdingsValue: Holding[],
+    tradesValue: PaperTrade[]
+  ) {
+    return ensurePositions({
+      balance: balanceValue,
+      holdings: holdingsValue,
+      positions: positionsRef.current,
+      trades: tradesValue,
+    });
+  }
+
+  function applyPaperState(state: PaperTradingState, tradesValue: Trade[]) {
+    positionsRef.current = state.positions ?? [];
+    setBalance(state.balance ?? INITIAL_BALANCE);
+    setHoldings((state.holdings ?? []) as Holding[]);
+    setTrades(tradesValue);
+  }
 
   const [validationError, setValidationError] = useState("");
   const [orderHistory, setOrderHistory] = useState<OrderRecord[]>([]);
@@ -228,8 +251,10 @@ export default function PaperTradingPage() {
     balance: number;
     holdings: Holding[];
     trades: Trade[];
+    positions?: PaperPosition[];
     cloudSyncedAtMs?: number;
   }) => {
+    positionsRef.current = state.positions ?? [];
     setBalance(state.balance);
     setHoldings(state.holdings as Holding[]);
     setTrades(state.trades as Trade[]);
@@ -255,12 +280,20 @@ export default function PaperTradingPage() {
         await savePaperTradingState({
           balance: state.balance,
           holdings: state.holdings,
+          positions: state.positions,
           trades: normalized,
         });
       }
-      applyCloudState({
+      const synced = ensurePositions({
         balance: state.balance,
-        holdings: state.holdings as Holding[],
+        holdings: state.holdings ?? [],
+        positions: state.positions ?? [],
+        trades: normalized,
+      });
+      applyCloudState({
+        balance: synced.balance ?? state.balance,
+        holdings: (synced.holdings ?? []) as Holding[],
+        positions: synced.positions,
         trades: normalized as Trade[],
         cloudSyncedAtMs: state.cloudUpdatedAtMs ?? Date.now(),
       });
@@ -333,15 +366,16 @@ export default function PaperTradingPage() {
       const settings = settingsRef.current;
       if (settings?.autoStopLoss || settings?.autoTakeProfit) {
         const { state, exits } = applyPaperRiskExits(
-          {
-            balance: balanceRef.current,
-            holdings: updated,
-            trades: tradesRef.current as PaperTrade[],
-          },
+          buildPaperBase(
+            balanceRef.current,
+            updated,
+            tradesRef.current as PaperTrade[]
+          ),
           settings
         );
         if (exits.length > 0) {
           const tradesBefore = tradesRef.current as PaperTrade[];
+          positionsRef.current = state.positions ?? [];
           setBalance(state.balance ?? balanceRef.current);
           setHoldings((state.holdings ?? []) as Holding[]);
           setTrades((state.trades ?? []) as Trade[]);
@@ -597,22 +631,12 @@ export default function PaperTradingPage() {
 
     const sym = symbol.toUpperCase().trim();
 
-    const paperBase = ensurePositions({
-      balance,
-      holdings: holdings.map((h) => ({
-        symbol: h.symbol,
-        exchange: h.exchange,
-        qty: h.qty,
-        avgPrice: h.avgPrice,
-        ltp: h.ltp,
-      })),
-      trades: trades as PaperTrade[],
-    });
+    const paperState = buildPaperBase(balance, holdings, trades as PaperTrade[]);
 
     if (appSettings) {
       const gate = canExecuteStrategyTrade(orderSide, sym, exchange, {
-        holdings: paperBase.holdings ?? [],
-        positions: paperBase.positions,
+        holdings: paperState.holdings ?? [],
+        positions: paperState.positions,
         trades: trades as PaperTrade[],
         settings: appSettings,
         ownerStrategyId: OWNER_MANUAL,
@@ -641,11 +665,11 @@ export default function PaperTradingPage() {
 
     const manualPosition =
       orderSide === "SELL"
-        ? getManualExitPosition(paperBase, sym, exchange)
+        ? getManualExitPosition(paperState, sym, exchange)
         : undefined;
 
     const { state, executed, message } = executePortfolioDecision(
-      paperBase,
+      paperState,
       {
         action: orderSide,
         symbol: sym,
@@ -679,6 +703,7 @@ export default function PaperTradingPage() {
       state.trades ?? [],
       orderHistory
     );
+    positionsRef.current = state.positions ?? [];
     setBalance(state.balance ?? balance);
     setHoldings((state.holdings ?? []) as Holding[]);
     setTrades(merged as Trade[]);
@@ -768,21 +793,11 @@ export default function PaperTradingPage() {
     }
 
     const sym = holding.symbol.toUpperCase().trim();
-    const paperBase = ensurePositions({
-      balance,
-      holdings: holdings.map((h) => ({
-        symbol: h.symbol,
-        exchange: h.exchange,
-        qty: h.qty,
-        avgPrice: h.avgPrice,
-        ltp: h.ltp,
-      })),
-      trades: trades as PaperTrade[],
-    });
+    const paperState = buildPaperBase(balance, holdings, trades as PaperTrade[]);
 
-    const position = getManualExitPosition(paperBase, sym, holding.exchange);
+    const position = getManualExitPosition(paperState, sym, holding.exchange);
     const { state, executed, message, trade } = executePortfolioDecision(
-      paperBase,
+      paperState,
       {
         action: "SELL",
         symbol: sym,
@@ -1185,6 +1200,10 @@ export default function PaperTradingPage() {
                     const pnl = currentVal - investedVal;
                     const pnlPct = investedVal > 0 ? (pnl / investedVal) * 100 : 0;
                     const isProfit = pnl >= 0;
+                    const signalCount = resolveHoldingBuySignalCount(
+                      h,
+                      normalizedTrades
+                    );
 
                     return (
                       <tr
@@ -1196,18 +1215,18 @@ export default function PaperTradingPage() {
                           <span className="ml-1 text-xs text-text-tertiary">{h.exchange}</span>
                         </td>
                         <td className="hidden py-3 px-2 sm:table-cell">
-                          {h.buySignalCount != null && h.buySignalCount > 0 ? (
+                          {signalCount != null && signalCount > 0 ? (
                             <span
                               className={cn(
                                 "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
-                                h.buySignalCount >= 5 && "bg-emerald-500/15 text-emerald-400",
-                                h.buySignalCount >= 3 &&
-                                  h.buySignalCount < 5 &&
+                                signalCount >= 5 && "bg-emerald-500/15 text-emerald-400",
+                                signalCount >= 3 &&
+                                  signalCount < 5 &&
                                   "bg-amber-500/15 text-amber-400",
-                                h.buySignalCount < 3 && "bg-border/50 text-text-tertiary"
+                                signalCount < 3 && "bg-border/50 text-text-tertiary"
                               )}
                             >
-                              {formatBuyStrength(h.buySignalCount)}
+                              {formatBuyStrength(signalCount)}
                             </span>
                           ) : (
                             <span className="text-xs text-text-tertiary">—</span>

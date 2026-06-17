@@ -38,6 +38,10 @@ export function syncHoldingsFromPositions(
       ) / 100;
     existing.qty = newQty;
     existing.ltp = p.ltp > 0 ? p.ltp : existing.ltp;
+    const a = existing.buySignalCount ?? 0;
+    const b = p.buySignalCount ?? 0;
+    const maxCount = Math.max(a, b);
+    if (maxCount > 0) existing.buySignalCount = maxCount;
   }
 
   return [...byKey.values()];

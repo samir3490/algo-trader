@@ -937,10 +937,12 @@ function LiveTradingContent() {
               </div>
 
               {/* Warning */}
-              <div className="bg-red-900/30 border border-red-800/50 rounded-md p-3 mb-5 flex items-start gap-2">
-                <ShieldAlert className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
-                <p className="text-red-300 text-xs leading-relaxed">
-                  This will place REAL orders on Zerodha. Use with caution.
+              <div className="mb-5 flex items-start gap-2 rounded-lg border border-red-500/35 bg-red-500/10 p-3">
+                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
+                <p className="text-xs leading-relaxed text-text-secondary">
+                  This will place{" "}
+                  <span className="font-semibold text-red-400">REAL</span> orders on
+                  Zerodha. Use with caution.
                 </p>
               </div>
 
@@ -1605,11 +1607,12 @@ function LiveTradingContent() {
             </div>
           </div>
 
-          <div className="mt-5 bg-red-900/20 border border-red-800/40 rounded-md p-3 flex items-start gap-2">
-            <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
-            <p className="text-red-300 text-xs leading-relaxed">
-              Auto-trading will place orders automatically based on strategy signals. Ensure proper risk management
-              parameters are set. You are solely responsible for any losses incurred.
+          <div className="mt-5 flex items-start gap-2 rounded-lg border border-red-500/35 bg-red-500/10 p-3">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
+            <p className="text-xs leading-relaxed text-text-secondary">
+              Auto-trading will place orders automatically based on strategy signals.
+              Ensure proper risk management parameters are set. You are solely responsible
+              for any losses incurred.
             </p>
           </div>
         </div>

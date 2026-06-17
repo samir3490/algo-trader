@@ -12,7 +12,14 @@ function inferOwnerFromTrades(
   trades: PaperTrade[],
   symbol: string,
   exchange: string
-): { ownerStrategyId: string; ownerStrategyName?: string; entryTime?: string; entryPrice?: number; signalReason?: string } {
+): {
+  ownerStrategyId: string;
+  ownerStrategyName?: string;
+  entryTime?: string;
+  entryPrice?: number;
+  signalReason?: string;
+  buySignalCount?: number;
+} {
   const key = symKey(symbol, exchange);
   const buys = trades
     .filter(
@@ -30,6 +37,7 @@ function inferOwnerFromTrades(
     entryTime: last.executedAt ?? last.time,
     entryPrice: last.price,
     signalReason: last.reason,
+    buySignalCount: last.buySignalCount,
   };
 }
 
@@ -60,6 +68,7 @@ export function migrateHoldingsToPositions(
       state: "OPEN",
       entryTime: meta.entryTime ?? new Date().toISOString(),
       signalReason: meta.signalReason,
+      buySignalCount: h.buySignalCount ?? meta.buySignalCount,
     });
   }
   return positions;
