@@ -7,7 +7,6 @@ import {
   Wallet,
   ArrowUpRight,
   ArrowDownRight,
-  Search,
   Plus,
   RefreshCw,
   IndianRupee,
@@ -64,6 +63,7 @@ import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
 import { formatBuyStrength, resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
+import { PaperOrderPanel } from "@/app/paper-trading/order-panel";
 import {
   paperOrderNotional,
   resolvePaperOrderQty,
@@ -215,6 +215,7 @@ export default function PaperTradingPage() {
     ok: boolean;
     text: string;
   } | null>(null);
+  const [orderPanelOpen, setOrderPanelOpen] = useState(false);
   const settingsRef = useRef<AppSettings | null>(null);
   const balanceRef = useRef(balance);
   const tradesRef = useRef(trades);
@@ -699,6 +700,8 @@ export default function PaperTradingPage() {
     setQuote(null);
     setValidationError("");
 
+    setOrderPanelOpen(false);
+
     if (appSettings?.notifyOrders !== false && appSettings?.notifyEmailDigest === false) {
       fetch("/api/notify/order", {
         method: "POST",
@@ -731,6 +734,16 @@ export default function PaperTradingPage() {
     }).catch(() => {});
   }
 
+  function openOrderPanel(side: OrderSide = "BUY") {
+    setOrderSide(side);
+    setValidationError("");
+    setOrderPanelOpen(true);
+  }
+
+  function closeOrderPanel() {
+    setOrderPanelOpen(false);
+  }
+
   function handleExit(holding: Holding) {
     setOrderSide("SELL");
     setSymbol(holding.symbol);
@@ -743,7 +756,7 @@ export default function PaperTradingPage() {
       fetchQuote(holding.symbol, holding.exchange);
     }
 
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setOrderPanelOpen(true);
   }
 
   function handleSquareOff(holding: Holding) {
@@ -1080,415 +1093,9 @@ export default function PaperTradingPage() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6 mb-6 lg:items-start">
-        {/* Order Form + Quote Panel */}
-        <div className="lg:col-span-1 space-y-4 order-2 lg:order-1 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-5rem)] lg:overflow-y-auto lg:overscroll-contain">
-          {/* Order Form */}
-          <div className="card">
-            <h2 className="text-lg font-semibold text-text-primary mb-4">
-              Place Order
-            </h2>
-
-            {/* BUY / SELL Tabs */}
-            <div className="flex rounded-lg bg-bg-primary p-1 mb-5">
-              {(["BUY", "SELL"] as const).map((side) => (
-                <button
-                  key={side}
-                  onClick={() => { setOrderSide(side); setValidationError(""); }}
-                  className={cn(
-                    "flex-1 py-2 text-sm font-semibold rounded-md transition-all duration-200 cursor-pointer",
-                    orderSide === side
-                      ? side === "BUY"
-                        ? "bg-profit text-white shadow-md"
-                        : "bg-loss text-white shadow-md"
-                      : "text-text-secondary hover:text-text-primary"
-                  )}
-                >
-                  {side}
-                </button>
-              ))}
-            </div>
-
-            {/* Symbol Search */}
-            <div className="mb-4 relative">
-              <label className="block text-xs text-text-tertiary uppercase tracking-wider mb-1.5">
-                Symbol
-              </label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
-                <input
-                  type="text"
-                  placeholder="Search stocks..."
-                  value={symbol}
-                  onChange={(e) => handleSymbolChange(e.target.value.toUpperCase())}
-                  onFocus={() => {
-                    setShowSuggestions(true);
-                    if (!searchResults.length) searchInstruments(symbol);
-                  }}
-                  onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-                  className="w-full pl-9 pr-9 py-2.5 rounded-lg bg-bg-primary border border-border
-                             text-text-primary placeholder:text-text-tertiary text-sm
-                             focus:outline-none focus:border-accent transition-colors"
-                />
-                {(isLoadingQuote || isSearching) && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-accent animate-spin" />
-                )}
-                {symbol && !isLoadingQuote && !isSearching && (
-                  <button
-                    onClick={() => { setSymbol(""); setQuote(null); setSearchResults([]); }}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary hover:text-text-primary"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-
-              {/* Search Dropdown */}
-              {showSuggestions && searchResults.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-bg-elevated border border-border rounded-lg shadow-xl max-h-52 overflow-y-auto">
-                  {searchResults.map((item, i) => (
-                    <button
-                      key={`${item.tradingsymbol}-${i}`}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => handleSelectSymbol(item)}
-                      className="w-full text-left px-3 py-2.5 text-sm hover:bg-accent/10 transition-colors flex items-center justify-between"
-                    >
-                      <div>
-                        <span className="text-text-primary font-medium">{item.tradingsymbol}</span>
-                        {item.name && item.name !== item.tradingsymbol && (
-                          <span className="text-text-tertiary text-xs ml-2">{item.name}</span>
-                        )}
-                      </div>
-                      <span className="text-text-tertiary text-xs">{item.exchange}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Selected symbol price (quick view) */}
-            {symbol.trim() && (
-              <div className="mb-4 rounded-lg border border-border bg-bg-primary px-3 py-2.5 flex items-center justify-between">
-                <span className="text-xs text-text-tertiary">{symbol} · {exchange}</span>
-                {isLoadingQuote ? (
-                  <span className="text-xs text-text-tertiary flex items-center gap-1.5">
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                    Loading price...
-                  </span>
-                ) : quote ? (
-                  <div className="text-right">
-                    <span className={cn("text-sm font-bold", quote.changePercent >= 0 ? "text-profit" : "text-loss")}>
-                      {formatCurrency(quote.lastPrice)}
-                    </span>
-                    <span className={cn("text-xs ml-2", quote.changePercent >= 0 ? "text-profit/80" : "text-loss/80")}>
-                      {quote.change >= 0 ? "+" : ""}{quote.change?.toFixed(2)} ({formatPercent(quote.changePercent)})
-                    </span>
-                  </div>
-                ) : zerodhaConnected ? (
-                  <span className="text-xs text-text-tertiary">Price unavailable</span>
-                ) : (
-                  <span className="text-xs text-amber-400/80">Connect Zerodha for live price</span>
-                )}
-              </div>
-            )}
-
-            {/* Exchange + Order Type + Product (from Settings) */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
-              <div>
-                <label className="block text-xs text-text-tertiary uppercase tracking-wider mb-1.5">
-                  Exchange
-                </label>
-                <select
-                  value={exchange}
-                  onChange={(e) => setExchange(e.target.value as Exchange)}
-                  className="w-full px-3 py-2.5 rounded-lg bg-bg-primary border border-border
-                             text-text-primary text-sm focus:outline-none focus:border-accent
-                             transition-colors cursor-pointer appearance-none"
-                >
-                  <option value="NSE">NSE</option>
-                  <option value="BSE">BSE</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-text-tertiary uppercase tracking-wider mb-1.5">
-                  Order Type
-                </label>
-                <select
-                  value={orderType}
-                  onChange={(e) => setOrderType(e.target.value as OrderType)}
-                  className="w-full px-3 py-2.5 rounded-lg bg-bg-primary border border-border
-                             text-text-primary text-sm focus:outline-none focus:border-accent
-                             transition-colors cursor-pointer appearance-none"
-                >
-                  <option value="MARKET">MARKET</option>
-                  <option value="LIMIT">LIMIT</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs text-text-tertiary uppercase tracking-wider mb-1.5">
-                  Product
-                </label>
-                <div
-                  className="w-full px-3 py-2.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm"
-                  title="Change in Settings → Paper Trading"
-                >
-                  {appSettings?.paperDefaultProduct ?? "CNC"}
-                  <span className="text-text-tertiary text-xs ml-1">
-                    ({appSettings?.paperDefaultProduct === "MIS" ? "Intraday" : "Delivery"})
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Order size — ₹ notional per trade */}
-            <div className="mb-4 rounded-lg border border-border bg-bg-primary px-3 py-2.5">
-              <p className="text-xs text-text-tertiary uppercase tracking-wider mb-1">
-                Order size
-              </p>
-              {orderSide === "SELL" ? (
-                <p className="text-sm text-text-primary">
-                  <span className="font-semibold">{formatNumber(orderQty)}</span> shares
-                  {selectedHolding ? (
-                    <span className="text-text-tertiary"> (full position)</span>
-                  ) : (
-                    <span className="text-text-tertiary"> — select a held symbol</span>
-                  )}
-                </p>
-              ) : (
-                <p className="text-sm text-text-primary">
-                  <span className="font-semibold">{formatNumber(buyQty || 0)}</span> shares
-                  <span className="text-text-tertiary">
-                    {" "}
-                    ≈ {formatCurrency(paperOrderNotional(appSettings ?? { paperOrderNotional: 100_000, maxOrderValue: 100_000 }))}
-                    {estimatedPrice && estimatedPrice > 0
-                      ? ` @ ${formatCurrency(estimatedPrice)}`
-                      : " (set price to preview)"}
-                  </span>
-                </p>
-              )}
-              <p className="text-[10px] text-text-tertiary mt-1">
-                Paper trades target a fixed rupee amount per stock — change in{" "}
-                <a href="/settings" className="text-accent hover:underline">
-                  Settings
-                </a>
-              </p>
-            </div>
-
-            {/* Price field for LIMIT orders */}
-            {orderType === "LIMIT" && (
-              <div className="mb-4">
-                <label className="block text-xs text-text-tertiary uppercase tracking-wider mb-1.5">
-                  Limit Price
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.05}
-                  placeholder="0.00"
-                  value={limitPrice}
-                  onChange={(e) => { setLimitPrice(e.target.value); setValidationError(""); }}
-                  className="w-full px-3 py-2.5 rounded-lg bg-bg-primary border border-border
-                             text-text-primary placeholder:text-text-tertiary text-sm
-                             focus:outline-none focus:border-accent transition-colors"
-                />
-              </div>
-            )}
-
-            {/* Manual price entry for MARKET orders when Zerodha not connected */}
-            {orderType === "MARKET" && !zerodhaConnected && (
-              <div className="mb-4">
-                <label className="block text-xs text-text-tertiary uppercase tracking-wider mb-1.5">
-                  Price (Manual Entry)
-                </label>
-                <input
-                  type="number"
-                  min={0}
-                  step={0.05}
-                  placeholder="Enter current market price"
-                  value={manualPrice}
-                  onChange={(e) => { setManualPrice(e.target.value); setValidationError(""); }}
-                  className="w-full px-3 py-2.5 rounded-lg bg-bg-primary border border-border
-                             text-text-primary placeholder:text-text-tertiary text-sm
-                             focus:outline-none focus:border-accent transition-colors"
-                />
-                <p className="text-xs text-amber-400/80 mt-1.5">
-                  Connect to Zerodha for live prices
-                </p>
-              </div>
-            )}
-
-            {/* Market price indicator when connected */}
-            {orderType === "MARKET" && zerodhaConnected && quote && (
-              <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-bg-primary mb-4">
-                <span className="text-xs text-text-tertiary">Market Price</span>
-                <span className="text-sm font-semibold text-text-primary">
-                  {formatCurrency(quote.lastPrice)}
-                </span>
-              </div>
-            )}
-
-            {/* Estimated Cost */}
-            {estimatedCost !== null && estimatedCost > 0 && (
-              <div className="flex items-center justify-between px-3 py-2.5 rounded-lg bg-bg-primary mb-5">
-                <span className="text-xs text-text-tertiary">
-                  Estimated {orderSide === "BUY" ? "Cost" : "Value"}
-                  {appSettings?.simulateBrokerage ? " (incl. charges)" : ""}
-                </span>
-                <span className="text-sm font-semibold text-text-primary">
-                  {formatCurrency(estimatedCost)}
-                </span>
-              </div>
-            )}
-
-            {/* Validation Error */}
-            {validationError && (
-              <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 mb-4">
-                <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-                <span className="text-xs text-red-400">{validationError}</span>
-              </div>
-            )}
-
-            {/* Place Order Button */}
-            <button
-              onClick={handlePlaceOrder}
-              className={cn(
-                "w-full py-3 rounded-lg font-semibold text-sm transition-all duration-200 cursor-pointer",
-                "disabled:opacity-40 disabled:cursor-not-allowed",
-                orderSide === "BUY"
-                  ? "bg-profit hover:bg-emerald-400 text-white shadow-lg shadow-profit/20"
-                  : "bg-loss hover:bg-red-400 text-white shadow-lg shadow-loss/20"
-              )}
-            >
-              <span className="flex items-center justify-center gap-2">
-                <Plus className="w-4 h-4" />
-                Place {orderSide} Order
-              </span>
-            </button>
-          </div>
-
-          {/* Quote Panel */}
-          {quote && (
-            <div className="card">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h3 className="text-base font-semibold text-text-primary">{quote.symbol}</h3>
-                  <span className="text-xs text-text-tertiary">{quote.exchange}</span>
-                </div>
-                <div className="text-right">
-                  <p className={cn(
-                    "text-lg font-bold",
-                    quote.changePercent >= 0 ? "text-profit" : "text-loss"
-                  )}>
-                    {formatCurrency(quote.lastPrice)}
-                  </p>
-                  <span className={cn(
-                    "text-xs font-medium px-1.5 py-0.5 rounded",
-                    quote.changePercent >= 0
-                      ? "bg-profit/10 text-profit"
-                      : "bg-loss/10 text-loss"
-                  )}>
-                    {quote.change >= 0 ? "+" : ""}{quote.change?.toFixed(2)} ({formatPercent(quote.changePercent)})
-                  </span>
-                </div>
-              </div>
-
-              {/* OHLC */}
-              <div className="grid grid-cols-4 gap-2 text-xs mb-3 py-2 border-y border-border">
-                <div>
-                  <span className="text-text-tertiary block">Open</span>
-                  <p className="text-text-secondary font-medium">{formatCurrency(quote.open)}</p>
-                </div>
-                <div>
-                  <span className="text-text-tertiary block">High</span>
-                  <p className="text-profit font-medium">{formatCurrency(quote.high)}</p>
-                </div>
-                <div>
-                  <span className="text-text-tertiary block">Low</span>
-                  <p className="text-loss font-medium">{formatCurrency(quote.low)}</p>
-                </div>
-                <div>
-                  <span className="text-text-tertiary block">Close</span>
-                  <p className="text-text-secondary font-medium">{formatCurrency(quote.close)}</p>
-                </div>
-              </div>
-
-              {/* Volume & Circuit */}
-              <div className="grid grid-cols-2 gap-2 text-xs mb-3">
-                <div>
-                  <span className="text-text-tertiary">Volume</span>
-                  <p className="text-text-secondary font-medium">{(quote.volume || 0).toLocaleString("en-IN")}</p>
-                </div>
-                <div>
-                  <span className="text-text-tertiary">Circuit</span>
-                  <p className="text-text-secondary font-medium">
-                    {formatCurrency(quote.lowerCircuit)} - {formatCurrency(quote.upperCircuit)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Market Depth */}
-              {(quote.buyDepth?.length > 0 || quote.sellDepth?.length > 0) && (
-                <div>
-                  <p className="text-xs text-text-tertiary mb-2 font-medium uppercase tracking-wider">Market Depth</p>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <div className="grid grid-cols-3 text-text-tertiary mb-1 font-medium">
-                        <span>Bid</span><span className="text-right">Qty</span><span className="text-right">Ord</span>
-                      </div>
-                      {quote.buyDepth?.map((b, i) => (
-                        <div key={i} className="grid grid-cols-3 text-profit/80 py-0.5">
-                          <span>{b.price?.toFixed(2)}</span>
-                          <span className="text-right">{b.quantity}</span>
-                          <span className="text-right">{b.orders}</span>
-                        </div>
-                      ))}
-                      <div className="mt-1 text-text-tertiary text-[10px]">
-                        Total: <span className="text-profit">{(quote.totalBuyQty || 0).toLocaleString("en-IN")}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <div className="grid grid-cols-3 text-text-tertiary mb-1 font-medium">
-                        <span>Ask</span><span className="text-right">Qty</span><span className="text-right">Ord</span>
-                      </div>
-                      {quote.sellDepth?.map((s, i) => (
-                        <div key={i} className="grid grid-cols-3 text-loss/80 py-0.5">
-                          <span>{s.price?.toFixed(2)}</span>
-                          <span className="text-right">{s.quantity}</span>
-                          <span className="text-right">{s.orders}</span>
-                        </div>
-                      ))}
-                      <div className="mt-1 text-text-tertiary text-[10px]">
-                        Total: <span className="text-loss">{(quote.totalSellQty || 0).toLocaleString("en-IN")}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* No Zerodha message */}
-          {!zerodhaConnected && !isCheckingAuth && symbol.trim() && (
-            <div className="card">
-              <div className="flex items-start gap-3 text-amber-400/80">
-                <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-amber-400">Connect to Zerodha for live prices</p>
-                  <p className="text-xs text-text-tertiary mt-1">
-                    You can still trade with manual price entry. Go to
-                    <a href="/live-trading" className="text-accent ml-1 hover:underline">Live Trading</a>
-                    {" "}to connect.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Holdings Table */}
-        <div className="lg:col-span-2 card order-1 lg:order-2 flex flex-col min-h-0">
-          <div className="flex items-center justify-between mb-4">
+      {/* Holdings */}
+      <div className="card mb-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
             <h2 className="text-lg font-semibold text-text-primary">
               Holdings
               {holdings.length > 0 && (
@@ -1497,127 +1104,119 @@ export default function PaperTradingPage() {
                 </span>
               )}
             </h2>
-            {holdings.length > 0 && (
-              <div className="text-xs text-text-tertiary text-right">
-                <span>Invested: {formatCurrency(portfolio.invested)}</span>
-                <span className="mx-2">·</span>
-                <span className={portfolio.pnl >= 0 ? "text-profit" : "text-loss"}>
-                  Unrealized: {portfolio.pnl >= 0 ? "+" : ""}{formatCurrency(portfolio.pnl)} ({formatPercent(portfolio.pnlPercent)})
-                </span>
-              </div>
-            )}
+            <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+              {holdings.length > 0 && (
+                <div className="text-xs text-text-tertiary">
+                  <span>Invested: {formatCurrency(portfolio.invested)}</span>
+                  <span className="mx-2">·</span>
+                  <span className={portfolio.pnl >= 0 ? "text-profit" : "text-loss"}>
+                    Unrealized: {portfolio.pnl >= 0 ? "+" : ""}
+                    {formatCurrency(portfolio.pnl)} ({formatPercent(portfolio.pnlPercent)})
+                  </span>
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => openOrderPanel("BUY")}
+                className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-semibold text-brand shadow-sm hover:opacity-90 transition-opacity"
+              >
+                <Plus className="h-4 w-4" />
+                Place Order
+              </button>
+            </div>
           </div>
 
-          <div className="overflow-x-auto overflow-y-auto -mx-5 flex-1 min-h-0 max-h-[min(70vh,calc(100dvh-14rem))] lg:max-h-[calc(100dvh-11rem)]">
-            <table className="w-full text-sm min-w-[800px]">
-              <thead>
-                <tr className="border-b border-border">
-                  <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Symbol</th>
-                  <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Buy strength</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Qty</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Avg Price</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">LTP</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Invested</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Current Value</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">P&L</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">P&L %</th>
-                  <th className="text-center text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {holdings.map((h) => {
-                  const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
-                  const currentVal = h.qty * mark;
-                  const investedVal = h.qty * h.avgPrice;
-                  const pnl = currentVal - investedVal;
-                  const pnlPct = investedVal > 0 ? (pnl / investedVal) * 100 : 0;
-                  const isProfit = pnl >= 0;
+          {holdings.length === 0 ? (
+            <div className="py-12 text-center">
+              <p className="text-text-tertiary mb-4">No holdings yet.</p>
+              <button
+                type="button"
+                onClick={() => openOrderPanel("BUY")}
+                className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-medium text-text-primary hover:bg-bg-hover transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Place your first order
+              </button>
+            </div>
+          ) : (
+            <div className="divide-y divide-border">
+              {holdings.map((h) => {
+                const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
+                const currentVal = h.qty * mark;
+                const investedVal = h.qty * h.avgPrice;
+                const pnl = currentVal - investedVal;
+                const pnlPct = investedVal > 0 ? (pnl / investedVal) * 100 : 0;
+                const isProfit = pnl >= 0;
 
-                  return (
-                    <tr
-                      key={`${h.symbol}-${h.exchange}`}
-                      className="border-b border-border/50 hover:bg-bg-hover/50 transition-colors"
-                    >
-                      <td className="py-3 px-5">
-                        <span className="font-medium text-text-primary">{h.symbol}</span>
-                        <span className="text-text-tertiary text-xs ml-1.5">{h.exchange}</span>
-                      </td>
-                      <td className="py-3 px-5">
-                        {h.buySignalCount != null && h.buySignalCount > 0 ? (
-                          <span
-                            className={cn(
-                              "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
-                              h.buySignalCount >= 5 && "bg-emerald-500/15 text-emerald-400",
-                              h.buySignalCount >= 3 &&
-                                h.buySignalCount < 5 &&
-                                "bg-amber-500/15 text-amber-400",
-                              h.buySignalCount < 3 && "bg-border/50 text-text-tertiary"
-                            )}
-                          >
-                            {formatBuyStrength(h.buySignalCount)}
-                          </span>
-                        ) : (
-                          <span className="text-text-tertiary text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-5 text-right text-text-secondary">
-                        {formatNumber(h.qty)}
-                      </td>
-                      <td className="py-3 px-5 text-right text-text-secondary">
-                        {formatCurrency(h.avgPrice)}
-                      </td>
-                      <td className="py-3 px-5 text-right text-text-primary font-medium">
-                        {formatCurrency(h.ltp)}
-                      </td>
-                      <td className="py-3 px-5 text-right text-text-secondary">
-                        {formatCurrency(investedVal)}
-                      </td>
-                      <td className="py-3 px-5 text-right text-text-primary">
-                        {formatCurrency(currentVal)}
-                      </td>
-                      <td className={cn("py-3 px-5 text-right font-medium", isProfit ? "text-profit" : "text-loss")}>
-                        <span className="inline-flex items-center gap-1">
-                          {isProfit ? <ArrowUpRight className="w-3.5 h-3.5" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                          {isProfit ? "+" : ""}{formatCurrency(pnl)}
-                        </span>
-                      </td>
-                      <td className={cn("py-3 px-5 text-right font-medium", isProfit ? "text-profit" : "text-loss")}>
-                        {formatPercent(pnlPct)}
-                      </td>
-                      <td className="py-3 px-5 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
+                return (
+                  <div
+                    key={`${h.symbol}-${h.exchange}`}
+                    className="py-4 first:pt-0 last:pb-0"
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-text-primary">{h.symbol}</span>
+                          <span className="text-xs text-text-tertiary">{h.exchange}</span>
+                          {h.buySignalCount != null && h.buySignalCount > 0 ? (
+                            <span
+                              className={cn(
+                                "inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium",
+                                h.buySignalCount >= 5 && "bg-emerald-500/15 text-emerald-400",
+                                h.buySignalCount >= 3 &&
+                                  h.buySignalCount < 5 &&
+                                  "bg-amber-500/15 text-amber-400",
+                                h.buySignalCount < 3 && "bg-border/50 text-text-tertiary"
+                              )}
+                            >
+                              {formatBuyStrength(h.buySignalCount)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-sm text-text-secondary">
+                          {formatNumber(h.qty)} shares · Avg {formatCurrency(h.avgPrice)} · LTP{" "}
+                          {formatCurrency(h.ltp)}
+                        </p>
+                        <p className="mt-0.5 text-xs text-text-tertiary">
+                          Invested {formatCurrency(investedVal)} · Value {formatCurrency(currentVal)}
+                        </p>
+                      </div>
+
+                      <div className="flex shrink-0 items-center justify-between gap-4 sm:flex-col sm:items-end sm:justify-center">
+                        <div className="text-left sm:text-right">
+                          <p className={cn("font-semibold", isProfit ? "text-profit" : "text-loss")}>
+                            {isProfit ? "+" : ""}
+                            {formatCurrency(pnl)}
+                          </p>
+                          <p className={cn("text-xs font-medium", isProfit ? "text-profit" : "text-loss")}>
+                            {formatPercent(pnlPct)}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
                           <button
+                            type="button"
                             onClick={() => handleExit(h)}
-                            className="px-2.5 py-1 text-xs font-medium rounded bg-loss/10 text-loss
-                                       hover:bg-loss/20 transition-colors cursor-pointer border border-loss/20"
+                            className="px-2.5 py-1 text-xs font-medium rounded bg-loss/10 text-loss hover:bg-loss/20 transition-colors cursor-pointer border border-loss/20"
                             title="Pre-fill sell order"
                           >
                             Exit
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleSquareOff(h)}
-                            className="px-2.5 py-1 text-xs font-medium rounded bg-amber-500/10 text-amber-400
-                                       hover:bg-amber-500/20 transition-colors cursor-pointer border border-amber-500/20"
+                            className="px-2.5 py-1 text-xs font-medium rounded bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 transition-colors cursor-pointer border border-amber-500/20"
                             title="Sell all at LTP immediately"
                           >
-                            <LogOut className="w-3 h-3" />
+                            <LogOut className="h-3 w-3" />
                           </button>
                         </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {holdings.length === 0 && (
-                  <tr>
-                    <td colSpan={9} className="py-12 text-center text-text-tertiary">
-                      No holdings yet. Place your first order!
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
       </div>
 
       {/* Strategy performance (realized P&L from closed trades) */}
@@ -1948,6 +1547,50 @@ export default function PaperTradingPage() {
           </table>
         </div>
       </div>
+
+      <PaperOrderPanel
+        open={orderPanelOpen}
+        onClose={closeOrderPanel}
+        orderSide={orderSide}
+        setOrderSide={setOrderSide}
+        symbol={symbol}
+        onSymbolChange={handleSymbolChange}
+        exchange={exchange}
+        setExchange={setExchange}
+        orderType={orderType}
+        setOrderType={setOrderType}
+        limitPrice={limitPrice}
+        setLimitPrice={setLimitPrice}
+        manualPrice={manualPrice}
+        setManualPrice={setManualPrice}
+        zerodhaConnected={zerodhaConnected}
+        isCheckingAuth={isCheckingAuth}
+        quote={quote}
+        isLoadingQuote={isLoadingQuote}
+        searchResults={searchResults}
+        showSuggestions={showSuggestions}
+        setShowSuggestions={setShowSuggestions}
+        isSearching={isSearching}
+        onSearchFocus={() => {
+          if (!searchResults.length) searchInstruments(symbol);
+        }}
+        onClearSymbol={() => {
+          setSymbol("");
+          setQuote(null);
+          setSearchResults([]);
+        }}
+        onSelectSymbol={handleSelectSymbol}
+        searchInstruments={searchInstruments}
+        orderQty={orderQty}
+        buyQty={buyQty}
+        selectedHolding={!!selectedHolding}
+        estimatedPrice={estimatedPrice}
+        estimatedCost={estimatedCost}
+        validationError={validationError}
+        setValidationError={setValidationError}
+        appSettings={appSettings}
+        onPlaceOrder={handlePlaceOrder}
+      />
     </div>
   );
 }
