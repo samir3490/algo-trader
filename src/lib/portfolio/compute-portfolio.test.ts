@@ -23,6 +23,17 @@ describe("computePortfolio", () => {
     assert.equal(summary.portfolioValue, 525_000);
   });
 
+  it("portfolio value excludes unrealized mark-to-market gains", () => {
+    const summary = computePortfolio(
+      [{ symbol: "TCS", exchange: "NSE", qty: 5, avgPrice: 4000, ltp: 4200 }],
+      980_000
+    );
+    assert.equal(summary.invested, 20_000);
+    assert.equal(summary.currentValue, 21_000);
+    assert.equal(summary.pnl, 1000);
+    assert.equal(summary.portfolioValue, 1_000_000);
+  });
+
   it("computes mark-to-market pnl when ltp is set", () => {
     const summary = computePortfolio(
       [{ symbol: "TCS", exchange: "NSE", qty: 5, avgPrice: 4000, ltp: 4200 }],

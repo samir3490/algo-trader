@@ -55,6 +55,9 @@ export function sanitizePaperTradingPayload(state: {
     if (p.buySignalCount != null && p.buySignalCount > 0) {
       row.buySignalCount = finiteNumber(p.buySignalCount);
     }
+    if (p.signalStrategyNames?.length) {
+      row.signalStrategyNames = p.signalStrategyNames.map((n) => String(n).trim()).filter(Boolean);
+    }
     return row;
   });
 
@@ -89,6 +92,12 @@ export function sanitizePaperTradingPayload(state: {
     if (t.buySignalCount != null && t.buySignalCount > 0) {
       row.buySignalCount = finiteNumber(t.buySignalCount);
     }
+    if (t.signalStrategyNames?.length) {
+      row.signalStrategyNames = t.signalStrategyNames.map((n) => String(n).trim()).filter(Boolean);
+    }
+    if (t.exchangeCharges != null) row.exchangeCharges = finiteNumber(t.exchangeCharges);
+    if (t.sebiFees != null) row.sebiFees = finiteNumber(t.sebiFees);
+    if (t.stampDuty != null) row.stampDuty = finiteNumber(t.stampDuty);
     return row;
   });
 

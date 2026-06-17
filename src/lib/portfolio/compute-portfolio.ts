@@ -53,13 +53,14 @@ export function computePortfolio(
   );
   const pnl = currentValue - invested;
   const pnlPercent = invested > 0 ? (pnl / invested) * 100 : 0;
+  // Account value at cost — grows only via realized P&L (cash + cost basis), not mark-to-market.
   return {
     balance,
     invested,
     currentValue,
     pnl,
     pnlPercent,
-    portfolioValue: balance + currentValue,
+    portfolioValue: balance + invested,
   };
 }
 
@@ -139,32 +140,94 @@ export function computeTodayPnl(
   return { pnl: 0, tradeCount: 0, mode: "none" };
 }
 
+function positionKey(symbol: string, exchange: string): string {
+  return `${symbol.trim().toUpperCase()}:${(exchange || "NSE").trim().toUpperCase()}`;
+}
+
+function buyCashOut(t: PaperTrade): number {
+  const turnover = t.grossAmount ?? t.qty * t.price;
+  return typeof t.charges === "number" ? turnover + t.charges : turnover;
+}
+
+function sellCashIn(t: PaperTrade): number {
+  const turnover = t.grossAmount ?? t.qty * t.price;
+  return typeof t.charges === "number" ? turnover - t.charges : turnover;
+}
+
+/** Reconstruct cost-basis portfolio value after each trade (excludes unrealized). */
 export function buildPortfolioChart(
   trades: PaperTrade[],
   balance: number,
   holdings: PortfolioHolding[],
   startingBalance: number
 ): { date: string; value: number }[] {
-  if (trades.length === 0) return [];
+  const sorted = [...trades].sort(
+    (a, b) => tradeExecutedAtMs(a) - tradeExecutedAtMs(b)
+  );
+  if (sorted.length === 0) return [];
 
-  const { portfolioValue } = computePortfolio(holdings, balance);
-  const numPoints = Math.min(Math.max(trades.length, 2), 30);
+  const lots = new Map<string, { qty: number; costPerShare: number }[]>();
+  let runBalance = startingBalance;
+
+  function investedAtCost(): number {
+    let sum = 0;
+    for (const list of lots.values()) {
+      for (const lot of list) sum += lot.qty * lot.costPerShare;
+    }
+    return sum;
+  }
 
   const points: { date: string; value: number }[] = [];
-  for (let i = 0; i < numPoints - 1; i++) {
-    const date = new Date();
-    date.setDate(date.getDate() - (numPoints - 1 - i));
-    const progress = i / Math.max(numPoints - 1, 1);
+  const firstMs = tradeExecutedAtMs(sorted[0]);
+  if (firstMs > 0) {
+    const d = new Date(firstMs);
+    d.setDate(d.getDate() - 1);
     points.push({
-      date: date.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-      value: Math.round(startingBalance + (portfolioValue - startingBalance) * progress),
+      date: d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+      value: Math.round(startingBalance),
     });
   }
 
-  points.push({
-    date: new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-    value: Math.round(portfolioValue),
-  });
+  for (const t of sorted) {
+    const key = positionKey(t.symbol, t.exchange);
+    if (t.side === "BUY") {
+      runBalance -= buyCashOut(t);
+      const list = lots.get(key) ?? [];
+      const costPerShare = t.qty > 0 ? buyCashOut(t) / t.qty : t.price;
+      list.push({ qty: t.qty, costPerShare });
+      lots.set(key, list);
+    } else {
+      let sellQty = t.qty;
+      const list = lots.get(key) ?? [];
+      while (sellQty > 0 && list.length > 0) {
+        const lot = list[0];
+        const take = Math.min(sellQty, lot.qty);
+        lot.qty -= take;
+        sellQty -= take;
+        if (lot.qty <= 0) list.shift();
+      }
+      lots.set(key, list);
+      runBalance += sellCashIn(t);
+    }
 
-  return points;
+    const ms = tradeExecutedAtMs(t);
+    points.push({
+      date:
+        ms > 0
+          ? new Date(ms).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
+          : t.date ?? "",
+      value: Math.round(runBalance + investedAtCost()),
+    });
+  }
+
+  const current = computePortfolio(holdings, balance).portfolioValue;
+  const last = points[points.length - 1];
+  if (!last || Math.abs(last.value - current) > 1) {
+    points.push({
+      date: new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
+      value: Math.round(current),
+    });
+  }
+
+  return points.length > 30 ? points.slice(-30) : points;
 }

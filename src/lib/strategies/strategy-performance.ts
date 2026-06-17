@@ -8,6 +8,8 @@ import {
 export interface EnrichedPaperTrade extends PaperTrade {
   /** Resolved name for display (from trade or opening BUY lot). */
   displayStrategyName: string;
+  /** All strategies that contributed to a multi-signal BUY. */
+  displayStrategyNames: string[];
   displayStrategyId?: string;
 }
 
@@ -85,8 +87,31 @@ type Lot = {
   qty: number;
   avgPrice: number;
   strategyName: string;
+  strategyNames: string[];
   strategyId?: string;
 };
+
+function resolveStrategyNames(t: PaperTrade, fallbackName: string): string[] {
+  const fromTrade = t.signalStrategyNames?.filter((n) => n.trim());
+  if (fromTrade && fromTrade.length > 0) return fromTrade;
+  if (fallbackName && fallbackName !== "Manual") return [fallbackName];
+  return fallbackName ? [fallbackName] : [];
+}
+
+/** Human-readable strategy label for trade history. */
+export function formatTradeStrategyLabel(
+  t: Pick<PaperTrade, "signalStrategyNames" | "strategyName" | "buySignalCount"> & {
+    displayStrategyName?: string;
+  }
+): string {
+  const names = t.signalStrategyNames?.filter((n) => n.trim());
+  if (names && names.length > 0) return names.join(", ");
+  const owner = t.strategyName?.trim() || t.displayStrategyName?.trim() || "";
+  if (owner && t.buySignalCount != null && t.buySignalCount > 1) {
+    return `${owner} (+${t.buySignalCount - 1} more signal${t.buySignalCount - 1 !== 1 ? "s" : ""})`;
+  }
+  return owner || "Manual";
+}
 
 function positionKey(symbol: string, exchange: string): string {
   return `${symbol.trim().toUpperCase()}:${(exchange || "NSE").trim().toUpperCase()}`;
@@ -111,7 +136,11 @@ export function enrichTradesWithStrategy(
     const name = t.strategyName?.trim() || "";
     const id = resolveStrategyId(t);
     const auto = isStrategyTrade(t);
-    const displayName = name || (auto ? "Auto strategy" : "Manual");
+    const displayName = formatTradeStrategyLabel({
+      ...t,
+      displayStrategyName: name || (auto ? "Auto strategy" : "Manual"),
+    });
+    const displayNames = resolveStrategyNames(t, displayName);
 
     if (t.side === "BUY") {
       const list = lots.get(key) ?? [];
@@ -119,18 +148,21 @@ export function enrichTradesWithStrategy(
         qty: t.qty,
         avgPrice: t.price,
         strategyName: displayName,
+        strategyNames: displayNames,
         strategyId: id,
       });
       lots.set(key, list);
       enrichedById.set(t.id, {
         ...t,
         displayStrategyName: displayName,
+        displayStrategyNames: displayNames,
         displayStrategyId: id,
       });
     } else {
       let sellQty = t.qty;
       let inheritedName = name;
       let inheritedId = id;
+      let inheritedNames: string[] = [];
       const list = lots.get(key) ?? [];
 
       while (sellQty > 0 && list.length > 0) {
@@ -138,6 +170,9 @@ export function enrichTradesWithStrategy(
         if (!inheritedName && lot.strategyName !== "Manual") {
           inheritedName = lot.strategyName;
           inheritedId = lot.strategyId;
+        }
+        if (inheritedNames.length === 0 && lot.strategyNames.length > 0) {
+          inheritedNames = lot.strategyNames;
         }
         const take = Math.min(sellQty, lot.qty);
         lot.qty -= take;
@@ -149,9 +184,18 @@ export function enrichTradesWithStrategy(
       const auto = isStrategyTrade(t);
       const sellDisplay =
         inheritedName || name || (auto ? "Auto strategy" : "Manual");
+      const sellNames =
+        inheritedNames.length > 0
+          ? inheritedNames
+          : resolveStrategyNames(t, sellDisplay);
       enrichedById.set(t.id, {
         ...t,
-        displayStrategyName: sellDisplay,
+        displayStrategyName: formatTradeStrategyLabel({
+          ...t,
+          strategyName: inheritedName || name || t.strategyName,
+          displayStrategyName: sellDisplay,
+        }),
+        displayStrategyNames: sellNames,
         displayStrategyId: inheritedId ?? id,
         strategyName: t.strategyName ?? (inheritedName || undefined),
         strategyId: t.strategyId ?? inheritedId,
@@ -164,9 +208,11 @@ export function enrichTradesWithStrategy(
     if (e) return e;
     const auto = isStrategyTrade(t);
     const name = t.strategyName?.trim() || (auto ? "Auto strategy" : "Manual");
+    const displayName = formatTradeStrategyLabel({ ...t, displayStrategyName: name });
     return {
       ...t,
-      displayStrategyName: name,
+      displayStrategyName: displayName,
+      displayStrategyNames: resolveStrategyNames(t, name),
       displayStrategyId: resolveStrategyId(t),
     };
   });
@@ -217,6 +263,7 @@ export function computeStrategyPerformance(
         qty: t.qty,
         avgPrice: t.price,
         strategyName: stratName,
+        strategyNames: t.displayStrategyNames ?? [stratName],
         strategyId: t.displayStrategyId,
       });
       lots.set(key, list);
@@ -291,6 +338,7 @@ export function computeStrategyDetailBundles(
             qty: t.qty,
             avgPrice: t.price,
             strategyName: summary.strategyName,
+            strategyNames: t.displayStrategyNames ?? [summary.strategyName],
             strategyId: summary.strategyId,
           });
           events.push({

@@ -70,6 +70,7 @@ export interface PaperHolding {
   ownerStrategyId?: string;
   ownerStrategyName?: string;
   buySignalCount?: number;
+  signalStrategyNames?: string[];
 }
 
 export interface PaperTrade {
@@ -92,6 +93,9 @@ export interface PaperTrade {
   brokerage?: number;
   stt?: number;
   gst?: number;
+  exchangeCharges?: number;
+  sebiFees?: number;
+  stampDuty?: number;
   netPnl?: number;
   grossAmount?: number;
   entryTime?: string;
@@ -100,6 +104,7 @@ export interface PaperTrade {
   exitPrice?: number;
   exitReason?: ExitReason;
   buySignalCount?: number;
+  signalStrategyNames?: string[];
 }
 
 import {

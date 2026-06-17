@@ -64,22 +64,30 @@ export function scanSignalToOpinion(
  */
 function consolidateBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
   const buyCounts = new Map<string, number>();
+  const buyStrategyNames = new Map<string, string[]>();
   const bestBuy = new Map<string, StrategyOpinion>();
 
   for (const op of opinions) {
     if (op.action !== "BUY") continue;
     const key = symKey(op.symbol, op.exchange);
     buyCounts.set(key, (buyCounts.get(key) ?? 0) + 1);
+    const names = buyStrategyNames.get(key) ?? [];
+    if (!names.includes(op.strategyName)) names.push(op.strategyName);
+    buyStrategyNames.set(key, names);
     const existing = bestBuy.get(key);
     if (!existing || op.confidence > existing.confidence) {
       bestBuy.set(key, op);
     }
   }
 
-  return [...bestBuy.values()].map((op) => ({
-    ...op,
-    buySignalCount: buyCounts.get(symKey(op.symbol, op.exchange)) ?? 1,
-  }));
+  return [...bestBuy.values()].map((op) => {
+    const key = symKey(op.symbol, op.exchange);
+    return {
+      ...op,
+      buySignalCount: buyCounts.get(key) ?? 1,
+      signalStrategyNames: buyStrategyNames.get(key) ?? [op.strategyName],
+    };
+  });
 }
 
 /** Paper auto-trade: entries from BUY signals only; exits via stop-loss / take-profit. */
@@ -112,6 +120,7 @@ export function buildRankedPaperBuyQueue(
       quantity: op.quantity,
       signalReason: op.reason,
       buySignalCount: op.buySignalCount,
+      signalStrategyNames: op.signalStrategyNames,
     }));
 }
 
@@ -270,6 +279,7 @@ export function evaluatePortfolioDecisions(
         quantity: op.quantity,
         signalReason: op.reason,
         buySignalCount: op.buySignalCount,
+        signalStrategyNames: op.signalStrategyNames,
       });
       continue;
     }

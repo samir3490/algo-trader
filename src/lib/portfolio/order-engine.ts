@@ -65,6 +65,18 @@ function buildTrade(
   };
 }
 
+function chargeFields(charges: ReturnType<typeof computeZerodhaCharges>) {
+  return {
+    charges: charges.total,
+    brokerage: charges.brokerage,
+    stt: charges.stt,
+    gst: charges.gst,
+    exchangeCharges: charges.exchangeCharges,
+    sebiFees: charges.sebiFees,
+    stampDuty: charges.stampDuty,
+  };
+}
+
 /**
  * Order engine — only path that mutates positions + balance from portfolio decisions.
  */
@@ -101,11 +113,9 @@ export function executePortfolioDecision(
 
   if (decision.action === "BUY") {
     const turnover = qty * price;
-    const charges = simulate
-      ? computeZerodhaCharges({ side: "BUY", qty, price, product })
-      : null;
+    const charges = computeZerodhaCharges({ side: "BUY", qty, price, product });
     const cashOut = simulate
-      ? cashFlowForTrade("BUY", turnover, charges!)
+      ? cashFlowForTrade("BUY", turnover, charges)
       : turnover;
 
     if (cashOut > balance) {
@@ -124,6 +134,7 @@ export function executePortfolioDecision(
       signalReason: decision.signalReason,
       product,
       buySignalCount: decision.buySignalCount,
+      signalStrategyNames: decision.signalStrategyNames,
     });
 
     const strength =
@@ -136,17 +147,11 @@ export function executePortfolioDecision(
       entryTime: position.entryTime,
       entryPrice: position.entryPrice,
       buySignalCount: decision.buySignalCount,
+      signalStrategyNames: decision.signalStrategyNames,
       reason: strength
         ? `${decision.signalReason} · ${strength}`
         : decision.signalReason,
-      ...(charges
-        ? {
-            charges: charges.total,
-            brokerage: charges.brokerage,
-            stt: charges.stt,
-            gst: charges.gst,
-          }
-        : {}),
+      ...chargeFields(charges),
     });
 
     current = addPositionToState(current, position);
@@ -168,11 +173,9 @@ export function executePortfolioDecision(
 
   const sellQty = qty;
   const sellTurnover = sellQty * price;
-  const charges = simulate
-    ? computeZerodhaCharges({ side: "SELL", qty: sellQty, price, product })
-    : null;
+  const charges = computeZerodhaCharges({ side: "SELL", qty: sellQty, price, product });
   const cashIn = simulate
-    ? -cashFlowForTrade("SELL", sellTurnover, charges!)
+    ? -cashFlowForTrade("SELL", sellTurnover, charges)
     : sellTurnover;
 
   const closed = closePositionInState(
@@ -206,14 +209,8 @@ export function executePortfolioDecision(
       entryPrice: pos.entryPrice,
       exitTime: pos.exitTime,
       exitPrice: price,
-      ...(charges
-        ? {
-            charges: charges.total,
-            brokerage: charges.brokerage,
-            stt: charges.stt,
-            gst: charges.gst,
-          }
-        : {}),
+      signalStrategyNames: pos.signalStrategyNames,
+      ...chargeFields(charges),
     }
   );
 

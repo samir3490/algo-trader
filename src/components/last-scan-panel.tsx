@@ -151,31 +151,32 @@ export default function LastScanPanel({
               No block reasons recorded — check the Audit tab for the scan log entry.
             </p>
           )}
-          {d.rankedBuyCandidates && d.rankedBuyCandidates.length > 0 && (
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">
-                Buy rank (signals → alphabetical)
-              </p>
-              <ul className="space-y-1 max-h-48 overflow-y-auto">
-                {d.rankedBuyCandidates.slice(0, 20).map((c, i) => (
-                  <li
-                    key={`${c.symbol}-${i}`}
-                    className="flex items-center justify-between gap-3 rounded-lg bg-bg-tertiary/30 px-3 py-1.5 text-sm"
-                  >
-                    <span className="text-text-secondary">
-                      {i + 1}. {c.symbol}
-                    </span>
-                    <span className="shrink-0 font-mono text-xs text-text-tertiary">
-                      {c.signalCount} signal{c.signalCount !== 1 ? "s" : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
           <p className="text-xs text-text-tertiary">
             Full history is saved under Strategies → Audit → System audit logs (Firestore, not server memory).
           </p>
+        </div>
+      )}
+
+      {d?.rankedBuyCandidates && d.rankedBuyCandidates.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-medium uppercase tracking-wider text-text-tertiary mb-2">
+            Buy rank (signals → alphabetical)
+          </p>
+          <ul className="space-y-1 max-h-48 overflow-y-auto">
+            {d.rankedBuyCandidates.slice(0, 20).map((c, i) => (
+              <li
+                key={`${c.symbol}-${i}`}
+                className="flex items-center justify-between gap-3 rounded-lg bg-bg-tertiary/30 px-3 py-1.5 text-sm"
+              >
+                <span className="text-text-secondary">
+                  {i + 1}. {c.symbol}
+                </span>
+                <span className="shrink-0 font-mono text-xs text-text-tertiary">
+                  {c.signalCount} signal{c.signalCount !== 1 ? "s" : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </section>

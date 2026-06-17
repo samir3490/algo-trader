@@ -28,6 +28,8 @@ import { NSE_INSTRUMENTS } from "@/lib/instruments";
 import {
   getActiveStrategies as getFirestoreStrategies,
   getStrategyRunnerMeta,
+  getPaperTradingState,
+  getSettings,
   saveActiveStrategies as saveFirestoreStrategies,
   type ActiveStrategy as FirestoreStrategy,
   type StrategyRunnerMeta,
@@ -46,6 +48,9 @@ import AuditLogsPanel from "@/components/audit-logs-panel";
 import TradeAuditPanel from "@/components/trade-audit-panel";
 import LastScanPanel from "@/components/last-scan-panel";
 import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
+import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
+import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
+import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import StrategiesSectionNav, {
   strategiesSectionFromParam,
   type StrategiesSection,
@@ -373,6 +378,7 @@ function StrategiesPageContent() {
   >(null);
   const [scanFeedback, setScanFeedback] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [paperTotalPnl, setPaperTotalPnl] = useState<number | null>(null);
 
   // Load persisted strategies on mount (avoid persisting empty state before hydration)
   useEffect(() => {
@@ -548,9 +554,35 @@ function StrategiesPageContent() {
 
   // Performance stats
   const totalSignals = activeStrategies.reduce((sum, s) => sum + s.signals, 0);
-  const totalPnl = activeStrategies.reduce((sum, s) => sum + s.pnl, 0);
+  const totalPnl = paperTotalPnl ?? 0;
   const runningCount = activeStrategies.filter((s) => s.status === "running").length;
   const pausedCount = activeStrategies.filter((s) => s.status === "paused").length;
+
+  useEffect(() => {
+    async function loadPaperPnl() {
+      try {
+        const [paper, settings] = await Promise.all([
+          getPaperTradingState(),
+          getSettings(),
+        ]);
+        const trades = normalizePaperTrades(paper.trades ?? []);
+        const starting = resolvePaperStartingBalance(settings);
+        const breakdown = computePnlBreakdown(
+          trades,
+          paper.holdings,
+          paper.balance,
+          starting
+        );
+        setPaperTotalPnl(breakdown.allTimePnl);
+      } catch {
+        setPaperTotalPnl(null);
+      }
+    }
+    void loadPaperPnl();
+    const onPaperUpdate = () => void loadPaperPnl();
+    window.addEventListener("paper-trading-updated", onPaperUpdate);
+    return () => window.removeEventListener("paper-trading-updated", onPaperUpdate);
+  }, []);
 
   useEffect(() => {
     async function loadRunnerMeta() {
@@ -912,7 +944,7 @@ function StrategiesPageContent() {
             <p className={cn("text-xl font-bold", totalPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
               {formatCurrency(totalPnl)}
             </p>
-            <p className="text-xs text-text-tertiary mt-1">Combined performance</p>
+            <p className="text-xs text-text-tertiary mt-1">Paper portfolio (realized, excl. unrealized)</p>
           </div>
           <div className="rounded-xl border border-border bg-bg-secondary p-4">
             <div className="flex items-center gap-2 mb-2">

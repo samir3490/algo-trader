@@ -426,8 +426,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <PaperHealthPanel />
-
       {/* ── Section 1: Summary Cards ──────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Portfolio Value */}
@@ -450,11 +448,11 @@ export default function DashboardPage() {
             <span className={cn("text-sm font-medium", isProfit ? "text-profit" : "text-loss")}>
               {formatPercent(allTimePnlPercent)}
             </span>
-            <span className="text-xs text-text-tertiary ml-1">all time</span>
+            <span className="text-xs text-text-tertiary ml-1">realized</span>
           </div>
           {invested > 0 && (
             <p className="text-xs text-text-tertiary mt-1">
-              Invested {formatCurrency(invested)}
+              Invested {formatCurrency(invested)} · Mkt {formatCurrency(portfolio.currentValue)}
             </p>
           )}
         </div>
@@ -838,6 +836,8 @@ export default function DashboardPage() {
           )}
         </div>
       </div>
+
+      <PaperHealthPanel />
     </div>
   );
 }

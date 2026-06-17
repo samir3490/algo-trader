@@ -67,6 +67,11 @@ import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
 import { PaperOrderPanel } from "@/app/paper-trading/order-panel";
 import PaperExportMenu from "@/components/paper-export-menu";
+import PaperHealthPanel from "@/components/paper-health-panel";
+import {
+  resolveTradeCharges,
+  formatChargesTooltip,
+} from "@/lib/brokerage/trade-charges";
 import {
   paperOrderNotional,
   resolvePaperOrderQty,
@@ -969,7 +974,7 @@ export default function PaperTradingPage() {
       value: `${pnlBreakdown.allTimePnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.allTimePnl)} (${formatPercent(pnlBreakdown.allTimePnlPercent)})`,
       icon: pnlBreakdown.allTimePnl >= 0 ? ArrowUpRight : ArrowDownRight,
       color: pnlBreakdown.allTimePnl >= 0 ? "text-profit" : "text-loss",
-      hint: "Portfolio vs starting balance",
+      hint: "Cash + cost basis (excludes unrealized)",
     },
   ];
 
@@ -1521,6 +1526,10 @@ export default function PaperTradingPage() {
               </span>
             )}
             {holdings.length} holding{holdings.length !== 1 ? "s" : ""}
+            <span className="block mt-1 text-text-tertiary/90">
+              Charges use Zerodha CNC/MIS schedule (brokerage, STT, GST, exchange, stamp duty).
+              Enable <em>Simulate brokerage</em> in Settings to deduct from paper balance.
+            </span>
             {holdingsNotInHistory.length > 0 && (
               <span className="block text-amber-400/90 mt-1">
                 {holdingsNotInHistory.length} holding
@@ -1542,12 +1551,16 @@ export default function PaperTradingPage() {
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Qty</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Price</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Total</th>
-                {appSettings?.simulateBrokerage && (
-                  <>
-                    <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Charges</th>
-                    <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Net P&amp;L</th>
-                  </>
-                )}
+                <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-3">Brokerage</th>
+                <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-3">STT</th>
+                <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-3">GST</th>
+                <th
+                  className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-3"
+                  title="Brokerage + STT + GST + exchange + SEBI + stamp duty"
+                >
+                  Charges
+                </th>
+                <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Net P&amp;L</th>
               </tr>
             </thead>
             <tbody>
@@ -1556,6 +1569,11 @@ export default function PaperTradingPage() {
                 const isManual =
                   t.displayStrategyName === "Manual" &&
                   !t.id?.startsWith("strat-");
+                const charges = resolveTradeCharges(t);
+                const strategyLabels =
+                  t.displayStrategyNames?.length > 0
+                    ? t.displayStrategyNames
+                    : [t.displayStrategyName];
                 return (
                   <tr
                     key={t.id}
@@ -1573,18 +1591,23 @@ export default function PaperTradingPage() {
                       {t.symbol}
                       <span className="text-text-tertiary text-xs ml-1">{t.exchange}</span>
                     </td>
-                    <td className="py-3 px-5 max-w-[160px]">
-                      <span
-                        className={cn(
-                          "inline-block text-xs font-medium px-2 py-0.5 rounded truncate max-w-full",
-                          isManual
-                            ? "bg-border/40 text-text-tertiary"
-                            : "bg-accent/15 text-accent"
-                        )}
-                        title={t.reason || t.displayStrategyName}
-                      >
-                        {t.displayStrategyName}
-                      </span>
+                    <td className="py-3 px-5 max-w-[220px]">
+                      <div className="flex flex-wrap gap-1">
+                        {strategyLabels.map((name) => (
+                          <span
+                            key={`${t.id}-${name}`}
+                            className={cn(
+                              "inline-block text-xs font-medium px-2 py-0.5 rounded max-w-full",
+                              isManual
+                                ? "bg-border/40 text-text-tertiary"
+                                : "bg-accent/15 text-accent"
+                            )}
+                            title={t.reason || name}
+                          >
+                            {name}
+                          </span>
+                        ))}
+                      </div>
                     </td>
                     <td className="py-3 px-5">
                       <span className={cn(
@@ -1598,28 +1621,39 @@ export default function PaperTradingPage() {
                     <td className="py-3 px-5 text-right text-text-secondary">{formatNumber(t.qty)}</td>
                     <td className="py-3 px-5 text-right text-text-primary">{formatCurrency(t.price)}</td>
                     <td className="py-3 px-5 text-right text-text-primary font-medium">{formatCurrency(t.qty * t.price)}</td>
-                    {appSettings?.simulateBrokerage && (
-                      <>
-                        <td className="py-3 px-5 text-right text-text-tertiary text-xs">
-                          {t.charges != null ? formatCurrency(t.charges) : "—"}
-                        </td>
-                        <td className="py-3 px-5 text-right text-xs">
-                          {t.netPnl != null ? (
-                            <span className={t.netPnl >= 0 ? "text-profit" : "text-loss"}>
-                              {formatCurrency(t.netPnl)}
-                            </span>
-                          ) : (
-                            <span className="text-text-tertiary">—</span>
-                          )}
-                        </td>
-                      </>
-                    )}
+                    <td className="py-3 px-3 text-right text-text-tertiary text-xs tabular-nums">
+                      {formatCurrency(charges.brokerage)}
+                    </td>
+                    <td className="py-3 px-3 text-right text-text-tertiary text-xs tabular-nums">
+                      {formatCurrency(charges.stt)}
+                    </td>
+                    <td className="py-3 px-3 text-right text-text-tertiary text-xs tabular-nums">
+                      {formatCurrency(charges.gst)}
+                    </td>
+                    <td
+                      className="py-3 px-3 text-right text-text-tertiary text-xs tabular-nums"
+                      title={formatChargesTooltip(charges)}
+                    >
+                      {formatCurrency(charges.total)}
+                      {charges.estimated && (
+                        <span className="block text-[10px] text-text-tertiary/80">est.</span>
+                      )}
+                    </td>
+                    <td className="py-3 px-5 text-right text-xs">
+                      {!isBuy && t.netPnl != null ? (
+                        <span className={t.netPnl >= 0 ? "text-profit" : "text-loss"}>
+                          {formatCurrency(t.netPnl)}
+                        </span>
+                      ) : (
+                        <span className="text-text-tertiary">—</span>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
               {enrichedTrades.length === 0 && (
                 <tr>
-                  <td colSpan={appSettings?.simulateBrokerage ? 9 : 7} className="py-12 text-center text-text-tertiary">
+                  <td colSpan={11} className="py-12 text-center text-text-tertiary">
                     No trades yet.
                   </td>
                 </tr>
@@ -1672,6 +1706,8 @@ export default function PaperTradingPage() {
         appSettings={appSettings}
         onPlaceOrder={handlePlaceOrder}
       />
+
+      <PaperHealthPanel className="mt-8" />
     </div>
   );
 }
