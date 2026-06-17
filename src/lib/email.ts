@@ -183,3 +183,67 @@ export async function sendScanDigestEmail(lines: ScanDigestLine[]) {
     console.error("Failed to send digest email:", error);
   }
 }
+
+export type HealthAlertKind =
+  | "cron_failed"
+  | "cron_stale"
+  | "scan_zero_trades"
+  | "price_corrections";
+
+export async function sendHealthAlertEmail(params: {
+  kind: HealthAlertKind;
+  title: string;
+  message: string;
+  details?: Record<string, string | number>;
+}) {
+  const recipientEmail = process.env.EMAIL_RECIPIENT || process.env.EMAIL_USER;
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD || !recipientEmail) {
+    return;
+  }
+
+  const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  const emoji =
+    params.kind === "cron_failed"
+      ? "🚨"
+      : params.kind === "cron_stale"
+        ? "⏰"
+        : params.kind === "price_corrections"
+          ? "📉"
+          : "⚠️";
+
+  const detailRows = Object.entries(params.details ?? {})
+    .map(
+      ([k, v]) =>
+        `<tr><td style="padding:6px 8px;color:#595959;font-size:13px;">${k}</td><td style="padding:6px 8px;text-align:right;font-size:13px;">${v}</td></tr>`
+    )
+    .join("");
+
+  const subject = `${emoji} AlgoTrader health: ${params.title}`;
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+      <div style="background:#dc2626;padding:16px 24px;">
+        <h2 style="margin:0;color:#fff;font-size:17px;">${params.title}</h2>
+      </div>
+      <div style="padding:20px 24px;color:#1a1a1a;">
+        <p style="margin:0 0 16px;font-size:14px;line-height:1.5;">${params.message}</p>
+        ${
+          detailRows
+            ? `<table style="width:100%;border-collapse:collapse;">${detailRows}</table>`
+            : ""
+        }
+        <p style="margin:16px 0 0;font-size:12px;color:#595959;">${now} IST · Check Dashboard → Paper trading health</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"AlgoTrader" <${process.env.EMAIL_USER}>`,
+      to: recipientEmail,
+      subject,
+      html,
+    });
+  } catch (error) {
+    console.error("Failed to send health alert email:", error);
+  }
+}

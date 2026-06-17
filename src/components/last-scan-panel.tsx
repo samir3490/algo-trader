@@ -84,6 +84,8 @@ export default function LastScanPanel({
             <Stat label="Max positions" value={d.maxPositions ?? 0} />
             <Stat label="BUY approved" value={d.buyDecisions} />
             <Stat label="Slots to fill" value={d.slotsToFill ?? 0} />
+            <Stat label="Dedupe blocked" value={d.dedupeBlocked} />
+            <Stat label="Price corrected" value={d.priceCorrections ?? 0} highlight={(d.priceCorrections ?? 0) > 0} />
             <Stat label="Gate blocked" value={d.gateBlocked} />
             <Stat label="Risk blocked" value={d.riskBlocked} />
             <Stat label="Deferred (rank)" value={d.strengthDeferred ?? 0} />

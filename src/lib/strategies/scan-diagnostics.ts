@@ -7,6 +7,7 @@ export interface ScanDiagnostics {
   gateBlocked: number;
   riskBlocked: number;
   dedupeBlocked: number;
+  priceCorrections?: number;
   liveSignals: number;
   paperSignals: number;
   strengthDeferred?: number;
@@ -43,17 +44,20 @@ export function formatScanAuditMessage(
   if (diagnostics.gateBlocked > 0) {
     parts.push(`${diagnostics.gateBlocked} blocked by trade gates`);
   }
+  if (diagnostics.dedupeBlocked > 0) {
+    parts.push(`${diagnostics.dedupeBlocked} blocked by dedupe (same-day / 15-min window)`);
+  }
   if (diagnostics.riskBlocked > 0) {
     parts.push(`${diagnostics.riskBlocked} blocked by risk limits`);
+  }
+  if ((diagnostics.priceCorrections ?? 0) > 0) {
+    parts.push(`${diagnostics.priceCorrections} execution price(s) corrected to live quote`);
   }
   if (diagnostics.skippedDecisions > 0) {
     parts.push(`${diagnostics.skippedDecisions} skipped at portfolio layer`);
   }
   if ((diagnostics.strengthDeferred ?? 0) > 0) {
     parts.push(`${diagnostics.strengthDeferred} deferred (lower rank vs max positions)`);
-  }
-  if (diagnostics.dedupeBlocked > 0) {
-    parts.push(`${diagnostics.dedupeBlocked} already tried this 15-min window`);
   }
 
   const topReasons = Object.entries(diagnostics.skipReasons ?? {})

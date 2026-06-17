@@ -54,6 +54,7 @@ import {
   sendScanDigestEmail,
   type ScanDigestLine,
 } from "@/lib/email";
+import { maybeSendCronHealthAlerts } from "@/lib/health/health-alerts";
 import {
   shouldSendEmailCategory,
   useScanDigestEmail,
@@ -269,6 +270,7 @@ async function loadRunnerMeta(db: Firestore, userId: string) {
     symbolCooldownUntil,
     symbolsLockedToday,
     lastRunAt: (data?.lastRunAt as string) ?? null,
+    lastCronAt: (data?.lastCronAt as string) ?? undefined,
   };
 }
 
@@ -303,6 +305,7 @@ export async function runStrategiesForUser(
     dedupeKeys: existingDedupeKeys,
     symbolCooldownUntil: persistedCooldown,
     symbolsLockedToday: persistedLocks,
+    lastCronAt: previousLastCronAt,
   } = await loadRunnerMeta(db, userId);
   const dedupe = new Set(existingDedupeKeys);
   const emailDedupe = new Set(existingEmailKeys);
@@ -320,6 +323,7 @@ export async function runStrategiesForUser(
     gateBlocked: 0,
     riskBlocked: 0,
     dedupeBlocked: 0,
+    priceCorrections: 0,
     liveSignals: 0,
     paperSignals: 0,
     strengthDeferred: 0,
@@ -571,6 +575,7 @@ export async function runStrategiesForUser(
       resolvedPrice.deviationPct > MAX_EXECUTION_HINT_DEVIATION_PCT &&
       resolvedPrice.hintPrice != null
     ) {
+      diagnostics.priceCorrections = (diagnostics.priceCorrections ?? 0) + 1;
       writeSystemLog("WARN", "StrategyScan", "execution_price_corrected", {
         symbol: baseDecision.symbol,
         exchange,
@@ -766,6 +771,16 @@ export async function runStrategiesForUser(
     { items: updatedStrategies, updatedAt: FieldValue.serverTimestamp() },
     { merge: true }
   );
+
+  await maybeSendCronHealthAlerts({
+    invokedBy: options?.invokedBy,
+    previousLastCronAt,
+    signalsFound: rawSignals.length,
+    tradesExecuted,
+    diagnostics,
+    emailDedupe,
+    userId,
+  });
 
   await db.doc(`users/${userId}/data/strategyRunner`).set(
     {

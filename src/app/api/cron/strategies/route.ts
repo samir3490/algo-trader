@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { isMarketOpen } from "@/lib/utils";
 import { runStrategiesForAllUsers } from "@/lib/strategies/run-server";
+import { sendCronFailureAlert } from "@/lib/health/health-alerts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -66,6 +67,7 @@ export async function GET(request: NextRequest) {
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Cron run failed";
     console.error("Cron strategies error:", error);
+    void sendCronFailureAlert(message);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }

@@ -46,6 +46,7 @@ import {
   buildPortfolioChart,
   computePnlBreakdown,
 } from "@/lib/portfolio/compute-portfolio";
+import PaperHealthPanel from "@/components/paper-health-panel";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -424,6 +425,8 @@ export default function DashboardPage() {
           })}
         </div>
       </div>
+
+      <PaperHealthPanel />
 
       {/* ── Section 1: Summary Cards ──────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">

@@ -188,6 +188,7 @@ export interface StrategyRunnerMeta {
       gateBlocked: number;
       riskBlocked: number;
       dedupeBlocked: number;
+      priceCorrections?: number;
       liveSignals: number;
       paperSignals: number;
       strengthDeferred?: number;
