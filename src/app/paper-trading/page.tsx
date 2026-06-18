@@ -1373,6 +1373,8 @@ export default function PaperTradingPage() {
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Stocks</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Closed</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Win / Loss</th>
+                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Win %</th>
+                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Avg hold</th>
                   <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Realized P&amp;L</th>
                 </tr>
               </thead>
@@ -1409,6 +1411,12 @@ export default function PaperTradingPage() {
                           <span className="text-profit">{s.wins}</span>
                           {" / "}
                           <span className="text-loss">{s.losses}</span>
+                        </td>
+                        <td className="py-3 px-5 text-right text-text-secondary">
+                          {s.winRate > 0 ? `${s.winRate}%` : "—"}
+                        </td>
+                        <td className="py-3 px-5 text-right text-text-secondary">
+                          {s.avgHoldDays > 0 ? `${s.avgHoldDays}d` : "—"}
                         </td>
                         <td
                           className={cn(

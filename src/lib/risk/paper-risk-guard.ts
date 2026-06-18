@@ -9,14 +9,20 @@ import {
   ensurePositions,
   getOpenPositions,
 } from "@/lib/portfolio/position-manager";
-import { mapRiskExitToReason } from "@/lib/portfolio/types";
+import { mapRiskExitToReason, type PaperPosition } from "@/lib/portfolio/types";
 import {
   cashFlowForTrade,
   computeZerodhaCharges,
   type ZerodhaProduct,
 } from "@/lib/brokerage/zerodha-charges";
 
-export type RiskExitReason = "stop_loss" | "take_profit" | "mis_square_off";
+export type RiskExitReason =
+  | "stop_loss"
+  | "take_profit"
+  | "mis_square_off"
+  | "trailing_stop"
+  | "max_hold_days"
+  | "no_progress";
 
 export interface RiskExitSignal {
   symbol: string;
@@ -37,10 +43,17 @@ export interface PaperHoldingLike {
 }
 
 const IST = "Asia/Kolkata";
+const MS_PER_DAY = 86_400_000;
 
 export function holdingPnlPercent(avgPrice: number, ltp: number): number {
   if (avgPrice <= 0 || ltp <= 0) return 0;
   return ((ltp - avgPrice) / avgPrice) * 100;
+}
+
+export function daysHeldSince(entryTime: string, now = new Date()): number {
+  const entryMs = Date.parse(entryTime);
+  if (Number.isNaN(entryMs)) return 0;
+  return (now.getTime() - entryMs) / MS_PER_DAY;
 }
 
 /** Whether current IST time is at or past square-off (HH:mm). */
@@ -107,6 +120,85 @@ export function evaluateHoldingRiskExit(
   }
 
   return null;
+}
+
+/** Full position risk check: trailing stop, fixed SL/TP, time exits, MIS square-off. */
+export function evaluatePositionRiskExit(
+  position: PaperPosition,
+  settings: AppSettings,
+  now = new Date()
+): RiskExitSignal | null {
+  const holdingLike: PaperHoldingLike = {
+    symbol: position.symbol,
+    exchange: position.exchange,
+    qty: position.quantity,
+    avgPrice: position.entryPrice,
+    ltp: position.ltp,
+  };
+  const pnlPercent = holdingPnlPercent(position.entryPrice, position.ltp);
+  const peak = Math.max(
+    position.peakPrice ?? position.entryPrice,
+    position.ltp
+  );
+
+  if (
+    settings.autoTrailingStop &&
+    (settings.trailingStopPercent ?? 0) > 0 &&
+    peak > 0
+  ) {
+    const floor = peak * (1 - (settings.trailingStopPercent ?? 2) / 100);
+    if (position.ltp > 0 && position.ltp <= floor) {
+      return {
+        symbol: position.symbol,
+        exchange: position.exchange,
+        reason: "trailing_stop",
+        message: `Trailing stop (${settings.trailingStopPercent}% from peak ₹${peak.toFixed(2)})`,
+        pnlPercent,
+      };
+    }
+  }
+
+  const fixed = evaluateHoldingRiskExit(holdingLike, settings, now);
+  if (fixed) return fixed;
+
+  const heldDays = daysHeldSince(position.entryTime, now);
+
+  if ((settings.maxHoldDays ?? 0) > 0 && heldDays >= (settings.maxHoldDays ?? 0)) {
+    return {
+      symbol: position.symbol,
+      exchange: position.exchange,
+      reason: "max_hold_days",
+      message: `Max hold ${settings.maxHoldDays} days (${heldDays.toFixed(1)}d held)`,
+      pnlPercent,
+    };
+  }
+
+  const noProgressDays = settings.noProgressDays ?? 0;
+  const minGain = settings.noProgressMinPct ?? 0.5;
+  if (noProgressDays > 0 && heldDays >= noProgressDays && pnlPercent < minGain) {
+    return {
+      symbol: position.symbol,
+      exchange: position.exchange,
+      reason: "no_progress",
+      message: `No progress: ${heldDays.toFixed(1)}d held, ${pnlPercent.toFixed(2)}% < ${minGain}%`,
+      pnlPercent,
+    };
+  }
+
+  return null;
+}
+
+/** Update peak LTP on open positions after a quote refresh. */
+export function ratchetPositionPeakPrices(
+  positions: PaperPosition[] | undefined,
+  ltpByKey: Record<string, number>
+): PaperPosition[] {
+  return (positions ?? []).map((p) => {
+    const key = `${p.symbol.trim().toUpperCase()}:${(p.exchange || "NSE").trim().toUpperCase()}`;
+    const ltp = ltpByKey[key] ?? p.ltp;
+    const peak = Math.max(p.peakPrice ?? p.entryPrice, ltp);
+    return { ...p, ltp, peakPrice: peak };
+  });
 }
 
 export function scanPaperHoldingsForRiskExits(
@@ -269,14 +361,7 @@ export function applyPaperRiskExits(
   const open = getOpenPositions(current);
 
   for (const position of open) {
-    const holdingLike: PaperHoldingLike = {
-      symbol: position.symbol,
-      exchange: position.exchange,
-      qty: position.quantity,
-      avgPrice: position.entryPrice,
-      ltp: position.ltp,
-    };
-    const signal = evaluateHoldingRiskExit(holdingLike, settings, now);
+    const signal = evaluatePositionRiskExit(position, settings, now);
     if (!signal) continue;
 
     const exitReason = mapRiskExitToReason(signal.reason);

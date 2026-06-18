@@ -190,7 +190,7 @@ export function createOpenPosition(params: {
     target: params.target,
     product: params.product,
     buySignalCount: params.buySignalCount,
-    signalStrategyNames: params.signalStrategyNames,
+    peakPrice: params.ltp > 0 ? params.ltp : params.entryPrice,
   };
 }
 

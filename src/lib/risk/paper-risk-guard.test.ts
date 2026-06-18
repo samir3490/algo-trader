@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   holdingPnlPercent,
   evaluateHoldingRiskExit,
+  evaluatePositionRiskExit,
   canPlacePaperBuy,
   applyPaperRiskExits,
   isPastMisSquareOff,
@@ -41,6 +42,46 @@ describe("evaluateHoldingRiskExit", () => {
       autoTakeProfit: false,
     });
     assert.equal(sig, null);
+  });
+});
+
+describe("evaluatePositionRiskExit", () => {
+  it("triggers trailing stop from peak", () => {
+    const sig = evaluatePositionRiskExit(
+      {
+        id: "p1",
+        symbol: "TCS",
+        exchange: "NSE",
+        quantity: 10,
+        entryPrice: 100,
+        ltp: 104,
+        peakPrice: 110,
+        state: "OPEN",
+        ownerStrategyId: "s1",
+        entryTime: new Date().toISOString(),
+      },
+      { ...baseSettings, autoTrailingStop: true, trailingStopPercent: 5 }
+    );
+    assert.equal(sig?.reason, "trailing_stop");
+  });
+
+  it("triggers max hold days", () => {
+    const old = new Date(Date.now() - 10 * 86_400_000).toISOString();
+    const sig = evaluatePositionRiskExit(
+      {
+        id: "p1",
+        symbol: "TCS",
+        exchange: "NSE",
+        quantity: 10,
+        entryPrice: 100,
+        ltp: 101,
+        state: "OPEN",
+        ownerStrategyId: "s1",
+        entryTime: old,
+      },
+      { ...baseSettings, maxHoldDays: 7, autoStopLoss: false, autoTakeProfit: false }
+    );
+    assert.equal(sig?.reason, "max_hold_days");
   });
 });
 

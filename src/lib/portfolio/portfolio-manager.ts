@@ -44,6 +44,7 @@ export function scanSignalToOpinion(
       ? resolvePaperScanOrderQty(sig.price, settings, {
           strategyParams: strat.params,
           balance,
+          atr: sig.atr,
         })
       : strat.params?.quantity ?? 1;
 
@@ -57,6 +58,7 @@ export function scanSignalToOpinion(
     quantity,
     reason: sig.reason,
     confidence: sig.confidence ?? 0,
+    scanConfidence: sig.confidence,
   };
 }
 
@@ -186,6 +188,8 @@ export function rankBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] 
   return consolidateBuyOpinions(buyOnlyOpinions(opinions)).sort((a, b) => {
     const strength = (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0);
     if (strength !== 0) return strength;
+    const conf = (b.confidence ?? 0) - (a.confidence ?? 0);
+    if (conf !== 0) return conf;
     return a.symbol.localeCompare(b.symbol, "en", { sensitivity: "base" });
   });
 }
@@ -208,6 +212,7 @@ export function buildRankedPaperBuyQueue(
       signalReason: op.reason,
       buySignalCount: op.buySignalCount,
       signalStrategyNames: op.signalStrategyNames,
+      scanConfidence: op.confidence,
     }));
 }
 

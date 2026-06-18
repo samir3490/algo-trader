@@ -49,6 +49,18 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
     noSameDayRebuyAfterSell: rm?.noSameDayRebuyAfterSell as boolean | undefined,
     minHoldMinutesBeforeSell: rm?.minHoldMinutesBeforeSell as number | undefined,
     enableStrategySellSignals: rm?.enableStrategySellSignals as boolean | undefined,
+    positionSizingMode: pt?.positionSizingMode as AppSettings["positionSizingMode"],
+    positionPct: pt?.positionPct as number | undefined,
+    atrRiskPct: pt?.atrRiskPct as number | undefined,
+    atrPeriod: pt?.atrPeriod as number | undefined,
+    autoTrailingStop: rm?.autoTrailingStop as boolean | undefined,
+    trailingStopPercent: rm?.trailingStopPercent as number | undefined,
+    maxHoldDays: rm?.maxHoldDays as number | undefined,
+    noProgressDays: rm?.noProgressDays as number | undefined,
+    noProgressMinPct: rm?.noProgressMinPct as number | undefined,
+    autoPauseEnabled: rm?.autoPauseEnabled as boolean | undefined,
+    autoPauseLookbackDays: rm?.autoPauseLookbackDays as number | undefined,
+    autoPauseMaxLoss: rm?.autoPauseMaxLoss as number | undefined,
   };
 }
 

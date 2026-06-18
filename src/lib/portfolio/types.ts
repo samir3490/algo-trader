@@ -40,9 +40,9 @@ export interface PaperPosition {
   product?: string;
   buySignalCount?: number;
   signalStrategyNames?: string[];
+  /** Peak LTP since entry — for trailing stop. */
+  peakPrice?: number;
 }
-
-/** Strategy opinion — advisors only; does not place orders. */
 export interface StrategyOpinion {
   strategyId: string;
   strategyName: string;
@@ -53,6 +53,8 @@ export interface StrategyOpinion {
   quantity: number;
   reason: string;
   confidence: number;
+  /** Scan confidence when available (universe ranking). */
+  scanConfidence?: number;
   /** Strategies that signaled BUY on this symbol in the same scan. */
   buySignalCount?: number;
   signalStrategyNames?: string[];
@@ -75,6 +77,7 @@ export interface PortfolioDecision {
   positionId?: string;
   buySignalCount?: number;
   signalStrategyNames?: string[];
+  scanConfidence?: number;
 }
 
 export interface StrategyConflict {
@@ -120,9 +123,16 @@ export function canTransitionPosition(
 }
 
 export function mapRiskExitToReason(
-  reason: "stop_loss" | "take_profit" | "mis_square_off"
+  reason:
+    | "stop_loss"
+    | "take_profit"
+    | "mis_square_off"
+    | "trailing_stop"
+    | "max_hold_days"
+    | "no_progress"
 ): ExitReason {
   if (reason === "stop_loss") return "STOP_LOSS";
   if (reason === "take_profit") return "TARGET_HIT";
+  if (reason === "trailing_stop") return "TRAILING_STOP";
   return "TIME_EXIT";
 }

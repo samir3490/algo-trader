@@ -12,6 +12,12 @@ const settings = {
   paperOrderNotional: 100_000,
   maxOrderValue: 500_000,
   defaultQuantity: 1,
+  positionSizingMode: "notional" as const,
+  positionPct: 10,
+  atrRiskPct: 1,
+  atrPeriod: 14,
+  simulateBrokerage: false,
+  paperDefaultProduct: "CNC" as const,
 };
 
 describe("integerShareQtyForBudget", () => {
@@ -66,6 +72,11 @@ describe("resolvePaperScanOrderQty", () => {
       resolvePaperScanOrderQty(100, settings, { strategyParams: { quantity: 50 } }),
       50
     );
+  });
+
+  it("uses portfolio pct when mode is portfolio_pct", () => {
+    const pctSettings = { ...settings, positionSizingMode: "portfolio_pct" as const, positionPct: 10 };
+    assert.equal(resolvePaperOrderQty(100, pctSettings, { balance: 1_000_000 }), 1000);
   });
 });
 

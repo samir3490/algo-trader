@@ -10,8 +10,8 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 
 | Phase | Goal | Timeline | Status |
 |-------|------|----------|--------|
-| **1** | Stabilize & trust paper auto-trading | 2–4 weeks | **In progress** — mostly shipped |
-| **2** | Smarter entries & exits (paper only) | 3–5 weeks | Not started |
+| **1** | Stabilize & trust paper auto-trading | 2–4 weeks | **Mostly shipped** |
+| **2** | Smarter entries & exits (paper only) | 3–5 weeks | **Shipped** |
 | **3** | Live trading automation (real money) | 4–8 weeks | Not started |
 | **4** | Analytics & optimization | Ongoing | Not started |
 | **5** | Product & ops polish | Ongoing | Partial (email alerts, drawer UI) |
@@ -30,7 +30,11 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 | Live Zerodha (manual orders) | Working |
 | Live auto from cron | **Email only** — no server-side orders |
 | Market data for cron | Yahoo (~15 min delayed) |
-| Strategy SELL signals | **Enabled** — two-phase scan (buy then sell), min-hold cooldown |
+| Strategy SELL signals | **Enabled** — two-phase scan with min-hold |
+| Universe scan | **Enabled** — Universe mode on Strategies page |
+| Volatility sizing | **Enabled** — ₹ / % balance / ATR-risk |
+| Trailing stop & time exits | **Enabled** — Settings → Risk |
+| Auto-pause strategies | **Enabled** — optional, Settings → Risk |
 
 ---
 
@@ -54,11 +58,11 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 
 **Goal:** Better signals and exits — still **paper only**.
 
-- [ ] **Universe scanning** — one strategy instance scans Nifty 50 / Bank Nifty / custom list; pick top N by signal strength
-- [ ] **Volatility-based sizing** — position size from ATR or % of portfolio, not fixed ~₹1L only
-- [ ] **Trailing stop-loss** — move SL up as price rises (trail % in Settings)
+- [x] **Universe scanning** — Strategies → Universe mode: one instance scans lists; top N by confidence per scan
+- [x] **Volatility-based sizing** — Settings → Paper: fixed ₹, % of balance, or ATR-risk
+- [x] **Trailing stop-loss** — Settings → Risk: trail % from peak since entry
 - [ ] **Time-based exits** — max hold days, square-off before 3:15 PM for MIS, optional “no progress in X days”
-- [ ] **Strategy performance loop** — auto-pause strategies with negative realized P&L over N days; leaderboard (win rate, avg hold, drawdown)
+- [x] **Strategy performance loop** — win rate & avg hold on Paper Trading; auto-pause losing instances
 - [x] **Optional strategy SELL signals** — two-phase scan: BUY queue first, then SELL on held positions after `minHoldMinutesBeforeSell` (default 60m). Same symbol never buys and sells in one scan; symbols with active BUY signals defer sell. Toggle in Settings → Risk. SL/TP still run first and ignore min-hold.
 
 ---

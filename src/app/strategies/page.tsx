@@ -55,6 +55,11 @@ import StrategiesSectionNav, {
   strategiesSectionFromParam,
   type StrategiesSection,
 } from "@/components/strategies/strategies-section-nav";
+import {
+  NIFTY50_SYMBOLS,
+  BANK_NIFTY_SYMBOLS,
+  TOP100_SYMBOLS,
+} from "@/lib/universe/symbol-lists";
 
 interface ActiveStrategy {
   id: string;
@@ -69,21 +74,14 @@ interface ActiveStrategy {
   params: Record<string, number>;
   timeframe: Timeframe;
   createdAt: string;
+  symbols?: string[];
+  universe?: "nifty50" | "banknifty" | "top100" | "custom";
+  universeTopN?: number;
 }
 
 // ── Constants ────────────────────────────────────────────────────────────
 
 const ACTIVE_STRATEGIES_KEY = "activeStrategies";
-
-const NIFTY50_SYMBOLS = NSE_INSTRUMENTS.slice(0, 50).map((i) => i.symbol);
-
-const BANK_NIFTY_SYMBOLS = [
-  "HDFCBANK", "ICICIBANK", "SBIN", "KOTAKBANK", "AXISBANK",
-  "INDUSINDBK", "BANDHANBNK", "FEDERALBNK", "IDFCFIRSTB", "PNB",
-  "BANKBARODA", "CANBK",
-];
-
-const TOP100_SYMBOLS = NSE_INSTRUMENTS.slice(0, 100).map((i) => i.symbol);
 
 // ── Persistence ──────────────────────────────────────────────────────────
 
@@ -115,6 +113,9 @@ function localToFirestore(strategies: ActiveStrategy[]): FirestoreStrategy[] {
     createdAt: s.createdAt,
     signals: s.signals,
     pnl: s.pnl,
+    ...(s.symbols?.length ? { symbols: s.symbols } : {}),
+    ...(s.universe ? { universe: s.universe } : {}),
+    ...(s.universeTopN != null ? { universeTopN: s.universeTopN } : {}),
   }));
 }
 
@@ -132,6 +133,9 @@ function firestoreToLocal(strategies: FirestoreStrategy[]): ActiveStrategy[] {
     params: s.params,
     timeframe: s.timeframe as Timeframe,
     createdAt: s.createdAt,
+    symbols: s.symbols,
+    universe: s.universe,
+    universeTopN: s.universeTopN,
   }));
 }
 
@@ -196,7 +200,9 @@ function ActiveStrategiesTable({
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-6 py-4 font-mono text-sm text-text-secondary">
-                  {s.symbol}
+                  {s.symbols && s.symbols.length > 1
+                    ? `Universe (${s.symbols.length})`
+                    : s.symbol}
                 </td>
                 <td className="whitespace-nowrap px-6 py-4">
                   <span
@@ -366,6 +372,8 @@ function StrategiesPageContent() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<StrategyType>("sma");
   const [modalSymbols, setModalSymbols] = useState("RELIANCE");
+  const [modalUniverseMode, setModalUniverseMode] = useState(false);
+  const [modalUniverseTopN, setModalUniverseTopN] = useState(5);
   const [modalTimeframe, setModalTimeframe] = useState<Timeframe>("15min");
   const [modalPaper, setModalPaper] = useState(true);
   const [modalParams, setModalParams] = useState<Record<string, number>>(() =>
@@ -444,6 +452,8 @@ function StrategiesPageContent() {
     const def = STRATEGY_DEFINITIONS[0];
     setModalType(def.id);
     setModalSymbols("RELIANCE");
+    setModalUniverseMode(false);
+    setModalUniverseTopN(5);
     setModalTimeframe("15min");
     setModalPaper(true);
     setModalParams(getDefaultParams(def));
@@ -466,6 +476,29 @@ function StrategiesPageContent() {
     const symbols = parseSymbols(modalSymbols);
     const def = getStrategyDef(modalType);
 
+    if (modalUniverseMode && symbols.length > 1) {
+      const newStrategy: ActiveStrategy = {
+        id: `active-${Date.now()}-universe`,
+        name: def.name,
+        type: modalType,
+        symbol: symbols[0],
+        symbols,
+        universe: "custom",
+        universeTopN: modalUniverseTopN,
+        exchange: "NSE",
+        mode: modalPaper ? "paper" : "live",
+        status: "running",
+        signals: 0,
+        pnl: 0,
+        params: { ...modalParams },
+        timeframe: modalTimeframe,
+        createdAt: new Date().toISOString(),
+      };
+      setActiveStrategies((prev) => [...prev, newStrategy]);
+      setModalOpen(false);
+      return;
+    }
+
     const newStrategies: ActiveStrategy[] = symbols.map((sym) => ({
       id: `active-${Date.now()}-${sym}`,
       name: def.name,
@@ -483,7 +516,7 @@ function StrategiesPageContent() {
 
     setActiveStrategies((prev) => [...prev, ...newStrategies]);
     setModalOpen(false);
-  }, [modalType, modalSymbols, modalPaper, modalParams, modalTimeframe]);
+  }, [modalType, modalSymbols, modalPaper, modalParams, modalTimeframe, modalUniverseMode, modalUniverseTopN]);
 
   const toggleCardActive = useCallback(
     (id: StrategyType) => {
@@ -1304,9 +1337,41 @@ function StrategiesPageContent() {
                   ))}
                 </div>
                 {parseSymbols(modalSymbols).length > 1 && (
-                  <p className="text-[10px] text-text-tertiary mt-1">
-                    {parseSymbols(modalSymbols).length} symbols selected — a separate strategy will run for each
-                  </p>
+                  <div className="mt-2 space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-3">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={modalUniverseMode}
+                        onChange={(e) => setModalUniverseMode(e.target.checked)}
+                        className="rounded border-border"
+                      />
+                      <span className="text-xs text-text-primary">
+                        Universe mode — one strategy, top N by signal strength
+                      </span>
+                    </label>
+                    {modalUniverseMode && (
+                      <div>
+                        <label className="block text-[10px] text-text-tertiary mb-1">
+                          Top N BUY signals per scan
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={20}
+                          value={modalUniverseTopN}
+                          onChange={(e) =>
+                            setModalUniverseTopN(Math.max(1, Number(e.target.value) || 1))
+                          }
+                          className="w-20 rounded border border-border bg-bg-primary px-2 py-1 text-xs"
+                        />
+                      </div>
+                    )}
+                    {!modalUniverseMode && (
+                      <p className="text-[10px] text-text-tertiary">
+                        {parseSymbols(modalSymbols).length} symbols — separate instance per symbol
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
 

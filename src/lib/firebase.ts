@@ -359,6 +359,28 @@ export interface AppSettings {
   minHoldMinutesBeforeSell: number;
   /** When true, strategy SELL signals exit paper positions after min-hold (buys run first each scan). */
   enableStrategySellSignals: boolean;
+  /** Paper position sizing: fixed rupee notional, % of balance, or ATR-risk. */
+  positionSizingMode: "notional" | "portfolio_pct" | "atr_risk";
+  /** % of paper balance per BUY when positionSizingMode is portfolio_pct. */
+  positionPct: number;
+  /** % of balance to risk per ATR when positionSizingMode is atr_risk. */
+  atrRiskPct: number;
+  /** ATR lookback for atr_risk sizing. */
+  atrPeriod: number;
+  /** Ratchet stop from position high-water mark. */
+  autoTrailingStop: boolean;
+  trailingStopPercent: number;
+  /** Close positions held longer than N days (0 = off). */
+  maxHoldDays: number;
+  /** Close if held N days without min gain (0 = off). */
+  noProgressDays: number;
+  /** Min % gain required to avoid no-progress exit. */
+  noProgressMinPct: number;
+  /** Auto-pause strategy instances with rolling realized loss. */
+  autoPauseEnabled: boolean;
+  autoPauseLookbackDays: number;
+  /** Pause when rolling loss exceeds this rupee amount. */
+  autoPauseMaxLoss: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -389,6 +411,18 @@ export const DEFAULT_SETTINGS: AppSettings = {
   noSameDayRebuyAfterSell: true,
   minHoldMinutesBeforeSell: 60,
   enableStrategySellSignals: true,
+  positionSizingMode: "notional",
+  positionPct: 10,
+  atrRiskPct: 1,
+  atrPeriod: 14,
+  autoTrailingStop: false,
+  trailingStopPercent: 2,
+  maxHoldDays: 0,
+  noProgressDays: 0,
+  noProgressMinPct: 0.5,
+  autoPauseEnabled: false,
+  autoPauseLookbackDays: 14,
+  autoPauseMaxLoss: 5000,
 };
 
 export async function getSettings(): Promise<AppSettings> {
@@ -428,6 +462,11 @@ export interface ActiveStrategy {
   pnl: number;
   lastRunAt?: string;
   lastSignalReason?: string;
+  /** Multi-symbol universe — scans all symbols on one instance. */
+  symbols?: string[];
+  universe?: "nifty50" | "banknifty" | "top100" | "custom";
+  /** Keep top N BUY signals by confidence per universe scan (0 = all). */
+  universeTopN?: number;
 }
 
 export async function getActiveStrategies(): Promise<ActiveStrategy[]> {

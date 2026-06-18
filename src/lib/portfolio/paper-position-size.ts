@@ -72,19 +72,54 @@ export function integerShareQtyForBudget(
   return qty;
 }
 
+export type PaperSizingSettings = Pick<
+  AppSettings,
+  | "paperOrderNotional"
+  | "maxOrderValue"
+  | "defaultQuantity"
+  | "positionSizingMode"
+  | "positionPct"
+  | "atrRiskPct"
+  | "atrPeriod"
+>;
+
+/** Rupee budget for one paper BUY based on sizing mode. */
+export function resolvePaperSizingBudget(
+  settings: PaperSizingSettings,
+  options?: { balance?: number; atr?: number | null }
+): number {
+  const cap = effectivePaperOrderCap(settings);
+  const mode = settings.positionSizingMode ?? "notional";
+  const balance = options?.balance;
+
+  if (mode === "portfolio_pct" && balance != null && balance > 0) {
+    const pct = Math.max(0.1, settings.positionPct ?? 10);
+    return Math.min(cap, balance * (pct / 100));
+  }
+
+  if (mode === "atr_risk" && balance != null && balance > 0) {
+    const atr = options?.atr;
+    const riskPct = Math.max(0.1, settings.atrRiskPct ?? 1);
+    if (atr != null && atr > 0) {
+      const riskAmount = balance * (riskPct / 100);
+      return Math.min(cap, riskAmount);
+    }
+  }
+
+  return Math.min(paperOrderNotional(settings), cap);
+}
+
 /**
- * Paper BUY size: target rupee notional per trade (default ₹1L), whole shares only.
+ * Paper BUY size: notional, portfolio %, or ATR-risk budget; whole shares only.
  * Strategy card `quantity` overrides when explicitly set &gt; 1.
  */
 export function resolvePaperOrderQty(
   price: number,
-  settings: Pick<
-    AppSettings,
-    "paperOrderNotional" | "maxOrderValue" | "defaultQuantity"
-  >,
+  settings: PaperSizingSettings,
   options?: {
     strategyParams?: Record<string, number>;
     balance?: number;
+    atr?: number | null;
   }
 ): number {
   const explicit = options?.strategyParams?.quantity;
@@ -92,14 +127,32 @@ export function resolvePaperOrderQty(
     return Math.max(1, Math.floor(explicit));
   }
 
-  const budget = Math.min(
-    paperOrderNotional(settings),
-    effectivePaperOrderCap(settings)
-  );
+  const mode = settings.positionSizingMode ?? "notional";
+
+  if (mode === "atr_risk") {
+    const atr = options?.atr;
+    const balance = options?.balance;
+    if (atr != null && atr > 0 && balance != null && balance > 0) {
+      const riskPct = Math.max(0.1, settings.atrRiskPct ?? 1);
+      const riskAmount = Math.min(
+        effectivePaperOrderCap(settings),
+        balance * (riskPct / 100)
+      );
+      const qty = Math.floor(riskAmount / atr);
+      if (qty >= 1) {
+        return integerShareQtyForBudget(price, qty * price, balance) || qty;
+      }
+    }
+  }
+
+  const budget = resolvePaperSizingBudget(settings, {
+    balance: options?.balance,
+    atr: options?.atr,
+  });
   return integerShareQtyForBudget(price, budget, options?.balance);
 }
 
-/** Auto-scan sizing: use ₹ notional unless strategy sets quantity &gt; 1 explicitly. */
+/** Auto-scan sizing: use sizing mode unless strategy sets quantity &gt; 1 explicitly. */
 export function resolvePaperScanOrderQty(
   price: number,
   settings: Pick<
@@ -109,10 +162,15 @@ export function resolvePaperScanOrderQty(
     | "defaultQuantity"
     | "simulateBrokerage"
     | "paperDefaultProduct"
+    | "positionSizingMode"
+    | "positionPct"
+    | "atrRiskPct"
+    | "atrPeriod"
   >,
   options?: {
     strategyParams?: Record<string, number>;
     balance?: number;
+    atr?: number | null;
   }
 ): number {
   const explicit = options?.strategyParams?.quantity;
@@ -120,6 +178,7 @@ export function resolvePaperScanOrderQty(
   let qty = resolvePaperOrderQty(price, settings, {
     strategyParams: useExplicit ? options?.strategyParams : undefined,
     balance: options?.balance,
+    atr: options?.atr,
   });
   if (qty < 1) return 0;
 

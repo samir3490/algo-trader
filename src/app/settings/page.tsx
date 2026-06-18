@@ -59,6 +59,10 @@ interface AppSettings {
     /** Target rupee value per paper BUY (default ₹1,00,000). */
     orderNotional: number;
     defaultProductType: "CNC" | "MIS";
+    positionSizingMode: "notional" | "portfolio_pct" | "atr_risk";
+    positionPct: number;
+    atrRiskPct: number;
+    atrPeriod: number;
   };
   tradingPreferences: {
     defaultExchange: "NSE" | "BSE";
@@ -87,6 +91,14 @@ interface AppSettings {
     noSameDayRebuyAfterSell: boolean;
     minHoldMinutesBeforeSell: number;
     enableStrategySellSignals: boolean;
+    autoTrailingStop: boolean;
+    trailingStopPercent: number;
+    maxHoldDays: number;
+    noProgressDays: number;
+    noProgressMinPct: number;
+    autoPauseEnabled: boolean;
+    autoPauseLookbackDays: number;
+    autoPauseMaxLoss: number;
   };
 }
 
@@ -96,6 +108,10 @@ const defaultSettings: AppSettings = {
     simulateBrokerage: true,
     orderNotional: 100_000,
     defaultProductType: "CNC",
+    positionSizingMode: "notional",
+    positionPct: 10,
+    atrRiskPct: 1,
+    atrPeriod: 14,
   },
   tradingPreferences: {
     defaultExchange: "NSE",
@@ -124,6 +140,14 @@ const defaultSettings: AppSettings = {
     noSameDayRebuyAfterSell: true,
     minHoldMinutesBeforeSell: 60,
     enableStrategySellSignals: true,
+    autoTrailingStop: false,
+    trailingStopPercent: 2,
+    maxHoldDays: 0,
+    noProgressDays: 0,
+    noProgressMinPct: 0.5,
+    autoPauseEnabled: false,
+    autoPauseLookbackDays: 14,
+    autoPauseMaxLoss: 5000,
   },
 };
 
@@ -134,6 +158,12 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       simulateBrokerage: fs.simulateBrokerage,
       orderNotional: fs.paperOrderNotional ?? 100_000,
       defaultProductType: (fs.paperDefaultProduct as "CNC" | "MIS") ?? "CNC",
+      positionSizingMode:
+        (fs.positionSizingMode as "notional" | "portfolio_pct" | "atr_risk") ??
+        "notional",
+      positionPct: fs.positionPct ?? 10,
+      atrRiskPct: fs.atrRiskPct ?? 1,
+      atrPeriod: fs.atrPeriod ?? 14,
     },
     tradingPreferences: {
       defaultExchange: fs.defaultExchange as "NSE" | "BSE",
@@ -162,6 +192,14 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       noSameDayRebuyAfterSell: fs.noSameDayRebuyAfterSell !== false,
       minHoldMinutesBeforeSell: fs.minHoldMinutesBeforeSell ?? 60,
       enableStrategySellSignals: fs.enableStrategySellSignals !== false,
+      autoTrailingStop: fs.autoTrailingStop === true,
+      trailingStopPercent: fs.trailingStopPercent ?? 2,
+      maxHoldDays: fs.maxHoldDays ?? 0,
+      noProgressDays: fs.noProgressDays ?? 0,
+      noProgressMinPct: fs.noProgressMinPct ?? 0.5,
+      autoPauseEnabled: fs.autoPauseEnabled === true,
+      autoPauseLookbackDays: fs.autoPauseLookbackDays ?? 14,
+      autoPauseMaxLoss: fs.autoPauseMaxLoss ?? 5000,
     },
   };
 }
@@ -178,6 +216,10 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     simulateBrokerage: s.paperTrading.simulateBrokerage,
     paperOrderNotional: s.paperTrading.orderNotional,
     paperDefaultProduct: s.paperTrading.defaultProductType,
+    positionSizingMode: s.paperTrading.positionSizingMode,
+    positionPct: s.paperTrading.positionPct,
+    atrRiskPct: s.paperTrading.atrRiskPct,
+    atrPeriod: s.paperTrading.atrPeriod,
     stopLossPercent: s.riskManagement.stopLossPercent,
     takeProfitPercent: s.riskManagement.takeProfitPercent,
     autoStopLoss: s.riskManagement.autoStopLoss,
@@ -189,6 +231,14 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     noSameDayRebuyAfterSell: s.riskManagement.noSameDayRebuyAfterSell,
     minHoldMinutesBeforeSell: s.riskManagement.minHoldMinutesBeforeSell,
     enableStrategySellSignals: s.riskManagement.enableStrategySellSignals,
+    autoTrailingStop: s.riskManagement.autoTrailingStop,
+    trailingStopPercent: s.riskManagement.trailingStopPercent,
+    maxHoldDays: s.riskManagement.maxHoldDays,
+    noProgressDays: s.riskManagement.noProgressDays,
+    noProgressMinPct: s.riskManagement.noProgressMinPct,
+    autoPauseEnabled: s.riskManagement.autoPauseEnabled,
+    autoPauseLookbackDays: s.riskManagement.autoPauseLookbackDays,
+    autoPauseMaxLoss: s.riskManagement.autoPauseMaxLoss,
     notifyOrders: s.notifications.orderExecution,
     notifyEmailDigest: s.notifications.emailDigest,
     notifySkipped: s.notifications.skippedOrders,
@@ -864,9 +914,86 @@ function SettingsContent() {
                 className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
               <p className="mt-1 text-[10px] text-text-tertiary">
-                Share count is calculated automatically from price (e.g. ₹1L → 10,000 shares @ ₹10).
+                Used when sizing mode is Fixed rupee (₹) notional.
               </p>
             </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Position sizing mode
+              </label>
+              <select
+                value={settings.paperTrading.positionSizingMode}
+                onChange={(e) =>
+                  updateSettings("paperTrading", {
+                    positionSizingMode: e.target.value as
+                      | "notional"
+                      | "portfolio_pct"
+                      | "atr_risk",
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              >
+                <option value="notional">Fixed ₹ notional</option>
+                <option value="portfolio_pct">% of paper balance</option>
+                <option value="atr_risk">ATR risk (volatility)</option>
+              </select>
+            </div>
+            {settings.paperTrading.positionSizingMode === "portfolio_pct" && (
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  % of balance per BUY
+                </label>
+                <input
+                  type="number"
+                  min={0.5}
+                  step={0.5}
+                  value={settings.paperTrading.positionPct}
+                  onChange={(e) =>
+                    updateSettings("paperTrading", {
+                      positionPct: Math.max(0.5, Number(e.target.value) || 10),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+            )}
+            {settings.paperTrading.positionSizingMode === "atr_risk" && (
+              <>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    Risk % of balance per ATR
+                  </label>
+                  <input
+                    type="number"
+                    min={0.1}
+                    step={0.1}
+                    value={settings.paperTrading.atrRiskPct}
+                    onChange={(e) =>
+                      updateSettings("paperTrading", {
+                        atrRiskPct: Math.max(0.1, Number(e.target.value) || 1),
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    ATR period (bars)
+                  </label>
+                  <input
+                    type="number"
+                    min={5}
+                    value={settings.paperTrading.atrPeriod}
+                    onChange={(e) =>
+                      updateSettings("paperTrading", {
+                        atrPeriod: Math.max(5, Number(e.target.value) || 14),
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                </div>
+              </>
+            )}
             <div>
               <label className="block text-xs font-medium text-text-secondary mb-1.5">
                 Paper Product Type
@@ -1388,6 +1515,163 @@ function SettingsContent() {
               Stop-loss / take-profit exits are not affected.
             </p>
           </div>
+
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                checked={settings.riskManagement.autoTrailingStop}
+                onChange={(e) =>
+                  updateSettings("riskManagement", {
+                    autoTrailingStop: e.target.checked,
+                  })
+                }
+                className="peer sr-only"
+              />
+              <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+            <div>
+              <p className="text-sm font-medium text-text-primary">Trailing stop-loss</p>
+              <p className="text-xs text-text-tertiary">
+                Exit when price falls this % from the peak since entry.
+              </p>
+            </div>
+          </div>
+
+          {settings.riskManagement.autoTrailingStop && (
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Trailing stop (%)
+              </label>
+              <input
+                type="number"
+                min={0.5}
+                step={0.5}
+                value={settings.riskManagement.trailingStopPercent}
+                onChange={(e) =>
+                  updateSettings("riskManagement", {
+                    trailingStopPercent: Math.max(0.5, Number(e.target.value) || 2),
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Max hold (days, 0 = off)
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={settings.riskManagement.maxHoldDays}
+              onChange={(e) =>
+                updateSettings("riskManagement", {
+                  maxHoldDays: Math.max(0, Number(e.target.value) || 0),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              No-progress exit (days, 0 = off)
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={settings.riskManagement.noProgressDays}
+              onChange={(e) =>
+                updateSettings("riskManagement", {
+                  noProgressDays: Math.max(0, Number(e.target.value) || 0),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-xs text-text-tertiary mt-1">
+              Closes if held N days without reaching min gain below.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              No-progress min gain (%)
+            </label>
+            <input
+              type="number"
+              min={0}
+              step={0.1}
+              value={settings.riskManagement.noProgressMinPct}
+              onChange={(e) =>
+                updateSettings("riskManagement", {
+                  noProgressMinPct: Math.max(0, Number(e.target.value) || 0),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                checked={settings.riskManagement.autoPauseEnabled}
+                onChange={(e) =>
+                  updateSettings("riskManagement", {
+                    autoPauseEnabled: e.target.checked,
+                  })
+                }
+                className="peer sr-only"
+              />
+              <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+            <div>
+              <p className="text-sm font-medium text-text-primary">Auto-pause losing strategies</p>
+              <p className="text-xs text-text-tertiary">
+                Pauses strategy instances after rolling realized loss exceeds limit.
+              </p>
+            </div>
+          </div>
+
+          {settings.riskManagement.autoPauseEnabled && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Lookback (days)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={settings.riskManagement.autoPauseLookbackDays}
+                  onChange={(e) =>
+                    updateSettings("riskManagement", {
+                      autoPauseLookbackDays: Math.max(1, Number(e.target.value) || 14),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Max loss (₹) before pause
+                </label>
+                <input
+                  type="number"
+                  min={100}
+                  step={500}
+                  value={settings.riskManagement.autoPauseMaxLoss}
+                  onChange={(e) =>
+                    updateSettings("riskManagement", {
+                      autoPauseMaxLoss: Math.max(100, Number(e.target.value) || 5000),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+            </>
+          )}
         </div>
       </section>
 

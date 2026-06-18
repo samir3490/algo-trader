@@ -26,6 +26,8 @@ export interface StrategyPerformanceRow {
   closedRounds: number;
   wins: number;
   losses: number;
+  winRate: number;
+  avgHoldDays: number;
 }
 
 export interface StrategyTradeEvent {
@@ -318,8 +320,10 @@ export function computeStrategyPerformance(
     (a, b) => tradeSortKey(a) - tradeSortKey(b)
   );
 
-  const lots = new Map<string, Lot[]>();
+  const lots = new Map<string, (Lot & { entryMs: number })[]>();
   const stats = new Map<string, StrategyPerformanceRow>();
+  const holdDaysSum = new Map<string, number>();
+  const holdCount = new Map<string, number>();
 
   function getRow(name: string): StrategyPerformanceRow {
     const key = strategyGroupKey(name);
@@ -334,10 +338,19 @@ export function computeStrategyPerformance(
         closedRounds: 0,
         wins: 0,
         losses: 0,
+        winRate: 0,
+        avgHoldDays: 0,
       };
       stats.set(key, row);
     }
     return row;
+  }
+
+  function recordHold(strategyName: string, entryMs: number, exitMs: number) {
+    const key = strategyGroupKey(strategyName);
+    const days = Math.max(0, (exitMs - entryMs) / 86_400_000);
+    holdDaysSum.set(key, (holdDaysSum.get(key) ?? 0) + days);
+    holdCount.set(key, (holdCount.get(key) ?? 0) + 1);
   }
 
   for (const t of chronological) {
@@ -358,11 +371,13 @@ export function computeStrategyPerformance(
         strategyNames: t.displayStrategyNames ?? [stratName],
         unknownStrategyCount: t.unknownStrategyCount ?? 0,
         strategyId: t.displayStrategyId,
+        entryMs: tradeSortKey(t),
       });
       lots.set(key, list);
     } else {
       row.sells += 1;
       let sellQty = t.qty;
+      const sellMs = tradeSortKey(t);
       const list = lots.get(key) ?? [];
 
       while (sellQty > 0 && list.length > 0) {
@@ -374,6 +389,7 @@ export function computeStrategyPerformance(
         lotRow.closedRounds += 1;
         if (pnl > 0) lotRow.wins += 1;
         else if (pnl < 0) lotRow.losses += 1;
+        recordHold(lot.strategyName, lot.entryMs, sellMs);
 
         lot.qty -= take;
         sellQty -= take;
@@ -381,6 +397,19 @@ export function computeStrategyPerformance(
       }
       lots.set(key, list);
     }
+  }
+
+  for (const row of stats.values()) {
+    const key = strategyGroupKey(row.strategyName);
+    row.winRate =
+      row.closedRounds > 0
+        ? Math.round((row.wins / row.closedRounds) * 1000) / 10
+        : 0;
+    const holds = holdCount.get(key) ?? 0;
+    row.avgHoldDays =
+      holds > 0
+        ? Math.round(((holdDaysSum.get(key) ?? 0) / holds) * 10) / 10
+        : 0;
   }
 
   return [...stats.values()]

@@ -8,6 +8,7 @@ import {
 } from "@/lib/firebase";
 import {
   applyPaperRiskExits,
+  ratchetPositionPeakPrices,
 } from "@/lib/risk/paper-risk-guard";
 import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
 import {
@@ -57,6 +58,7 @@ import {
   type ScanDigestLine,
 } from "@/lib/email";
 import { maybeSendCronHealthAlerts } from "@/lib/health/health-alerts";
+import { evaluateAutoPause } from "@/lib/strategies/auto-pause";
 import {
   shouldSendEmailCategory,
   useScanDigestEmail,
@@ -300,8 +302,10 @@ export async function runStrategiesForUser(
     type: inferStrategyType(s.name),
   }));
 
-  const { scanned, signals: rawSignals } = await scanStrategiesForSignals(payload);
   const userSettings = await loadUserSettings(db, userId);
+  const { scanned, signals: rawSignals } = await scanStrategiesForSignals(payload, {
+    atrPeriod: userSettings.atrPeriod ?? 14,
+  });
   const {
     emailDedupeKeys: existingEmailKeys,
     dedupeKeys: existingDedupeKeys,
@@ -373,10 +377,10 @@ export async function runStrategiesForUser(
     }
     paperState = {
       ...paperState,
-      positions: (paperState.positions ?? []).map((p) => ({
-        ...p,
-        ltp: ltpMap[symKey(p.symbol, p.exchange)] ?? p.ltp,
-      })),
+      positions: ratchetPositionPeakPrices(
+        paperState.positions,
+        ltpMap
+      ),
       holdings: paperState.holdings,
     };
   }
@@ -589,9 +593,16 @@ export async function runStrategiesForUser(
       });
     }
 
+    const signalAtr = rawSignals.find(
+      (s) =>
+        s.strategyId === baseDecision.ownerStrategyId &&
+        s.symbol.toUpperCase() === baseDecision.symbol.toUpperCase()
+    )?.atr;
+
     const freshQty = resolvePaperScanOrderQty(price, userSettings, {
       strategyParams: strat.params,
       balance: paperState.balance ?? INITIAL_BALANCE,
+      atr: signalAtr,
     });
     if (freshQty <= 0 || price <= 0) {
       bumpReason(
@@ -933,7 +944,7 @@ export async function runStrategiesForUser(
   }
 
   const now = new Date().toISOString();
-  const updatedStrategies = items.map((s) => {
+  let strategiesToSave = items.map((s) => {
     if (signalStrategyIds.has(s.id)) {
       return {
         ...s,
@@ -948,8 +959,32 @@ export async function runStrategiesForUser(
     return s;
   });
 
+  const autoPauses = evaluateAutoPause(
+    strategiesToSave,
+    paperState.trades ?? [],
+    userSettings
+  );
+  if (autoPauses.length > 0) {
+    const pauseById = new Map(autoPauses.map((p) => [p.strategyId, p]));
+    strategiesToSave = strategiesToSave.map((s) => {
+      const hit = pauseById.get(s.id);
+      if (!hit) return s;
+      writeSystemLog("WARN", "AutoPause", "strategy_auto_paused", {
+        strategyId: s.id,
+        strategyName: s.name,
+        rollingPnl: hit.rollingPnl,
+        reason: hit.reason,
+      });
+      return {
+        ...s,
+        status: "paused" as const,
+        lastSignalReason: hit.reason,
+      };
+    });
+  }
+
   await db.doc(`users/${userId}/data/strategies`).set(
-    { items: updatedStrategies, updatedAt: FieldValue.serverTimestamp() },
+    { items: strategiesToSave, updatedAt: FieldValue.serverTimestamp() },
     { merge: true }
   );
 
