@@ -1,4 +1,5 @@
 export function toYahooTicker(symbol: string, exchange: string): string {
+  if (symbol.startsWith("^")) return symbol;
   const suffix = exchange.toUpperCase() === "BSE" ? ".BO" : ".NS";
   return `${symbol.toUpperCase()}${suffix}`;
 }

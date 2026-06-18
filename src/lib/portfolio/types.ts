@@ -103,6 +103,7 @@ export interface TradeAuditEntry {
   symbol: string;
   exchange: string;
   signalReason?: string;
+  signalStrength?: string;
   entryTime?: string;
   entryPrice?: number;
   exitTime?: string;
@@ -111,6 +112,7 @@ export interface TradeAuditEntry {
   side: "BUY" | "SELL";
   qty: number;
   netPnl?: number;
+  executedAt?: string;
 }
 
 const VALID_TRANSITIONS: Record<PositionState, PositionState[]> = {

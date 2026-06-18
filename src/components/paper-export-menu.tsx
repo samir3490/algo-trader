@@ -16,8 +16,9 @@ import {
 } from "@/lib/export/paper-data-export";
 
 const EXPORT_OPTIONS: { kind: PaperExportKind; label: string }[] = [
-  { kind: "all", label: "Export all (6 CSV files)" },
+  { kind: "all", label: "Export all (7 CSV files)" },
   { kind: "trades", label: "Trade history" },
+  { kind: "journal", label: "Trade journal" },
   { kind: "holdings", label: "Holdings" },
   { kind: "positions", label: "Positions" },
   { kind: "orders", label: "Orders" },

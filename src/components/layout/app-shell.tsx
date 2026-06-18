@@ -5,6 +5,7 @@ import { AuthProvider } from "@/lib/auth-context";
 import AuthGuard from "@/components/layout/auth-guard";
 import Sidebar from "@/components/layout/sidebar";
 import MainContent from "@/components/layout/main-content";
+import MobileBottomNav from "@/components/layout/mobile-bottom-nav";
 import StrategyRunner from "@/components/strategy-runner";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -21,6 +22,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <StrategyRunner />
             <Sidebar />
             <MainContent>{children}</MainContent>
+            <MobileBottomNav />
           </>
         )}
       </AuthGuard>

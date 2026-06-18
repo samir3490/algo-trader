@@ -246,3 +246,70 @@ export async function sendHealthAlertEmail(params: {
     console.error("Failed to send health alert email:", error);
   }
 }
+
+export interface DailyPnlEmailReport {
+  dateIST: string;
+  startingBalance: number;
+  portfolioValue: number;
+  cashBalance: number;
+  invested: number;
+  todayRealizedPnl: number;
+  todayTradeCount: number;
+  unrealizedPnl: number;
+  allTimePnl: number;
+  allTimePnlPercent: number;
+  openPositions: number;
+  sellsToday: number;
+  buysToday: number;
+}
+
+export async function sendDailyPnlEmail(report: DailyPnlEmailReport) {
+  const recipientEmail = process.env.EMAIL_RECIPIENT || process.env.EMAIL_USER;
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD || !recipientEmail) {
+    return;
+  }
+
+  const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  const todayColor = report.todayRealizedPnl >= 0 ? "#22c55e" : "#ef4444";
+  const allTimeColor = report.allTimePnl >= 0 ? "#22c55e" : "#ef4444";
+  const todaySign = report.todayRealizedPnl >= 0 ? "+" : "";
+  const allTimeSign = report.allTimePnl >= 0 ? "+" : "";
+
+  const subject = `📊 Daily P&L ${report.dateIST}: ${todaySign}₹${report.todayRealizedPnl.toLocaleString("en-IN")} today`;
+
+  const row = (label: string, value: string, color = "#1a1a1a") =>
+    `<tr><td style="padding:8px 0;color:#595959;font-size:14px;">${label}</td><td style="padding:8px 0;color:${color};font-size:14px;text-align:right;font-weight:600;">${value}</td></tr>`;
+
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+      <div style="background:#1e3a5f;padding:16px 24px;">
+        <h2 style="margin:0;color:#fff;font-size:18px;">Paper trading — daily summary</h2>
+        <p style="margin:8px 0 0;font-size:13px;color:#bfdbfe;">${report.dateIST} · ${now} IST</p>
+      </div>
+      <div style="padding:24px;">
+        <table style="width:100%;border-collapse:collapse;">
+          ${row("Today's realized P&L", `${todaySign}₹${report.todayRealizedPnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, todayColor)}
+          ${row("All-time P&L", `${allTimeSign}₹${report.allTimePnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })} (${report.allTimePnlPercent.toFixed(2)}%)`, allTimeColor)}
+          ${row("Portfolio value", `₹${report.portfolioValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`)}
+          ${row("Cash balance", `₹${report.cashBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`)}
+          ${row("Invested (cost)", `₹${report.invested.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`)}
+          ${row("Unrealized P&L", `₹${report.unrealizedPnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`)}
+          ${row("Trades today", `${report.todayTradeCount} (${report.buysToday} buy, ${report.sellsToday} sell)`)}
+          ${row("Open positions", String(report.openPositions))}
+        </table>
+        <p style="margin:16px 0 0;font-size:12px;color:#595959;">AlgoTrader paper portfolio · Enable in Settings → Notifications → Daily P&L email</p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"AlgoTrader" <${process.env.EMAIL_USER}>`,
+      to: recipientEmail,
+      subject,
+      html,
+    });
+  } catch (error) {
+    console.error("Failed to send daily P&L email:", error);
+  }
+}

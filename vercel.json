@@ -3,6 +3,14 @@
     {
       "path": "/api/cron/strategies",
       "schedule": "30 6 * * 1-5"
+    },
+    {
+      "path": "/api/cron/square-off",
+      "schedule": "45 9 * * 1-5"
+    },
+    {
+      "path": "/api/cron/daily-pnl",
+      "schedule": "5 10 * * 1-5"
     }
   ]
 }

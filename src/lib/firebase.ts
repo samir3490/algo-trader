@@ -179,6 +179,9 @@ export interface StrategyRunnerMeta {
   lastRunAt?: string;
   /** Last automated cron scan (weekdays, market hours). */
   lastCronAt?: string;
+  /** IST date (YYYY-MM-DD) when daily P&L email was last sent. */
+  lastDailyPnlEmailDate?: string;
+  lastDailyPnlEmailAt?: string;
   lastScanSummary?: {
     ranAt: string;
     scanned: number;

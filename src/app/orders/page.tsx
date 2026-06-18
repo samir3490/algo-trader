@@ -306,8 +306,76 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {/* Orders Table */}
-      <div className="rounded-xl border border-border bg-bg-secondary overflow-hidden">
+      {/* Orders — mobile cards */}
+      <div className="md:hidden space-y-2">
+        {isLoading ? (
+          <div className="flex items-center justify-center gap-2 py-12 text-text-tertiary">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Loading orders...
+          </div>
+        ) : filtered.length === 0 ? (
+          <p className="py-12 text-center text-sm text-text-tertiary">
+            No orders found matching your filters.
+          </p>
+        ) : (
+          filtered.map((order) => {
+            const sc = statusConfig[order.status] || statusConfig.PENDING;
+            const StatusIcon = sc.icon;
+            return (
+              <div
+                key={order.id}
+                className="rounded-xl border border-border bg-bg-secondary p-3 space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-text-primary">
+                      {order.symbol}{" "}
+                      <span className="text-xs text-text-tertiary">{order.exchange}</span>
+                    </p>
+                    <p className="text-[10px] text-text-tertiary">
+                      {formatDateTimeCompactIST(order.time, order.date)}
+                    </p>
+                  </div>
+                  <span
+                    className={`inline-flex items-center gap-1 text-xs font-semibold ${
+                      order.side === "BUY" ? "text-profit" : "text-loss"
+                    }`}
+                  >
+                    {order.side}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 text-xs">
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 ${sc.color} ${sc.bg}`}>
+                    <StatusIcon className="h-3 w-3" />
+                    {sc.label}
+                  </span>
+                  <span
+                    className={`rounded-md px-2 py-0.5 font-semibold ${
+                      order.mode === "LIVE"
+                        ? "bg-loss/10 text-loss"
+                        : "bg-accent/10 text-accent"
+                    }`}
+                  >
+                    {order.mode}
+                  </span>
+                  <span className="text-text-secondary">{order.type}</span>
+                </div>
+                <div className="flex justify-between text-xs text-text-secondary">
+                  <span>
+                    {order.quantity} @ {formatCurrency(order.price)}
+                  </span>
+                  <span className="font-medium text-text-primary">
+                    {formatCurrency(order.price * order.quantity)}
+                  </span>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Orders Table — desktop */}
+      <div className="hidden md:block rounded-xl border border-border bg-bg-secondary overflow-hidden">
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">

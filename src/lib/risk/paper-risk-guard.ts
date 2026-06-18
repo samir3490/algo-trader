@@ -67,6 +67,15 @@ export function isPastMisSquareOff(squareOffTime: string, now = new Date()): boo
   return minutes >= hh * 60 + mm;
 }
 
+/** True when position or default product is MIS intraday. */
+export function isMisProduct(
+  product: string | undefined,
+  settings: Pick<AppSettings, "paperDefaultProduct">
+): boolean {
+  const p = (product ?? settings.paperDefaultProduct ?? "CNC").toUpperCase();
+  return p === "MIS";
+}
+
 export function evaluateHoldingRiskExit(
   holding: PaperHoldingLike,
   settings: Pick<
@@ -107,7 +116,7 @@ export function evaluateHoldingRiskExit(
   }
 
   if (
-    settings.paperDefaultProduct === "MIS" &&
+    isMisProduct(settings.paperDefaultProduct, settings) &&
     isPastMisSquareOff(settings.squareOffTime, now)
   ) {
     return {
@@ -210,7 +219,7 @@ export function evaluatePositionRiskExit(
   }
 
   if (
-    settings.paperDefaultProduct === "MIS" &&
+    isMisProduct(position.product, settings) &&
     isPastMisSquareOff(settings.squareOffTime, now)
   ) {
     return {

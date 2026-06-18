@@ -1244,8 +1244,8 @@ function SettingsContent() {
             },
             {
               key: "pnlAlerts" as const,
-              label: "P&L Alerts",
-              desc: "Notify on significant profit or loss thresholds",
+              label: "Daily P&L email",
+              desc: "End-of-day paper portfolio summary after market close (15:35 IST)",
             },
           ].map((item) => (
             <div

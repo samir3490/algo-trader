@@ -13,8 +13,8 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 | **1** | Stabilize & trust paper auto-trading | 2–4 weeks | **Mostly shipped** |
 | **2** | Smarter entries & exits (paper only) | 3–5 weeks | **Shipped** |
 | **3** | Live trading automation (real money) | 4–8 weeks | Not started |
-| **4** | Analytics & optimization | Ongoing | Not started |
-| **5** | Product & ops polish | Ongoing | Partial (email alerts, drawer UI) |
+| **4** | Analytics & optimization | Ongoing | Done |
+| **5** | Product & ops polish | Ongoing | Partial (mobile UI, audit & compliance) |
 
 **Suggested order:** Phase 1 → Phase 2.1–2.3 → 4+ weeks stable paper → Phase 3 → Phase 4 in parallel.
 
@@ -86,11 +86,11 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 
 **Goal:** Know what works before scaling capital.
 
-- [ ] **Portfolio analytics** — Sharpe, max drawdown, profit factor, by strategy / symbol / month
-- [ ] **Walk-forward / out-of-sample backtest** — e.g. train on 2023, test on 2024
-- [ ] **Parameter tuning** — grid search RSI period, MA lengths per symbol (with overfitting warnings)
-- [ ] **Trade journal** — why each trade happened (signal, strength, gate passed); CSV export
-- [ ] **Benchmark** — paper P&L vs Nifty 50 buy-and-hold on same dates
+- [x] **Portfolio analytics** — Sharpe, max drawdown, profit factor, by strategy / symbol / month
+- [x] **Walk-forward / out-of-sample backtest** — e.g. train on 2023, test on 2024
+- [x] **Parameter tuning** — grid search RSI period, MA lengths per symbol (with overfitting warnings)
+- [x] **Trade journal** — why each trade happened (signal, strength, gate passed); CSV export
+- [x] **Benchmark** — paper P&L vs Nifty 50 buy-and-hold on same dates
 
 Can run in parallel once you have enough paper trade history.
 
@@ -101,10 +101,10 @@ Can run in parallel once you have enough paper trade history.
 **Goal:** Production-grade UX and operations.
 
 - [ ] **Telegram bot** — buys, sells, risk exits, cron failures (email exists today)
-- [x] **Mobile-friendly UI** — partial (drawer order panel, responsive holdings)
+- [x] **Mobile-friendly UI** — bottom nav, responsive cards on orders/audit/analytics
 - [ ] **Multi-account** — separate paper portfolios or tags per strategy bundle
 - [ ] **PostgreSQL cache** — faster backtests, historical candle store (`DATABASE_URL` optional)
-- [ ] **Audit & compliance** — full trade audit trail, daily P&L email, 3 PM square-off enforcement
+- [x] **Audit & compliance** — trade audit trail + CSV, daily P&L email, MIS square-off cron (15:15 IST)
 
 ---
 

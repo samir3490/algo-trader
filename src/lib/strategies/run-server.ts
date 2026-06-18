@@ -4,6 +4,7 @@ import type { ActiveStrategy } from "@/lib/firebase";
 import {
   DEFAULT_SETTINGS,
   type AppSettings,
+  type PaperTrade,
   type PaperTradingState,
 } from "@/lib/firebase";
 import {
@@ -42,6 +43,7 @@ import {
 } from "@/lib/portfolio/paper-order-record-server";
 import { paperTradeToOrderRecord } from "@/lib/portfolio/paper-order-record";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
+import { formatTradeAuditMessage } from "@/lib/audit/trade-execution-audit";
 import { formatScanAuditMessage, addScanDetail } from "@/lib/strategies/scan-diagnostics";
 import { writeSystemLog } from "@/lib/core/system-log";
 import { nowISTDateTimeString } from "@/lib/utils";
@@ -256,6 +258,31 @@ async function loadUserSettings(
   return normalizeAppSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as AppSettings);
 }
 
+async function logTradeExecutionAudit(
+  db: Firestore,
+  userId: string,
+  trade: PaperTrade,
+  source = "TradeExecution"
+): Promise<void> {
+  await appendUserAuditLogAdmin(db, userId, {
+    severity: "INFO",
+    source,
+    message: formatTradeAuditMessage(trade),
+    meta: {
+      tradeId: trade.id,
+      symbol: trade.symbol,
+      exchange: trade.exchange,
+      side: trade.side,
+      qty: trade.qty,
+      price: trade.price,
+      netPnl: trade.netPnl,
+      exitReason: trade.exitReason,
+      strategyName: trade.strategyName,
+      buySignalCount: trade.buySignalCount,
+    },
+  });
+}
+
 async function loadRunnerMeta(db: Firestore, userId: string) {
   const snap = await db.doc(`users/${userId}/data/strategyRunner`).get();
   const data = snap.data();
@@ -430,6 +457,12 @@ export async function runStrategiesForUser(
       paperState.trades ?? [],
       { product: userSettings.paperDefaultProduct }
     );
+    const newRiskTrades = (paperState.trades ?? []).filter(
+      (t) => !tradesBeforeRisk.some((old) => old.id === t.id)
+    );
+    for (const t of newRiskTrades) {
+      await logTradeExecutionAudit(db, userId, t, "RiskExit");
+    }
     const cooldownMs = (userSettings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
     for (const exit of riskResult.exits) {
       const key = symKey(exit.symbol, exit.exchange);
@@ -769,6 +802,13 @@ export async function runStrategiesForUser(
       );
 
       if (trade) {
+        await logTradeExecutionAudit(db, userId, {
+          ...trade,
+          qty: tradeQty,
+          reason: strengthLabel
+            ? `${decision.signalReason} · ${strengthLabel}`
+            : trade.reason,
+        });
         await persistPaperOrderAdmin(
           db,
           userId,
@@ -976,6 +1016,7 @@ export async function runStrategiesForUser(
         );
 
         if (trade) {
+          await logTradeExecutionAudit(db, userId, { ...trade, qty: tradeQty });
           await persistPaperOrderAdmin(
             db,
             userId,

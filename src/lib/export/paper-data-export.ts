@@ -11,6 +11,7 @@ import {
 } from "@/lib/strategies/strategy-performance";
 import { formatTradeDateTime } from "@/lib/paper-trades/normalize";
 import { downloadCsv, exportDateStamp, rowsToCsv } from "./csv";
+import { buildTradeJournalCsv } from "./trade-journal";
 
 export type PaperExportKind =
   | "trades"
@@ -19,6 +20,7 @@ export type PaperExportKind =
   | "orders"
   | "summary"
   | "strategy-pnl"
+  | "journal"
   | "all";
 
 export interface PaperExportInput {
@@ -267,6 +269,10 @@ export function buildStrategyPnlCsv(input: PaperExportInput): string {
   );
 }
 
+function buildJournalCsv(input: PaperExportInput): string {
+  return buildTradeJournalCsv(input.trades, input.positions);
+}
+
 const BUILDERS: Record<
   Exclude<PaperExportKind, "all">,
   (input: PaperExportInput) => string
@@ -277,6 +283,7 @@ const BUILDERS: Record<
   orders: buildOrdersCsv,
   summary: buildSummaryCsv,
   "strategy-pnl": buildStrategyPnlCsv,
+  journal: buildJournalCsv,
 };
 
 const FILE_LABELS: Record<Exclude<PaperExportKind, "all">, string> = {
@@ -286,6 +293,7 @@ const FILE_LABELS: Record<Exclude<PaperExportKind, "all">, string> = {
   orders: "orders",
   summary: "portfolio-summary",
   "strategy-pnl": "strategy-pnl",
+  journal: "trade-journal",
 };
 
 export function downloadPaperExport(

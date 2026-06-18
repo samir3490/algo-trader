@@ -27,7 +27,7 @@ export default function MainContent({ children }: { children: React.ReactNode })
       <main
         className={cn(
           "flex-1 overflow-y-auto transition-all duration-300",
-          "ml-0",
+          "ml-0 pb-[calc(4.5rem+env(safe-area-inset-bottom,0px))] md:pb-0",
           sidebarOpen ? "md:ml-64" : "md:ml-[72px]"
         )}
       >
