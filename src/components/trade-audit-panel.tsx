@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, Download, RefreshCw } from "lucide-react";
-import { cn, formatCurrency } from "@/lib/utils";
+import {
+  cn,
+  formatCurrency,
+  formatDateTimeCompactIST,
+  formatDateTimeIST,
+  tableDateTimeTdClass,
+  tableDateTimeThClass,
+} from "@/lib/utils";
 import { buildTradeAuditLog } from "@/lib/portfolio/trade-audit";
 import { useTableSort } from "@/hooks/use-table-sort";
 import SortableTh from "@/components/ui/sortable-th";
@@ -12,11 +19,29 @@ import { getPaperTradingState } from "@/lib/firebase";
 import type { PaperTrade } from "@/lib/firebase";
 import type { TradeAuditEntry } from "@/lib/portfolio/types";
 
+function formatAuditWhen(r: TradeAuditEntry): string {
+  const raw = r.executedAt ?? (r.side === "SELL" ? r.exitTime : r.entryTime);
+  if (!raw) return "—";
+  return formatDateTimeCompactIST(raw);
+}
+
 function AuditCard({ r }: { r: TradeAuditEntry }) {
+  const whenLabel = formatAuditWhen(r);
+  const whenTitle =
+    r.executedAt ?? r.exitTime ?? r.entryTime
+      ? formatDateTimeIST(r.executedAt ?? r.exitTime ?? r.entryTime!)
+      : undefined;
+
   return (
     <div className="rounded-lg border border-border bg-bg-primary/50 p-3 space-y-2">
       <div className="flex items-start justify-between gap-2">
         <div>
+          <p
+            className={cn(tableDateTimeTdClass, "text-[11px] text-text-tertiary mb-0.5")}
+            title={whenTitle}
+          >
+            {whenLabel}
+          </p>
           <p className="text-sm font-semibold text-text-primary">
             {r.symbol}{" "}
             <span
@@ -153,23 +178,36 @@ export default function TradeAuditPanel() {
           </div>
 
           <div className="hidden md:block overflow-x-auto max-h-[min(70vh,560px)] overflow-y-auto">
-            <table className="w-full text-xs">
-              <thead>
+            <table className="w-full text-xs min-w-[900px]">
+              <thead className="sticky top-0 z-10 bg-bg-secondary">
                 <tr className="border-b border-border text-text-tertiary text-left">
-                  <SortableTh sortKey="strategy" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Strategy</SortableTh>
-                  <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Symbol</SortableTh>
-                  <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Side</SortableTh>
-                  <SortableTh sortKey="signal" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Signal</SortableTh>
-                  <SortableTh sortKey="strength" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Strength</SortableTh>
-                  <SortableTh sortKey="entry" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Entry</SortableTh>
-                  <SortableTh sortKey="exit" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Exit</SortableTh>
-                  <SortableTh sortKey="exitReason" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Exit reason</SortableTh>
-                  <SortableTh sortKey="pnl" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-2 pr-3">P&amp;L</SortableTh>
+                  <SortableTh sortKey="when" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className={cn(tableDateTimeThClass, "py-2 pr-2 font-semibold uppercase tracking-wider")}>When</SortableTh>
+                  <SortableTh sortKey="strategy" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Strategy</SortableTh>
+                  <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Symbol</SortableTh>
+                  <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Side</SortableTh>
+                  <SortableTh sortKey="signal" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Signal</SortableTh>
+                  <SortableTh sortKey="strength" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Strength</SortableTh>
+                  <SortableTh sortKey="entry" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Entry</SortableTh>
+                  <SortableTh sortKey="exit" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Exit</SortableTh>
+                  <SortableTh sortKey="exitReason" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Exit reason</SortableTh>
+                  <SortableTh sortKey="pnl" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-2 pr-3 font-semibold uppercase tracking-wider">P&amp;L</SortableTh>
                 </tr>
               </thead>
               <tbody>
                 {sortedRows.map((r) => (
                   <tr key={r.id} className="border-b border-border/40">
+                    <td
+                      className={cn(tableDateTimeTdClass, "py-2 pr-2")}
+                      title={
+                        r.executedAt ?? r.exitTime ?? r.entryTime
+                          ? formatDateTimeIST(
+                              r.executedAt ?? r.exitTime ?? r.entryTime!
+                            )
+                          : undefined
+                      }
+                    >
+                      {formatAuditWhen(r)}
+                    </td>
                     <td className="py-2 pr-3 text-text-primary font-medium">
                       {r.strategyName}
                     </td>

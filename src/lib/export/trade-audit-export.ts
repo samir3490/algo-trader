@@ -5,6 +5,7 @@ export function buildTradeAuditCsv(rows: TradeAuditEntry[]): string {
   return rowsToCsv(
     [
       "id",
+      "executedAt",
       "strategyName",
       "symbol",
       "exchange",
@@ -21,6 +22,7 @@ export function buildTradeAuditCsv(rows: TradeAuditEntry[]): string {
     ],
     rows.map((r) => [
       r.id,
+      r.executedAt ?? "",
       r.strategyName,
       r.symbol,
       r.exchange,
