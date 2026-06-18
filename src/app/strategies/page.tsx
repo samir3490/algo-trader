@@ -373,7 +373,7 @@ function StrategiesPageContent() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<StrategyType>("sma");
   const [modalSymbols, setModalSymbols] = useState("RELIANCE");
-  const [modalSymbols, setModalSymbols] = useState("RELIANCE");
+  const [modalTimeframe, setModalTimeframe] = useState<Timeframe>("15min");
   const [modalPaper, setModalPaper] = useState(true);
   const [modalParams, setModalParams] = useState<Record<string, number>>(() =>
     getDefaultParams(STRATEGY_DEFINITIONS[0])
