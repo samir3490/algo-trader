@@ -1,5 +1,5 @@
 import type { OrderRecord, PaperTrade } from "@/lib/firebase";
-import { formatDateTimeIST } from "@/lib/utils";
+import { formatDateTimeIST, formatDateTimeCompactIST } from "@/lib/utils";
 
 const IST = "Asia/Kolkata";
 
@@ -39,6 +39,12 @@ export function formatTradeDateTime(t: PaperTrade): string {
   const ms = tradeExecutedAtMs(t);
   if (ms > 0) return formatDateTimeIST(ms);
   return formatDateTimeIST(t.time, t.date);
+}
+
+export function formatTradeDateTimeCompact(t: PaperTrade): string {
+  const ms = tradeExecutedAtMs(t);
+  if (ms > 0) return formatDateTimeCompactIST(ms);
+  return formatDateTimeCompactIST(t.time, t.date);
 }
 
 function exactFingerprint(t: PaperTrade): string {

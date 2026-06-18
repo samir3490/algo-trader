@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { formatDateTimeIST, parseDateTimeMs } from "./utils";
+import { formatDateTimeIST, formatDateTimeCompactIST, parseDateTimeMs } from "./utils";
 
 describe("formatDateTimeIST", () => {
   it("formats ISO timestamps with date and time", () => {
@@ -19,5 +19,15 @@ describe("formatDateTimeIST", () => {
     const a = parseDateTimeMs("09:00:00", "2026-05-27");
     const b = parseDateTimeMs("10:00:00", "2026-05-27");
     assert.ok(b > a);
+  });
+});
+
+describe("formatDateTimeCompactIST", () => {
+  it("omits seconds and is shorter than full format", () => {
+    const iso = "2026-05-27T10:30:45.000Z";
+    const full = formatDateTimeIST(iso);
+    const compact = formatDateTimeCompactIST(iso);
+    assert.ok(compact.length < full.length);
+    assert.doesNotMatch(compact, /:45/);
   });
 });

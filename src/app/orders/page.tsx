@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { formatCurrency, formatDateTimeIST, parseDateTimeMs } from "@/lib/utils";
+import {
+  cn,
+  formatCurrency,
+  formatDateTimeCompactIST,
+  formatDateTimeIST,
+  parseDateTimeMs,
+  tableDateTimeThClass,
+  tableDateTimeTdClass,
+} from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
   getOrders as getFirestoreOrders,
@@ -303,7 +311,7 @@ export default function OrdersPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Date &amp; time</th>
+              <th className={cn(tableDateTimeThClass, "px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary")}>When</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Symbol</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Side</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Type</th>
@@ -336,8 +344,11 @@ export default function OrdersPage() {
                 const StatusIcon = sc.icon;
                 return (
                   <tr key={order.id} className="transition-colors hover:bg-bg-hover/50">
-                    <td className="px-4 py-3 text-sm text-text-secondary font-mono">
-                      {formatDateTimeIST(order.time, order.date)}
+                    <td
+                      className={cn(tableDateTimeTdClass, "px-4 py-3")}
+                      title={formatDateTimeIST(order.time, order.date)}
+                    >
+                      {formatDateTimeCompactIST(order.time, order.date)}
                     </td>
                     <td className="px-4 py-3">
                       <div>

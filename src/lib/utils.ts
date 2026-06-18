@@ -31,6 +31,22 @@ export const IST_DATETIME_FORMAT: Intl.DateTimeFormatOptions = {
   hour12: false,
 };
 
+/** Shorter IST display for table columns — no seconds, minimal padding footprint. */
+export const IST_DATETIME_COMPACT_FORMAT: Intl.DateTimeFormatOptions = {
+  timeZone: IST,
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+};
+
+/** Table header/cell classes — `w-0` shrinks column to content width. */
+export const tableDateTimeThClass =
+  "text-left py-2 pl-3 pr-1 font-medium w-0 whitespace-nowrap";
+export const tableDateTimeTdClass =
+  "py-2 pl-3 pr-1 text-[10px] leading-tight text-text-tertiary font-mono whitespace-nowrap w-0";
+
 /** Current date+time in IST for storage and display. */
 export function nowISTDateTimeString(now = new Date()): string {
   return now.toLocaleString("en-IN", IST_DATETIME_FORMAT);
@@ -86,6 +102,37 @@ export function formatDateTimeIST(
 
   if (fallbackDate) return `${fallbackDate} ${str}`.trim();
   return str;
+}
+
+/** Compact IST label for tables, e.g. `27 May 16:05` (full string in title/tooltip). */
+export function formatDateTimeCompactIST(
+  value: string | number | Date | null | undefined,
+  fallbackDate?: string
+): string {
+  const ms = parseDateTimeMs(value, fallbackDate);
+  if (ms > 0) {
+    const d = new Date(ms);
+    const year = d.toLocaleDateString("en-CA", { timeZone: IST, year: "numeric" });
+    const nowYear = new Date().toLocaleDateString("en-CA", {
+      timeZone: IST,
+      year: "numeric",
+    });
+    const datePart = d.toLocaleDateString("en-IN", {
+      ...IST_DATETIME_COMPACT_FORMAT,
+      ...(year !== nowYear ? { year: "2-digit" as const } : {}),
+    });
+    const timePart = d.toLocaleTimeString("en-GB", {
+      timeZone: IST,
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    return `${datePart} ${timePart}`;
+  }
+
+  const full = formatDateTimeIST(value, fallbackDate);
+  if (full === "—") return full;
+  return full.replace(/:\d{2}(?=\s*$)/, "").replace(/,?\s*\d{4}/, "");
 }
 
 export function formatPercent(value: number): string {

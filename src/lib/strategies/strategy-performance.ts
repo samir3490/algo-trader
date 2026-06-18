@@ -1,6 +1,7 @@
 import type { PaperTrade } from "@/lib/firebase";
 import {
   formatTradeDateTime,
+  formatTradeDateTimeCompact,
   isStrategyTrade,
   tradeExecutedAtMs,
 } from "@/lib/paper-trades/normalize";
@@ -35,6 +36,8 @@ export interface StrategyTradeEvent {
   total: number;
   executedAtMs: number;
   dateTimeLabel: string;
+  /** Full timestamp for hover tooltip. */
+  dateTimeTitle?: string;
   reason?: string;
   strategyNames?: string[];
   unknownStrategyCount?: number;
@@ -440,7 +443,8 @@ export function computeStrategyDetailBundles(
             price: t.price,
             total: t.qty * t.price,
             executedAtMs,
-            dateTimeLabel: formatTradeDateTime(t),
+            dateTimeLabel: formatTradeDateTimeCompact(t),
+            dateTimeTitle: formatTradeDateTime(t),
             reason: t.reason,
             strategyNames: t.displayStrategyNames,
             unknownStrategyCount: t.unknownStrategyCount,
@@ -471,7 +475,8 @@ export function computeStrategyDetailBundles(
             price: t.price,
             total: t.qty * t.price,
             executedAtMs,
-            dateTimeLabel: formatTradeDateTime(t),
+            dateTimeLabel: formatTradeDateTimeCompact(t),
+            dateTimeTitle: formatTradeDateTime(t),
             reason: t.reason,
             strategyNames: t.displayStrategyNames,
             unknownStrategyCount: t.unknownStrategyCount,

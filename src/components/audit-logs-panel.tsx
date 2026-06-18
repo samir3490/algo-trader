@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { ScrollText, RefreshCw } from "lucide-react";
-import { cn, formatDateTimeIST } from "@/lib/utils";
+import { cn, formatDateTimeCompactIST, formatDateTimeIST, tableDateTimeThClass, tableDateTimeTdClass } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import type { UserAuditEntry } from "@/lib/audit/user-audit-log";
 
@@ -82,7 +82,7 @@ export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border text-text-tertiary text-left">
-              <th className="py-2 pr-3">Date &amp; time</th>
+              <th className={cn(tableDateTimeThClass, "py-2 pr-2")}>When</th>
               <th className="py-2 pr-3">Level</th>
               <th className="py-2 pr-3">Source</th>
               <th className="py-2">Message</th>
@@ -91,8 +91,11 @@ export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
           <tbody>
             {logs.map((l) => (
               <tr key={l.id} className="border-b border-border/40">
-                <td className="py-2 pr-3 text-text-tertiary whitespace-nowrap">
-                  {formatDateTimeIST(l.timestamp)}
+                <td
+                  className={cn(tableDateTimeTdClass, "py-2 pr-2")}
+                  title={formatDateTimeIST(l.timestamp)}
+                >
+                  {formatDateTimeCompactIST(l.timestamp)}
                 </td>
                 <td className="py-2 pr-3">
                   <span

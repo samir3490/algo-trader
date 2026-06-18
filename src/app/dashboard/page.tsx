@@ -27,7 +27,7 @@ import {
   YAxis,
   Tooltip,
 } from "recharts";
-import { cn, formatCurrency, formatPercent, getMarketStatus, isMarketOpen } from "@/lib/utils";
+import { cn, formatCurrency, formatPercent, getMarketStatus, isMarketOpen, tableDateTimeThClass, tableDateTimeTdClass } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
   getPaperTradingState,
@@ -39,7 +39,7 @@ import {
   type PaperTrade,
 } from "@/lib/firebase";
 import { enrichTradesWithStrategy } from "@/lib/strategies/strategy-performance";
-import { formatTradeDateTime, normalizePaperTrades } from "@/lib/paper-trades/normalize";
+import { formatTradeDateTime, formatTradeDateTimeCompact, normalizePaperTrades } from "@/lib/paper-trades/normalize";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { loadSettingsFromCache } from "@/lib/settings/cache";
 import {
@@ -779,7 +779,7 @@ export default function DashboardPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border text-text-tertiary uppercase tracking-wider">
-                    <th className="text-left py-2 px-5 font-medium">Date &amp; time</th>
+                    <th className={cn(tableDateTimeThClass, "text-text-tertiary uppercase tracking-wider")}>When</th>
                     <th className="text-left py-2 px-5 font-medium">Symbol</th>
                     <th className="text-left py-2 px-5 font-medium">Strategy</th>
                     <th className="text-left py-2 px-5 font-medium">Side</th>
@@ -799,8 +799,11 @@ export default function DashboardPage() {
                           isBuy ? "hover:bg-profit/[0.05]" : "hover:bg-loss/[0.05]"
                         )}
                       >
-                        <td className="py-2.5 px-5 text-text-tertiary font-mono whitespace-nowrap">
-                          {formatTradeDateTime(t)}
+                        <td
+                          className={cn(tableDateTimeTdClass)}
+                          title={formatTradeDateTime(t)}
+                        >
+                          {formatTradeDateTimeCompact(t)}
                         </td>
                         <td className="py-2.5 px-5 font-medium text-text-primary">{t.symbol}</td>
                         <td className="py-2.5 px-5">

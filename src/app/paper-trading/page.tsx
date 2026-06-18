@@ -18,7 +18,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from "lucide-react";
-import { cn, formatCurrency, formatPercent, formatNumber, isMarketOpen } from "@/lib/utils";
+import { cn, formatCurrency, formatPercent, formatNumber, isMarketOpen, tableDateTimeThClass, tableDateTimeTdClass } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
   getPaperTradingState,
@@ -61,6 +61,7 @@ import {
 import StrategyBadges from "@/components/strategy-badges";
 import {
   formatTradeDateTime,
+  formatTradeDateTimeCompact,
   normalizePaperTrades,
   tradesNormalizedChanged,
   tradeExecutedAtMs,
@@ -1479,7 +1480,7 @@ export default function PaperTradingPage() {
                                       <table className="w-full text-xs">
                                         <thead>
                                           <tr className="text-text-tertiary uppercase tracking-wider border-b border-border/40">
-                                            <th className="text-left py-2 px-4 font-medium">Date &amp; time</th>
+                                            <th className={cn(tableDateTimeThClass, "py-2 px-4")}>When</th>
                                             <th className="text-left py-2 px-4 font-medium">Strategies</th>
                                             <th className="text-left py-2 px-4 font-medium">Side</th>
                                             <th className="text-right py-2 px-4 font-medium">Qty</th>
@@ -1496,7 +1497,10 @@ export default function PaperTradingPage() {
                                                 key={ev.tradeId}
                                                 className="border-b border-border/30 last:border-0"
                                               >
-                                                <td className="py-2 px-4 text-text-secondary font-mono whitespace-nowrap">
+                                                <td
+                                                  className={cn(tableDateTimeTdClass, "py-2 px-4")}
+                                                  title={ev.dateTimeTitle ?? ev.dateTimeLabel}
+                                                >
                                                   {ev.dateTimeLabel}
                                                 </td>
                                                 <td className="py-2 px-4">
@@ -1603,7 +1607,7 @@ export default function PaperTradingPage() {
           <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-border">
-                <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Date &amp; time</th>
+                <th className={cn(tableDateTimeThClass, "text-xs text-text-tertiary uppercase tracking-wider py-3 pl-5 pr-1")}>When</th>
                 <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Symbol</th>
                 <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Strategy</th>
                 <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Side</th>
@@ -1645,8 +1649,11 @@ export default function PaperTradingPage() {
                         : "bg-loss/[0.03] hover:bg-loss/[0.07]"
                     )}
                   >
-                    <td className="py-3 px-5 text-text-secondary font-mono text-xs whitespace-nowrap">
-                      {formatTradeDateTime(t)}
+                    <td
+                      className={cn(tableDateTimeTdClass, "py-3 pl-5 pr-1")}
+                      title={formatTradeDateTime(t)}
+                    >
+                      {formatTradeDateTimeCompact(t)}
                     </td>
                     <td className="py-3 px-5 font-medium text-text-primary">
                       {t.symbol}
