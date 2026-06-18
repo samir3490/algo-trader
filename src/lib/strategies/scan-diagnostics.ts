@@ -1,3 +1,24 @@
+export interface ScanSymbolDetail {
+  symbol: string;
+  meta?: string;
+}
+
+/** Keys for drill-down symbol lists shown in the last-scan panel. */
+export type ScanDetailKey =
+  | "buySignals"
+  | "sellSignals"
+  | "buyApproved"
+  | "sellApproved"
+  | "paperExec"
+  | "liveOnly"
+  | "openPositions"
+  | "deferred"
+  | "portfolioSkip"
+  | "gateBlocked"
+  | "dedupeBlocked"
+  | "priceCorrected"
+  | "riskBlocked";
+
 export interface ScanDiagnostics {
   buySignals: number;
   sellSignals: number;
@@ -19,6 +40,20 @@ export interface ScanDiagnostics {
   openPositions?: number;
   paperBalance?: number;
   maxPositions?: number;
+  /** Symbol lists for clickable stats in the UI. */
+  details?: Partial<Record<ScanDetailKey, ScanSymbolDetail[]>>;
+}
+
+export function addScanDetail(
+  diagnostics: ScanDiagnostics,
+  key: ScanDetailKey,
+  symbol: string,
+  meta?: string
+): void {
+  if (!diagnostics.details) diagnostics.details = {};
+  const list = diagnostics.details[key] ?? [];
+  list.push(meta ? { symbol, meta } : { symbol });
+  diagnostics.details[key] = list;
 }
 
 export function formatScanAuditMessage(

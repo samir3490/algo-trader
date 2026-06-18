@@ -12,16 +12,10 @@ import {
   ChevronDown,
   Zap,
   Shield,
-  Info,
-  Target,
-  Signal,
-  Hash,
   Loader2,
   BarChart3,
   ScrollText,
-  Clock,
   CheckCircle2,
-  RotateCcw,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -385,7 +379,7 @@ function StrategiesPageContent() {
   >(null);
   const [scanFeedback, setScanFeedback] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
-  const [isMigrating, setIsMigrating] = useState(false);
+  const [expandedCard, setExpandedCard] = useState<StrategyType | null>(null);
   const [paperTotalPnl, setPaperTotalPnl] = useState<number | null>(null);
 
   // Load persisted strategies on mount (avoid persisting empty state before hydration)
@@ -520,47 +514,6 @@ function StrategiesPageContent() {
     setModalOpen(false);
   }, [modalType, modalSymbols, modalPaper, modalParams, modalTimeframe]);
 
-  const handleMigrateUniverse = async () => {
-    const n = activeStrategies.length;
-    const msg =
-      n > 0
-        ? `Replace all ${n} active strategies with 12 Nifty 50 universe scanners (one per strategy type)? This cannot be undone.`
-        : "Create 12 Nifty 50 universe scanners (one per strategy type)?";
-    if (!window.confirm(msg)) return;
-
-    setIsMigrating(true);
-    try {
-      const { getAuth } = await import("firebase/auth");
-      const { app } = await import("@/lib/firebase");
-      const auth = getAuth(app);
-      const token = await auth.currentUser?.getIdToken();
-      if (!token) {
-        alert("Sign in required.");
-        return;
-      }
-      const res = await fetch("/api/strategies/migrate-universe", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ mode: "paper", timeframe: "Day" }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        alert((data.error as string) ?? "Migration failed");
-        return;
-      }
-      alert(data.message as string);
-      const fs = await getFirestoreStrategies();
-      setActiveStrategies(firestoreToLocal(fs));
-      saveActiveStrategiesToCache(firestoreToLocal(fs));
-      window.dispatchEvent(new CustomEvent("strategies-updated"));
-    } finally {
-      setIsMigrating(false);
-    }
-  };
-
   const toggleCardActive = useCallback(
     (id: StrategyType) => {
       const state = cardState[id];
@@ -629,10 +582,8 @@ function StrategiesPageContent() {
   };
 
   // Performance stats
-  const totalSignals = activeStrategies.reduce((sum, s) => sum + s.signals, 0);
   const totalPnl = paperTotalPnl ?? 0;
   const runningCount = activeStrategies.filter((s) => s.status === "running").length;
-  const pausedCount = activeStrategies.filter((s) => s.status === "paused").length;
 
   useEffect(() => {
     async function loadPaperPnl() {
@@ -797,19 +748,6 @@ function StrategiesPageContent() {
           </button>
           <button
             type="button"
-            onClick={handleMigrateUniverse}
-            disabled={isMigrating}
-            className="inline-flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
-          >
-            {isMigrating ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <RotateCcw className="h-4 w-4" />
-            )}
-            Universe scan (Nifty 50)
-          </button>
-          <button
-            type="button"
             onClick={handleRunScanNow}
             disabled={isScanning || runningCount === 0}
             className="inline-flex items-center gap-2 rounded-xl border border-emerald-600/50 bg-emerald-600/10 px-4 py-2.5 text-sm font-medium text-emerald-400 transition-colors hover:bg-emerald-600/20 disabled:opacity-50"
@@ -888,165 +826,41 @@ function StrategiesPageContent() {
 
       {pageSection === "configure" && (
         <>
-      <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-4 mb-2">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-400 mt-0.5 shrink-0" />
-            <div>
-              <h3 className="text-sm font-semibold text-emerald-300">Automatic paper trading is ON</h3>
-              <p className="mt-1 text-xs text-text-secondary leading-relaxed">
-                Server scans run <strong className="text-text-primary">every 15 minutes</strong> on
-                weekdays during NSE hours (9:15 AM–3:30 PM IST) via GitHub Actions. Top BUY signals
-                fill up to <strong className="text-text-primary">5 positions</strong> at ~₹1L each;
-                exits use your stop-loss / take-profit settings.
-              </p>
-              {lastCronAt && (
-                <p className="mt-2 text-xs text-emerald-400/90 flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5" />
-                  Last auto scan:{" "}
-                  {new Date(lastCronAt).toLocaleString("en-IN", {
-                    timeZone: "Asia/Kolkata",
-                    day: "2-digit",
-                    month: "short",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    hour12: false,
-                  })}{" "}
-                  IST
-                </p>
-              )}
-            </div>
-          </div>
-          {runningCount > 0 ? (
-            <span className="shrink-0 rounded-full bg-emerald-500/20 px-3 py-1 text-xs font-medium text-emerald-300">
-              {runningCount} strateg{runningCount === 1 ? "y" : "ies"} running
-            </span>
-          ) : (
-            <span className="shrink-0 rounded-full bg-amber-500/20 px-3 py-1 text-xs font-medium text-amber-300">
-              Start a strategy to enable scans
-            </span>
-          )}
+      <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 mb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-xs text-text-secondary">
+            <CheckCircle2 className="inline h-3.5 w-3.5 text-emerald-400 mr-1 -mt-0.5" />
+            Auto scans every <strong className="text-text-primary">15 min</strong> (NSE hours).
+            {lastCronAt && (
+              <span className="text-emerald-400/90 ml-2">
+                Last cron:{" "}
+                {new Date(lastCronAt).toLocaleString("en-IN", {
+                  timeZone: "Asia/Kolkata",
+                  day: "2-digit",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: false,
+                })}{" "}
+                IST
+              </span>
+            )}
+          </p>
+          <span
+            className={cn(
+              "shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-medium",
+              runningCount > 0
+                ? "bg-emerald-500/20 text-emerald-300"
+                : "bg-amber-500/20 text-amber-300"
+            )}
+          >
+            {runningCount > 0
+              ? `${runningCount} running`
+              : "Start a strategy to enable scans"}
+          </span>
         </div>
       </div>
       <LastScanPanel summary={lastScanSummary ?? null} className="mb-2" />
-      {/* ── How Strategies Work ────────────────────────────────────────── */}
-      <div className="rounded-xl border border-accent/30 bg-accent-muted p-5">
-        <div className="flex items-start gap-3">
-          <Info className="h-5 w-5 text-accent mt-0.5 shrink-0" />
-          <div className="space-y-2">
-            <h3 className="text-sm font-semibold text-brand">How Strategies Work</h3>
-            <ul className="space-y-1.5 text-xs text-text-secondary leading-relaxed">
-              <li className="flex items-start gap-2">
-                <Signal className="h-3.5 w-3.5 text-accent mt-0.5 shrink-0" />
-                <strong className="text-text-secondary">Auto scans</strong> run every{" "}
-                <strong className="text-text-primary">15 minutes</strong> on weekdays (GitHub Actions).
-                Use <strong className="text-text-primary">Run scan now</strong> for an immediate check.
-              </li>
-              <li className="flex items-start gap-2">
-                <Target className="h-3.5 w-3.5 text-accent mt-0.5 shrink-0" />
-                <strong className="text-amber-400">Paper mode:</strong> ranked{" "}
-                <strong className="text-text-primary">BUY</strong> signals open positions (~₹1L each,
-                max 5). SELL signals are ignored — exits use{" "}
-                <strong className="text-text-primary">stop-loss / take-profit</strong> (Settings → Risk).
-              </li>
-              <li className="flex items-start gap-2">
-                <Shield className="h-3.5 w-3.5 text-red-400 mt-0.5 shrink-0" />
-                <strong className="text-red-400">Live mode:</strong> signals are logged only; connect Zerodha and place orders manually until live auto-trade is enabled.
-              </li>
-              {lastRunnerAt && (
-                <li className="text-emerald-400/90 pt-1">
-                  Last scan:{" "}
-                  {new Date(lastRunnerAt).toLocaleString("en-IN", {
-                    timeZone: "Asia/Kolkata",
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                    hour12: false,
-                  })}{" "}
-                  IST
-                  {lastScanSummary && (
-                    <span className="text-text-tertiary">
-                      {" "}
-                      · {lastScanSummary.signalsFound} signals,{" "}
-                      {lastScanSummary.tradesExecuted} trades
-                      {lastScanSummary.diagnostics && (
-                        <>
-                          {" "}
-                          ({lastScanSummary.diagnostics.buySignals} BUY /{" "}
-                          {lastScanSummary.diagnostics.sellSignals} SELL)
-                        </>
-                      )}
-                    </span>
-                  )}
-                </li>
-              )}
-              {scanFeedback && (
-                <li
-                  className={cn(
-                    "pt-2 text-sm rounded-lg px-3 py-2 -mx-1",
-                    lastScanSummary &&
-                      lastScanSummary.tradesExecuted === 0 &&
-                      lastScanSummary.signalsFound > 0
-                      ? "bg-amber-500/10 text-amber-200"
-                      : "text-text-secondary"
-                  )}
-                >
-                  {scanFeedback}
-                </li>
-              )}
-            </ul>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Strategy Performance Overview ──────────────────────────────── */}
-      {activeStrategies.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="rounded-xl border border-border bg-bg-secondary p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Hash className="h-4 w-4 text-accent" />
-              <span className="text-xs text-text-secondary uppercase tracking-wider">Total Strategies</span>
-            </div>
-            <p className="text-xl font-bold text-text-primary">
-              {activeStrategies.length}
-            </p>
-            <p className="text-xs text-text-tertiary mt-1">
-              {runningCount} running · {pausedCount} paused
-            </p>
-          </div>
-          <div className="rounded-xl border border-border bg-bg-secondary p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Signal className="h-4 w-4 text-purple-400" />
-              <span className="text-xs text-text-secondary uppercase tracking-wider">Lifetime signals</span>
-            </div>
-            <p className="text-xl font-bold text-text-primary">{totalSignals}</p>
-            <p className="text-xs text-text-tertiary mt-1">Cumulative since strategies started</p>
-          </div>
-          <div className="rounded-xl border border-border bg-bg-secondary p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <TrendingUp className="h-4 w-4 text-emerald-400" />
-              <span className="text-xs text-text-secondary uppercase tracking-wider">Total P&amp;L</span>
-            </div>
-            <p className={cn("text-xl font-bold", totalPnl >= 0 ? "text-emerald-400" : "text-red-400")}>
-              {formatCurrency(totalPnl)}
-            </p>
-            <p className="text-xs text-text-tertiary mt-1">Paper portfolio (realized, excl. unrealized)</p>
-          </div>
-          <div className="rounded-xl border border-border bg-bg-secondary p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Target className="h-4 w-4 text-cyan-400" />
-              <span className="text-xs text-text-secondary uppercase tracking-wider">Unique Symbols</span>
-            </div>
-            <p className="text-xl font-bold text-text-primary">
-              {new Set(activeStrategies.map((s) => s.symbol)).size}
-            </p>
-            <p className="text-xs text-text-tertiary mt-1">Being monitored</p>
-          </div>
-        </div>
-      )}
 
       {/* Category filter */}
       <div className="flex flex-wrap items-center gap-2">
@@ -1069,178 +883,49 @@ function StrategiesPageContent() {
         </p>
       </div>
 
-      {/* Strategy Cards Grid */}
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+      {/* Strategy types — compact list */}
+      <div className="rounded-xl border border-border bg-bg-secondary divide-y divide-border">
         {filteredDefinitions.map((def) => {
           const state = cardState[def.id];
           const Icon = def.icon;
+          const expanded = expandedCard === def.id;
           return (
-            <div
-              key={def.id}
-              className={cn(
-                "group relative rounded-xl border p-5 transition-all duration-200",
-                state.active
-                  ? "border-accent/50 bg-bg-secondary shadow-lg shadow-accent/10"
-                  : "border-border bg-bg-secondary hover:border-border"
-              )}
-            >
-              {/* Status dot */}
-              <div className="absolute right-4 top-4">
-                <span
-                  className={cn(
-                    "inline-flex h-2.5 w-2.5 rounded-full",
-                    state.active ? "bg-profit shadow-sm shadow-profit/30" : "bg-border-light"
-                  )}
-                />
-              </div>
-
-              {/* Name & icon */}
-              <div className="mb-3 flex items-center gap-3">
+            <div key={def.id} className="px-4 py-3">
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <div
                   className={cn(
-                    "flex h-10 w-10 items-center justify-center rounded-lg",
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
                     state.active ? "bg-accent/25 text-accent" : "bg-bg-tertiary text-text-secondary"
                   )}
                 >
-                  <Icon className="h-5 w-5" />
+                  <Icon className="h-4 w-4" />
                 </div>
-                <div>
-                  <h3 className="text-base font-semibold text-text-primary">{def.name}</h3>
-                  <span
-                    className={cn(
-                      "text-[10px] font-medium uppercase tracking-wide",
-                      def.category === "advanced" ? "text-purple-400" : "text-text-tertiary"
-                    )}
-                  >
-                    {def.category}
-                  </span>
-                </div>
-              </div>
-
-              <p className="mb-3 text-sm leading-relaxed text-text-secondary">{def.description}</p>
-
-              <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
-                <div className="rounded-lg border border-border bg-bg-tertiary px-2.5 py-2">
-                  <span className="text-text-tertiary">Hist. win rate</span>
-                  <p className="font-semibold text-emerald-400">{def.winRate}%</p>
-                </div>
-                <div className="rounded-lg border border-border bg-bg-tertiary px-2.5 py-2">
-                  <span className="text-text-tertiary">Risk</span>
-                  <p
-                    className={cn(
-                      "font-semibold",
-                      def.riskLevel === "Low"
-                        ? "text-green-400"
-                        : def.riskLevel === "Medium"
-                          ? "text-amber-400"
-                          : "text-red-400"
-                    )}
-                  >
-                    {def.riskLevel}
-                  </p>
-                </div>
-                <div className="col-span-2 rounded-lg border border-border bg-bg-tertiary px-2.5 py-2">
-                  <span className="text-text-tertiary">Best for</span>
-                  <p className="text-text-secondary">{def.bestFor}</p>
-                </div>
-              </div>
-              <p className="mb-4 text-[11px] italic text-text-tertiary leading-relaxed">{def.feedback}</p>
-
-              {/* Parameter inputs */}
-              <div className="mb-4 space-y-2">
-                <span className="text-xs font-medium uppercase tracking-wider text-text-tertiary">
-                  Parameters
-                </span>
-                <div className="grid grid-cols-2 gap-2">
-                  {def.params.map((p) => (
-                    <div key={p.key}>
-                      <label className="mb-1 block text-xs text-text-tertiary">{p.label}</label>
-                      <input
-                        type="number"
-                        value={state.params[p.key]}
-                        onChange={(e) =>
-                          setCardState((prev) => ({
-                            ...prev,
-                            [def.id]: {
-                              ...prev[def.id],
-                              params: {
-                                ...prev[def.id].params,
-                                [p.key]: Number(e.target.value),
-                              },
-                            },
-                          }))
-                        }
-                        className="w-full rounded-lg border border-border bg-bg-primary px-3 py-1.5 text-sm text-text-primary outline-none transition-colors focus:border-accent"
-                      />
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Symbols (multi-symbol) */}
-              <div className="mb-3">
-                <label className="mb-1 block text-xs text-text-tertiary">Symbols (comma-separated)</label>
-                <input
-                  type="text"
-                  value={state.symbols}
-                  onChange={(e) =>
-                    setCardState((prev) => ({
-                      ...prev,
-                      [def.id]: { ...prev[def.id], symbols: e.target.value },
-                    }))
-                  }
-                  placeholder="RELIANCE, TCS, INFY"
-                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-1.5 text-sm uppercase text-text-primary outline-none transition-colors focus:border-accent placeholder:text-text-tertiary placeholder:normal-case"
-                />
-                {/* Preset buttons */}
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-[10px] text-text-tertiary">Presets:</span>
-                  {[
-                    { label: "Nifty 50", key: "nifty50" },
-                    { label: "Bank Nifty", key: "banknifty" },
-                    { label: "Top 100", key: "top100" },
-                  ].map((preset) => (
-                    <button
-                      key={preset.key}
-                      onClick={() => applyPreset("card", def.id, preset.key)}
-                      className="rounded px-2 py-0.5 text-[10px] font-medium text-accent bg-accent-muted hover:bg-accent-hover/20 transition-colors"
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="text-sm font-semibold text-text-primary">{def.name}</h3>
+                    <span
+                      className={cn(
+                        "text-[10px] font-medium uppercase",
+                        def.category === "advanced" ? "text-purple-400" : "text-text-tertiary"
+                      )}
                     >
-                      {preset.label}
-                    </button>
-                  ))}
+                      {def.category}
+                    </span>
+                    <span className="text-[10px] text-text-tertiary">
+                      {def.winRate}% win · {def.riskLevel} risk
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-tertiary truncate">{def.description}</p>
                 </div>
-              </div>
-
-              {/* Timeframe */}
-              <div className="mb-4">
-                <label className="mb-1 block text-xs text-text-tertiary">Timeframe</label>
-                <div className="relative">
-                  <select
-                    value={state.timeframe}
-                    onChange={(e) =>
-                      setCardState((prev) => ({
-                        ...prev,
-                        [def.id]: {
-                          ...prev[def.id],
-                          timeframe: e.target.value as Timeframe,
-                        },
-                      }))
-                    }
-                    className="w-full appearance-none rounded-lg border border-border bg-bg-primary px-3 py-1.5 text-sm text-text-primary outline-none transition-colors focus:border-accent"
-                  >
-                    {TIMEFRAMES.map((tf) => (
-                      <option key={tf} value={tf}>
-                        {tf}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
-                </div>
-              </div>
-
-              {/* Paper / Live toggle + Activate */}
-              <div className="flex items-center justify-between border-t border-border pt-4">
+                <span
+                  className={cn(
+                    "inline-flex h-2 w-2 shrink-0 rounded-full",
+                    state.active ? "bg-profit" : "bg-border-light"
+                  )}
+                  title={state.active ? "Active" : "Inactive"}
+                />
                 <button
+                  type="button"
                   onClick={() =>
                     setCardState((prev) => ({
                       ...prev,
@@ -1251,70 +936,147 @@ function StrategiesPageContent() {
                     }))
                   }
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors",
+                    "shrink-0 rounded-lg px-2 py-1 text-[10px] font-medium",
                     state.paperTrading
                       ? "bg-amber-500/10 text-amber-400"
                       : "bg-red-500/10 text-red-400"
                   )}
                 >
-                  {state.paperTrading ? (
-                    <Shield className="h-3.5 w-3.5" />
-                  ) : (
-                    <Zap className="h-3.5 w-3.5" />
-                  )}
                   {state.paperTrading ? "Paper" : "Live"}
                 </button>
-
                 <button
+                  type="button"
+                  onClick={() => setExpandedCard(expanded ? null : def.id)}
+                  className="shrink-0 rounded-lg border border-border px-2 py-1 text-[10px] text-text-secondary hover:bg-bg-tertiary"
+                >
+                  {expanded ? "Hide" : "Configure"}
+                </button>
+                <button
+                  type="button"
                   onClick={() => toggleCardActive(def.id)}
                   className={cn(
-                    "rounded-lg px-4 py-1.5 text-xs font-semibold transition-colors",
+                    "shrink-0 rounded-lg px-3 py-1 text-[10px] font-semibold",
                     state.active
-                      ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
-                      : "bg-accent text-brand hover:bg-accent-hover"
+                      ? "bg-emerald-500/10 text-emerald-400"
+                      : "bg-accent text-brand"
                   )}
                 >
-                  {state.active ? "Deactivate" : "Activate"}
+                  {state.active ? "On" : "Activate"}
                 </button>
               </div>
+
+              {expanded && (
+                <div className="mt-3 space-y-3 border-t border-border pt-3">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {def.params.map((p) => (
+                      <div key={p.key}>
+                        <label className="mb-0.5 block text-[10px] text-text-tertiary">
+                          {p.label}
+                        </label>
+                        <input
+                          type="number"
+                          value={state.params[p.key]}
+                          onChange={(e) =>
+                            setCardState((prev) => ({
+                              ...prev,
+                              [def.id]: {
+                                ...prev[def.id],
+                                params: {
+                                  ...prev[def.id].params,
+                                  [p.key]: Number(e.target.value),
+                                },
+                              },
+                            }))
+                          }
+                          className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs text-text-primary outline-none focus:border-accent"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap items-end gap-2">
+                    <div className="min-w-[200px] flex-1">
+                      <label className="mb-0.5 block text-[10px] text-text-tertiary">
+                        Symbols
+                      </label>
+                      <input
+                        type="text"
+                        value={state.symbols}
+                        onChange={(e) =>
+                          setCardState((prev) => ({
+                            ...prev,
+                            [def.id]: { ...prev[def.id], symbols: e.target.value },
+                          }))
+                        }
+                        className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs uppercase text-text-primary outline-none focus:border-accent"
+                      />
+                    </div>
+                    <div className="w-28">
+                      <label className="mb-0.5 block text-[10px] text-text-tertiary">
+                        Timeframe
+                      </label>
+                      <select
+                        value={state.timeframe}
+                        onChange={(e) =>
+                          setCardState((prev) => ({
+                            ...prev,
+                            [def.id]: {
+                              ...prev[def.id],
+                              timeframe: e.target.value as Timeframe,
+                            },
+                          }))
+                        }
+                        className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs text-text-primary outline-none focus:border-accent"
+                      >
+                        {TIMEFRAMES.map((tf) => (
+                          <option key={tf} value={tf}>
+                            {tf}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {[
+                      { label: "Nifty 50", key: "nifty50" },
+                      { label: "Bank Nifty", key: "banknifty" },
+                      { label: "Top 100", key: "top100" },
+                    ].map((preset) => (
+                      <button
+                        key={preset.key}
+                        type="button"
+                        onClick={() => applyPreset("card", def.id, preset.key)}
+                        className="rounded px-2 py-1 text-[10px] font-medium text-accent bg-accent-muted hover:bg-accent-hover/20"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
 
-      {/* Active strategies — quick link (full table on Active tab) */}
-      <div className="rounded-xl border border-border bg-bg-secondary px-5 py-4 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="text-base font-semibold text-text-primary">Active strategies</h2>
-          <p className="text-sm text-text-secondary mt-0.5">
-            {activeStrategies.length === 0
-              ? "None activated yet"
-              : `${runningCount} running · ${activeStrategies.length} total`}
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setSection("active")}
-            className="text-sm font-medium text-accent hover:underline"
-          >
-            View full list →
-          </button>
-          <button
-            type="button"
-            onClick={() => setSection("backtest")}
-            className="text-sm font-medium text-text-secondary hover:text-accent"
-          >
-            Backtest
-          </button>
-          <button
-            type="button"
-            onClick={() => setSection("audit")}
-            className="text-sm font-medium text-text-secondary hover:text-accent"
-          >
-            Audit logs
-          </button>
-        </div>
+      {/* Active strategies — quick link */}
+      <div className="rounded-xl border border-border bg-bg-secondary px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm text-text-secondary">
+          <span className="font-medium text-text-primary">Active:</span>{" "}
+          {activeStrategies.length === 0
+            ? "none"
+            : `${runningCount} running · ${activeStrategies.length} total`}
+          {activeStrategies.length > 0 && (
+            <span className="text-text-tertiary">
+              {" "}
+              · {formatCurrency(totalPnl)} paper P&amp;L
+            </span>
+          )}
+        </p>
+        <button
+          type="button"
+          onClick={() => setSection("active")}
+          className="text-xs font-medium text-accent hover:underline"
+        >
+          View all →
+        </button>
       </div>
 
         </>

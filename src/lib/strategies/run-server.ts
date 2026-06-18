@@ -42,7 +42,7 @@ import {
 } from "@/lib/portfolio/paper-order-record-server";
 import { paperTradeToOrderRecord } from "@/lib/portfolio/paper-order-record";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
-import { formatScanAuditMessage } from "@/lib/strategies/scan-diagnostics";
+import { formatScanAuditMessage, addScanDetail } from "@/lib/strategies/scan-diagnostics";
 import { writeSystemLog } from "@/lib/core/system-log";
 import { nowISTDateTimeString } from "@/lib/utils";
 import {
@@ -339,9 +339,36 @@ export async function runStrategiesForUser(
     maxPositions: 0,
   };
 
+  const buyStrategiesBySymbol = new Map<string, string[]>();
+  const sellStrategiesBySymbol = new Map<string, string[]>();
+
   for (const sig of rawSignals) {
-    if (sig.action === "BUY") diagnostics.buySignals += 1;
-    else if (sig.action === "SELL") diagnostics.sellSignals += 1;
+    const strat = running.find((s) => s.id === sig.strategyId);
+    const stratName = strat?.name ?? "Unknown";
+    if (sig.action === "BUY") {
+      diagnostics.buySignals += 1;
+      const names = buyStrategiesBySymbol.get(sig.symbol) ?? [];
+      if (!names.includes(stratName)) names.push(stratName);
+      buyStrategiesBySymbol.set(sig.symbol, names);
+      if (strat && resolveStrategyMode(strat) === "live") {
+        addScanDetail(diagnostics, "liveOnly", sig.symbol, `BUY · ${stratName}`);
+      }
+    } else if (sig.action === "SELL") {
+      diagnostics.sellSignals += 1;
+      const names = sellStrategiesBySymbol.get(sig.symbol) ?? [];
+      if (!names.includes(stratName)) names.push(stratName);
+      sellStrategiesBySymbol.set(sig.symbol, names);
+      if (strat && resolveStrategyMode(strat) === "live") {
+        addScanDetail(diagnostics, "liveOnly", sig.symbol, `SELL · ${stratName}`);
+      }
+    }
+  }
+
+  for (const [symbol, names] of buyStrategiesBySymbol) {
+    addScanDetail(diagnostics, "buySignals", symbol, names.join(", "));
+  }
+  for (const [symbol, names] of sellStrategiesBySymbol) {
+    addScanDetail(diagnostics, "sellSignals", symbol, names.join(", "));
   }
 
   function queueEmail(
@@ -491,6 +518,14 @@ export async function runStrategiesForUser(
   diagnostics.openPositions = openPositionCount;
   diagnostics.paperBalance = paperState.balance ?? 0;
   diagnostics.maxPositions = maxPositions;
+  for (const pos of getOpenPositions(paperState)) {
+    addScanDetail(
+      diagnostics,
+      "openPositions",
+      pos.symbol,
+      pos.ownerStrategyName
+    );
+  }
   const { ranked: rankedQueue, slotsToFill } = selectTopBuyDecisionsForScan(
     buyQueue,
     { openPositionCount, maxPositions }
@@ -500,6 +535,15 @@ export async function runStrategiesForUser(
   diagnostics.rankedBuyCandidates = rankedForDisplay;
   diagnostics.slotsToFill = slotsToFill;
   diagnostics.buyQueueSize = rankedQueue.length;
+  for (const d of buyQueue) {
+    const count = d.buySignalCount ?? 1;
+    addScanDetail(
+      diagnostics,
+      "buyApproved",
+      d.symbol,
+      count > 1 ? `${count} strategies` : d.ownerStrategyName
+    );
+  }
 
   let placedThisScan = 0;
   let queueIndex = 0;
@@ -522,6 +566,12 @@ export async function runStrategiesForUser(
     if (hasOpenPositionForSymbol(paperState, baseDecision.symbol, exchange)) {
       bumpReason(diagnostics.skipReasons, "Already holding — no add-on buy");
       diagnostics.gateBlocked += 1;
+      addScanDetail(
+        diagnostics,
+        "gateBlocked",
+        baseDecision.symbol,
+        "Already holding — no add-on buy"
+      );
       continue;
     }
 
@@ -531,6 +581,12 @@ export async function runStrategiesForUser(
     if (dedupe.has(noBuyKey)) {
       bumpReason(diagnostics.skipReasons, "Sold today — no rebuy until tomorrow");
       diagnostics.dedupeBlocked += 1;
+      addScanDetail(
+        diagnostics,
+        "dedupeBlocked",
+        baseDecision.symbol,
+        "Sold today — no rebuy until tomorrow"
+      );
       continue;
     }
     if (dedupe.has(buyTodayKey)) {
@@ -539,6 +595,12 @@ export async function runStrategiesForUser(
         "Already bought this symbol today — no duplicate entry"
       );
       diagnostics.dedupeBlocked += 1;
+      addScanDetail(
+        diagnostics,
+        "dedupeBlocked",
+        baseDecision.symbol,
+        "Already bought today"
+      );
       continue;
     }
     if (dedupe.has(slotKey)) {
@@ -547,6 +609,12 @@ export async function runStrategiesForUser(
         "Already traded this symbol in this 15-minute window"
       );
       diagnostics.dedupeBlocked += 1;
+      addScanDetail(
+        diagnostics,
+        "dedupeBlocked",
+        baseDecision.symbol,
+        "Already traded this window"
+      );
       continue;
     }
 
@@ -563,6 +631,12 @@ export async function runStrategiesForUser(
     if (!gate.allowed) {
       bumpReason(diagnostics.skipReasons, gate.reason ?? "Blocked by trade gate");
       diagnostics.gateBlocked += 1;
+      addScanDetail(
+        diagnostics,
+        "gateBlocked",
+        baseDecision.symbol,
+        gate.reason ?? "Blocked by trade gate"
+      );
       continue;
     }
 
@@ -584,6 +658,12 @@ export async function runStrategiesForUser(
       resolvedPrice.hintPrice != null
     ) {
       diagnostics.priceCorrections = (diagnostics.priceCorrections ?? 0) + 1;
+      addScanDetail(
+        diagnostics,
+        "priceCorrected",
+        baseDecision.symbol,
+        `Hint ₹${resolvedPrice.hintPrice?.toFixed(2)} → live ₹${resolvedPrice.livePrice?.toFixed(2)}`
+      );
       writeSystemLog("WARN", "StrategyScan", "execution_price_corrected", {
         symbol: baseDecision.symbol,
         exchange,
@@ -647,6 +727,12 @@ export async function runStrategiesForUser(
       boughtThisRun.add(symKey(decision.symbol, exchange));
       tradesExecuted += 1;
       placedThisScan += 1;
+      addScanDetail(
+        diagnostics,
+        "paperExec",
+        decision.symbol,
+        `BUY · ${decision.ownerStrategyName}`
+      );
 
       const tradeQty = executedQty ?? qty;
       const strengthLabel =
@@ -738,6 +824,9 @@ export async function runStrategiesForUser(
     });
     diagnostics.sellDecisions = sellQueue.length;
     diagnostics.sellQueueSize = sellQueue.length;
+    for (const d of sellQueue) {
+      addScanDetail(diagnostics, "sellApproved", d.symbol, d.ownerStrategyName);
+    }
 
     for (const baseDecision of sellQueue) {
       signalStrategyIds.add(baseDecision.ownerStrategyId);
@@ -758,6 +847,12 @@ export async function runStrategiesForUser(
       if (!gate.allowed) {
         bumpReason(diagnostics.skipReasons, gate.reason ?? "Blocked by trade gate");
         diagnostics.gateBlocked += 1;
+        addScanDetail(
+          diagnostics,
+          "gateBlocked",
+          baseDecision.symbol,
+          gate.reason ?? "Blocked by trade gate"
+        );
         continue;
       }
 
@@ -768,6 +863,12 @@ export async function runStrategiesForUser(
           "Already traded this symbol in this 15-minute window"
         );
         diagnostics.dedupeBlocked += 1;
+        addScanDetail(
+          diagnostics,
+          "dedupeBlocked",
+          baseDecision.symbol,
+          "Already traded this window"
+        );
         continue;
       }
 
@@ -789,6 +890,12 @@ export async function runStrategiesForUser(
         resolvedPrice.hintPrice != null
       ) {
         diagnostics.priceCorrections = (diagnostics.priceCorrections ?? 0) + 1;
+        addScanDetail(
+          diagnostics,
+          "priceCorrected",
+          baseDecision.symbol,
+          `Hint ₹${resolvedPrice.hintPrice?.toFixed(2)} → live ₹${resolvedPrice.livePrice?.toFixed(2)}`
+        );
         writeSystemLog("WARN", "StrategyScan", "execution_price_corrected", {
           symbol: baseDecision.symbol,
           exchange,
@@ -835,6 +942,12 @@ export async function runStrategiesForUser(
         );
         dedupe.add(executionNoBuyTodayKey(decision.symbol));
         tradesExecuted += 1;
+        addScanDetail(
+          diagnostics,
+          "paperExec",
+          decision.symbol,
+          `SELL · ${decision.ownerStrategyName}`
+        );
 
         const tradeQty = executedQty ?? decision.quantity;
         queueEmail(
@@ -909,6 +1022,15 @@ export async function runStrategiesForUser(
 
   diagnostics.strengthDeferred = rankedQueue.length - queueIndex;
   for (let i = queueIndex; i < rankedQueue.length; i++) {
+    const deferred = rankedQueue[i];
+    addScanDetail(
+      diagnostics,
+      "deferred",
+      deferred.symbol,
+      deferred.buySignalCount
+        ? `${deferred.buySignalCount} signal${deferred.buySignalCount !== 1 ? "s" : ""}`
+        : deferred.ownerStrategyName
+    );
     bumpReason(diagnostics.skipReasons, deferReason);
     writeSystemLog("INFO", "PortfolioManager", "Deferred buy (rank)", {
       symbol: rankedQueue[i].symbol,
@@ -920,10 +1042,13 @@ export async function runStrategiesForUser(
   for (const decision of decisions.filter((d) => d.action === "SKIP")) {
     signalStrategyIds.add(decision.ownerStrategyId);
     diagnostics.skippedDecisions += 1;
-    bumpReason(
-      diagnostics.skipReasons,
-      decision.skipReason ?? "Portfolio skip"
-    );
+    const reason = decision.skipReason ?? "Portfolio skip";
+    bumpReason(diagnostics.skipReasons, reason);
+    addScanDetail(diagnostics, "portfolioSkip", decision.symbol, reason);
+    if (/risk|loss|limit/i.test(reason)) {
+      diagnostics.riskBlocked += 1;
+      addScanDetail(diagnostics, "riskBlocked", decision.symbol, reason);
+    }
     writeSystemLog("INFO", "PortfolioManager", "Signal skipped", {
       symbol: decision.symbol,
       strategy: decision.ownerStrategyName,
