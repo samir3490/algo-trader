@@ -30,4 +30,10 @@ describe("formatDateTimeCompactIST", () => {
     assert.ok(compact.length < full.length);
     assert.doesNotMatch(compact, /:45/);
   });
+
+  it("does not repeat the time segment", () => {
+    const compact = formatDateTimeCompactIST("2026-06-17T07:37:00.000Z");
+    const times = compact.match(/\d{1,2}:\d{2}/g) ?? [];
+    assert.equal(times.length, 1, `expected one time in "${compact}"`);
+  });
 });

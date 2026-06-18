@@ -31,7 +31,7 @@ export const IST_DATETIME_FORMAT: Intl.DateTimeFormatOptions = {
   hour12: false,
 };
 
-/** Shorter IST display for table columns — no seconds, minimal padding footprint. */
+/** Shorter IST display for table columns — no seconds. */
 export const IST_DATETIME_COMPACT_FORMAT: Intl.DateTimeFormatOptions = {
   timeZone: IST,
   day: "numeric",
@@ -39,6 +39,12 @@ export const IST_DATETIME_COMPACT_FORMAT: Intl.DateTimeFormatOptions = {
   hour: "2-digit",
   minute: "2-digit",
   hour12: false,
+};
+
+const IST_DATE_COMPACT_FORMAT: Intl.DateTimeFormatOptions = {
+  timeZone: IST,
+  day: "numeric",
+  month: "short",
 };
 
 /** Table header/cell classes — `w-0` shrinks column to content width. */
@@ -118,7 +124,7 @@ export function formatDateTimeCompactIST(
       year: "numeric",
     });
     const datePart = d.toLocaleDateString("en-IN", {
-      ...IST_DATETIME_COMPACT_FORMAT,
+      ...IST_DATE_COMPACT_FORMAT,
       ...(year !== nowYear ? { year: "2-digit" as const } : {}),
     });
     const timePart = d.toLocaleTimeString("en-GB", {
