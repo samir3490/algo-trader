@@ -86,6 +86,7 @@ interface AppSettings {
     maxRoundTripsPerSymbolPerDay: number;
     noSameDayRebuyAfterSell: boolean;
     minHoldMinutesBeforeSell: number;
+    enableStrategySellSignals: boolean;
   };
 }
 
@@ -122,6 +123,7 @@ const defaultSettings: AppSettings = {
     maxRoundTripsPerSymbolPerDay: 1,
     noSameDayRebuyAfterSell: true,
     minHoldMinutesBeforeSell: 60,
+    enableStrategySellSignals: true,
   },
 };
 
@@ -159,6 +161,7 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       maxRoundTripsPerSymbolPerDay: fs.maxRoundTripsPerSymbolPerDay ?? 1,
       noSameDayRebuyAfterSell: fs.noSameDayRebuyAfterSell !== false,
       minHoldMinutesBeforeSell: fs.minHoldMinutesBeforeSell ?? 60,
+      enableStrategySellSignals: fs.enableStrategySellSignals !== false,
     },
   };
 }
@@ -185,6 +188,7 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     maxRoundTripsPerSymbolPerDay: s.riskManagement.maxRoundTripsPerSymbolPerDay,
     noSameDayRebuyAfterSell: s.riskManagement.noSameDayRebuyAfterSell,
     minHoldMinutesBeforeSell: s.riskManagement.minHoldMinutesBeforeSell,
+    enableStrategySellSignals: s.riskManagement.enableStrategySellSignals,
     notifyOrders: s.notifications.orderExecution,
     notifyEmailDigest: s.notifications.emailDigest,
     notifySkipped: s.notifications.skippedOrders,
@@ -1333,6 +1337,30 @@ function SettingsContent() {
               </p>
               <p className="text-xs text-text-tertiary">
                 After SAIL / Policybazaar is sold once today, strategies cannot buy it again until tomorrow.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                checked={settings.riskManagement.enableStrategySellSignals}
+                onChange={(e) =>
+                  updateSettings("riskManagement", {
+                    enableStrategySellSignals: e.target.checked,
+                  })
+                }
+                className="peer sr-only"
+              />
+              <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+            <div>
+              <p className="text-sm font-medium text-text-primary">
+                Strategy SELL signals (paper)
+              </p>
+              <p className="text-xs text-text-tertiary">
+                Buys run first each scan; sells only on held positions after min-hold. Never buy and sell the same symbol in one scan.
               </p>
             </div>
           </div>

@@ -96,4 +96,35 @@ describe("conflict-detector", () => {
     assert.equal(blocked.has("a:RELIANCE:NSE:BUY"), false);
     assert.equal(blocked.has("b:RELIANCE:NSE:SELL"), true);
   });
+
+  it("allows SELL when holding despite opposing BUY conflict", () => {
+    const opinions: StrategyOpinion[] = [
+      {
+        strategyId: "a",
+        strategyName: "A",
+        symbol: "RELIANCE",
+        exchange: "NSE",
+        action: "BUY",
+        price: 100,
+        quantity: 10,
+        reason: "buy",
+        confidence: 1,
+      },
+      {
+        strategyId: "b",
+        strategyName: "B",
+        symbol: "RELIANCE",
+        exchange: "NSE",
+        action: "SELL",
+        price: 90,
+        quantity: 10,
+        reason: "sell",
+        confidence: 1,
+      },
+    ];
+    const conflicts = detectStrategyConflicts(opinions);
+    const blocked = opinionsBlockedByConflict(opinions, conflicts, () => true);
+    assert.equal(blocked.has("a:RELIANCE:NSE:BUY"), true);
+    assert.equal(blocked.has("b:RELIANCE:NSE:SELL"), false);
+  });
 });

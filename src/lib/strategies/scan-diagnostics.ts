@@ -3,6 +3,7 @@ export interface ScanDiagnostics {
   sellSignals: number;
   buyDecisions: number;
   sellDecisions: number;
+  sellQueueSize?: number;
   skippedDecisions: number;
   gateBlocked: number;
   riskBlocked: number;

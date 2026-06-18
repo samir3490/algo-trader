@@ -71,6 +71,22 @@ function lastBuyMs(trades: PaperTrade[], symbol: string, exchange: string): numb
   return last;
 }
 
+/** Latest entry time for open positions on a symbol, or last buy trade — used for min-hold gate. */
+export function positionHoldAnchorMs(
+  openPositions: PaperPosition[],
+  trades: PaperTrade[],
+  symbol: string,
+  exchange: string
+): number {
+  let anchor = 0;
+  for (const p of openPositions) {
+    const ms = Date.parse(p.entryTime);
+    if (!Number.isNaN(ms) && ms > anchor) anchor = ms;
+  }
+  const lastBuy = lastBuyMs(trades, symbol, exchange);
+  return Math.max(anchor, lastBuy);
+}
+
 function anySellToday(
   trades: PaperTrade[],
   symbol: string,
@@ -149,6 +165,8 @@ export interface PortfolioGateContext {
   multiStrategyMode?: boolean;
   /** Symbols sold in this cron run — block immediate rebuy. */
   soldThisRun: Set<string>;
+  /** Symbols bought in this cron run — block strategy sell until next scan. */
+  boughtThisRun?: Set<string>;
   /** Symbol → cooldown end (ms). */
   symbolCooldownUntil?: Record<string, number>;
   /** Symbol locked for rest of IST day (persisted in strategyRunner). */
@@ -198,6 +216,12 @@ export function canExecuteStrategyTrade(
     if (!hasPosition) {
       return { allowed: false, reason: "No position to sell" };
     }
+    if (ctx.boughtThisRun?.has(key)) {
+      return {
+        allowed: false,
+        reason: "Bought this scan — strategy sell deferred",
+      };
+    }
     if (ownerId && openPositions.length > 0) {
       const exitCheck = canStrategyExitPosition(
         stateLike,
@@ -211,11 +235,16 @@ export function canExecuteStrategyTrade(
     }
     const minHold = ctx.settings.minHoldMinutesBeforeSell ?? 60;
     const manualExit = ownerId === OWNER_MANUAL;
-    const lastBuy = lastBuyMs(ctx.trades, symbol, exchange);
+    const holdAnchor = positionHoldAnchorMs(
+      openPositions,
+      ctx.trades,
+      symbol,
+      exchange
+    );
     if (
       !manualExit &&
-      lastBuy > 0 &&
-      Date.now() - lastBuy < minHold * 60 * 1000
+      holdAnchor > 0 &&
+      Date.now() - holdAnchor < minHold * 60 * 1000
     ) {
       return {
         allowed: false,

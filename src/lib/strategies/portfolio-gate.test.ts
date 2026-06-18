@@ -155,4 +155,63 @@ describe("canExecuteStrategyTrade", () => {
     });
     assert.equal(r.allowed, true);
   });
+
+  it("blocks strategy SELL when bought this scan", () => {
+    const entryTime = new Date().toISOString();
+    const r = canExecuteStrategyTrade("SELL", "TCS", "NSE", {
+      holdings: [
+        { symbol: "TCS", exchange: "NSE", qty: 1, avgPrice: 100, ltp: 105 },
+      ],
+      positions: [
+        {
+          id: "p1",
+          symbol: "TCS",
+          exchange: "NSE",
+          quantity: 1,
+          entryPrice: 100,
+          ltp: 105,
+          state: "OPEN",
+          ownerStrategyId: "macd-1",
+          ownerStrategyName: "MACD",
+          entryTime,
+        },
+      ],
+      trades: [],
+      settings,
+      soldThisRun: new Set(),
+      boughtThisRun: new Set(["TCS:NSE"]),
+      ownerStrategyId: "macd-1",
+    });
+    assert.equal(r.allowed, false);
+    assert.match(r.reason ?? "", /Bought this scan/);
+  });
+
+  it("blocks strategy SELL within min hold from position entry", () => {
+    const entryTime = new Date().toISOString();
+    const r = canExecuteStrategyTrade("SELL", "TCS", "NSE", {
+      holdings: [
+        { symbol: "TCS", exchange: "NSE", qty: 1, avgPrice: 100, ltp: 105 },
+      ],
+      positions: [
+        {
+          id: "p1",
+          symbol: "TCS",
+          exchange: "NSE",
+          quantity: 1,
+          entryPrice: 100,
+          ltp: 105,
+          state: "OPEN",
+          ownerStrategyId: "macd-1",
+          ownerStrategyName: "MACD",
+          entryTime,
+        },
+      ],
+      trades: [],
+      settings: { ...settings, minHoldMinutesBeforeSell: 60 },
+      soldThisRun: new Set(),
+      ownerStrategyId: "macd-1",
+    });
+    assert.equal(r.allowed, false);
+    assert.match(r.reason ?? "", /Min hold/);
+  });
 });

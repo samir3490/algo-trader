@@ -20,8 +20,10 @@ import {
   buyOnlyOpinions,
   scanSignalToOpinion,
   buildRankedPaperBuyQueue,
+  buildRankedPaperSellQueue,
   rankBuyOpinions,
 } from "@/lib/portfolio/portfolio-manager";
+import { detectStrategyConflicts } from "@/lib/portfolio/conflict-detector";
 import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trading/balance";
 import {
   selectTopBuyDecisionsForScan,
@@ -446,7 +448,7 @@ export async function runStrategiesForUser(
     })
     .filter((o): o is NonNullable<typeof o> => o != null);
 
-  const { decisions, conflicts } = evaluatePortfolioDecisions(
+  const { decisions } = evaluatePortfolioDecisions(
     buyOnlyOpinions(opinions),
     {
       state: paperState,
@@ -454,6 +456,7 @@ export async function runStrategiesForUser(
       todayRealizedLoss: todayRealizedLoss(paperState.trades),
     }
   );
+  const conflicts = detectStrategyConflicts(opinions);
 
   for (const conflict of conflicts) {
     writeSystemLog("WARN", "PortfolioManager", conflict.type, {
@@ -497,6 +500,7 @@ export async function runStrategiesForUser(
   let placedThisScan = 0;
   let queueIndex = 0;
   const deferReason = `Lower buy rank — max ${maxPositions} positions`;
+  const boughtThisRun = new Set<string>();
 
   while (placedThisScan < slotsToFill && queueIndex < rankedQueue.length) {
     const baseDecision = rankedQueue[queueIndex];
@@ -629,6 +633,7 @@ export async function runStrategiesForUser(
       paperState = ensurePositions(state);
       dedupe.add(executionDedupeKey(decision.symbol));
       dedupe.add(`BUY-TODAY:${decision.symbol.toUpperCase()}:${todayKeyIST()}`);
+      boughtThisRun.add(symKey(decision.symbol, exchange));
       tradesExecuted += 1;
       placedThisScan += 1;
 
@@ -712,6 +717,182 @@ export async function runStrategiesForUser(
           strategyName: decision.ownerStrategyName,
         }
       );
+    }
+  }
+
+  if (userSettings.enableStrategySellSignals !== false) {
+    portfolioCtx.state = paperState;
+    const sellQueue = buildRankedPaperSellQueue(opinions, portfolioCtx, {
+      boughtThisScan: boughtThisRun,
+    });
+    diagnostics.sellDecisions = sellQueue.length;
+    diagnostics.sellQueueSize = sellQueue.length;
+
+    for (const baseDecision of sellQueue) {
+      signalStrategyIds.add(baseDecision.ownerStrategyId);
+      const exchange = baseDecision.exchange || "NSE";
+      const key = symKey(baseDecision.symbol, exchange);
+
+      const gate = canExecuteStrategyTrade("SELL", baseDecision.symbol, exchange, {
+        holdings: paperState.holdings ?? [],
+        positions: paperState.positions,
+        trades: paperState.trades ?? [],
+        settings: userSettings,
+        soldThisRun,
+        boughtThisRun,
+        symbolCooldownUntil,
+        symbolsLockedToday,
+        ownerStrategyId: baseDecision.ownerStrategyId,
+      });
+      if (!gate.allowed) {
+        bumpReason(diagnostics.skipReasons, gate.reason ?? "Blocked by trade gate");
+        diagnostics.gateBlocked += 1;
+        continue;
+      }
+
+      const slotKey = executionDedupeKey(baseDecision.symbol);
+      if (dedupe.has(slotKey)) {
+        bumpReason(
+          diagnostics.skipReasons,
+          "Already traded this symbol in this 15-minute window"
+        );
+        diagnostics.dedupeBlocked += 1;
+        continue;
+      }
+
+      let price = baseDecision.price;
+      const resolvedPrice = await resolvePaperExecutionPrice(
+        baseDecision.symbol,
+        exchange,
+        price,
+        { requireLive: true }
+      );
+      if (!resolvedPrice) {
+        bumpReason(diagnostics.skipReasons, "Could not resolve live market price");
+        continue;
+      }
+      price = resolvedPrice.price;
+      if (
+        resolvedPrice.deviationPct != null &&
+        resolvedPrice.deviationPct > MAX_EXECUTION_HINT_DEVIATION_PCT &&
+        resolvedPrice.hintPrice != null
+      ) {
+        diagnostics.priceCorrections = (diagnostics.priceCorrections ?? 0) + 1;
+        writeSystemLog("WARN", "StrategyScan", "execution_price_corrected", {
+          symbol: baseDecision.symbol,
+          exchange,
+          hintPrice: resolvedPrice.hintPrice,
+          livePrice: resolvedPrice.livePrice,
+          deviationPct: Math.round(resolvedPrice.deviationPct * 100) / 100,
+        });
+      }
+
+      const decision = { ...baseDecision, price };
+      diagnostics.paperSignals += 1;
+
+      const { state, executed, message, executedQty, trade } = executePortfolioDecision(
+        paperState,
+        decision,
+        {
+          simulateBrokerage: userSettings.simulateBrokerage,
+          product: userSettings.paperDefaultProduct,
+        }
+      );
+
+      if (executed) {
+        const saved = await persistPaperState(db, userId, state, recentOrders);
+        if (!saved.ok) {
+          console.error(
+            `Paper trade not saved for ${decision.symbol} ${decision.action}: ${saved.error}`
+          );
+          bumpReason(
+            diagnostics.skipReasons,
+            `Failed to save paper state — ${saved.error.slice(0, 120)}`
+          );
+          continue;
+        }
+
+        paperState = ensurePositions(state);
+        dedupe.add(executionDedupeKey(decision.symbol));
+        soldThisRun.add(key);
+        const cooldownMs = (userSettings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
+        symbolCooldownUntil[key] = Date.now() + cooldownMs;
+        symbolsLockedToday = lockSymbolForToday(
+          symbolsLockedToday,
+          decision.symbol,
+          exchange
+        );
+        dedupe.add(executionNoBuyTodayKey(decision.symbol));
+        tradesExecuted += 1;
+
+        const tradeQty = executedQty ?? decision.quantity;
+        queueEmail(
+          "executed",
+          {
+            symbol: decision.symbol,
+            exchange,
+            side: "SELL",
+            quantity: tradeQty,
+            price: decision.price,
+            status: "EXECUTED",
+            strategyName: decision.ownerStrategyName,
+          },
+          {
+            mode: "PAPER",
+            symbol: decision.symbol,
+            exchange,
+            side: "SELL",
+            quantity: tradeQty,
+            price: decision.price,
+            orderType: "MARKET",
+            product: userSettings.paperDefaultProduct,
+            status: "EXECUTED",
+            strategyName: decision.ownerStrategyName,
+          }
+        );
+
+        if (trade) {
+          await persistPaperOrderAdmin(
+            db,
+            userId,
+            paperTradeToOrderRecord(
+              { ...trade, qty: tradeQty },
+              { product: userSettings.paperDefaultProduct, mode: "PAPER" }
+            )
+          );
+        }
+
+        const strat = running.find((s) => s.id === baseDecision.ownerStrategyId);
+        if (strat && resolveStrategyMode(strat) === "live") {
+          diagnostics.liveSignals += 1;
+        }
+      } else if (message) {
+        bumpReason(diagnostics.skipReasons, message);
+        queueEmail(
+          "skipped",
+          {
+            symbol: decision.symbol,
+            exchange,
+            side: "SELL",
+            quantity: decision.quantity,
+            price: decision.price,
+            status: `SKIPPED — ${message}`,
+            strategyName: decision.ownerStrategyName,
+          },
+          {
+            mode: "PAPER",
+            symbol: decision.symbol,
+            exchange,
+            side: "SELL",
+            quantity: decision.quantity,
+            price: decision.price,
+            orderType: "MARKET",
+            product: userSettings.paperDefaultProduct,
+            status: `SKIPPED — ${message}`,
+            strategyName: decision.ownerStrategyName,
+          }
+        );
+      }
     }
   }
 

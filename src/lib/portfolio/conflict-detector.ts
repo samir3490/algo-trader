@@ -58,7 +58,8 @@ export function detectStrategyConflicts(
 
 /**
  * When flat on a symbol, opposing SELL signals cannot execute anyway — allow BUY.
- * When a position is open, block both sides to avoid wash trades.
+ * When a position is open, block conflicting BUY (no add-on) but allow SELL — sell phase
+ * runs after buys and respects min-hold / buy-active filters.
  */
 export function opinionsBlockedByConflict(
   opinions: StrategyOpinion[],
@@ -72,7 +73,13 @@ export function opinionsBlockedByConflict(
     for (const o of opinions) {
       if (symKey(o.symbol, o.exchange) !== key || o.action === "HOLD") continue;
       if (!hasPos && o.action === "BUY") continue;
-      blocked.add(`${o.strategyId}:${key}:${o.action}`);
+      if (!hasPos && o.action === "SELL") {
+        blocked.add(`${o.strategyId}:${key}:${o.action}`);
+        continue;
+      }
+      if (hasPos && o.action === "BUY") {
+        blocked.add(`${o.strategyId}:${key}:${o.action}`);
+      }
     }
   }
   return blocked;

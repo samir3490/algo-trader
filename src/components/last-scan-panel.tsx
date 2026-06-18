@@ -83,6 +83,7 @@ export default function LastScanPanel({
             <Stat label="Paper balance" value={d.paperBalance ?? 0} />
             <Stat label="Max positions" value={d.maxPositions ?? 0} />
             <Stat label="BUY approved" value={d.buyDecisions} />
+            <Stat label="SELL approved" value={d.sellDecisions} />
             <Stat label="Slots to fill" value={d.slotsToFill ?? 0} />
             <Stat label="Dedupe blocked" value={d.dedupeBlocked} />
             <Stat label="Price corrected" value={d.priceCorrections ?? 0} highlight={(d.priceCorrections ?? 0) > 0} />
@@ -109,14 +110,14 @@ export default function LastScanPanel({
               Signals were found but the buy queue did not execute — check skip reasons below.
             </p>
           )}
-          {d.sellSignals > 0 && d.buySignals === 0 && (
+          {d.sellSignals > 0 && d.buySignals === 0 && d.sellDecisions === 0 && (
             <p className="text-sm text-text-secondary">
-              SELL signals are not used for paper exits — holdings close on stop-loss or take-profit only.
+              SELL signals were skipped — check min-hold, open positions, or skip reasons below. Stop-loss / take-profit still apply.
             </p>
           )}
           {d.sellSignals > 0 && d.buySignals > 0 && (
             <p className="text-sm text-text-secondary">
-              SELL signals are ignored for paper trading; only BUY signals open positions. Exits use your profit/loss targets.
+              Buys run before sells each scan. Symbols with both BUY and SELL signals defer the sell until a later scan (no same-scan whipsaw).
             </p>
           )}
           {(d.slotsToFill ?? 0) === 0 && (d.openPositions ?? 0) >= (d.maxPositions ?? 5) && d.buySignals > 0 && (

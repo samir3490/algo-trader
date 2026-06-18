@@ -8,6 +8,7 @@ import {
 import {
   canStrategyExitPosition,
   canStrategyOpenPosition,
+  getOpenPositions,
   hasOpenPositionForSymbol,
 } from "./position-manager";
 import type {
@@ -93,6 +94,92 @@ function consolidateBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] 
 /** Paper auto-trade: entries from BUY signals only; exits via stop-loss / take-profit. */
 export function buyOnlyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
   return opinions.filter((o) => o.action === "BUY");
+}
+
+export function sellOnlyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
+  return opinions.filter((o) => o.action === "SELL");
+}
+
+function consolidateSellOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
+  const bestSell = new Map<string, StrategyOpinion>();
+  for (const op of opinions) {
+    if (op.action !== "SELL") continue;
+    const key = symKey(op.symbol, op.exchange);
+    const existing = bestSell.get(key);
+    if (!existing || op.confidence > existing.confidence) {
+      bestSell.set(key, op);
+    }
+  }
+  return [...bestSell.values()].sort((a, b) =>
+    a.symbol.localeCompare(b.symbol, "en", { sensitivity: "base" })
+  );
+}
+
+function buyActiveSymbolKeys(opinions: StrategyOpinion[]): Set<string> {
+  const keys = new Set<string>();
+  for (const op of opinions) {
+    if (op.action === "BUY") keys.add(symKey(op.symbol, op.exchange));
+  }
+  return keys;
+}
+
+export interface PaperSellQueueOptions {
+  boughtThisScan?: Set<string>;
+  minHoldMinutes?: number;
+}
+
+/** Ranked paper SELL queue — only open positions, after min-hold; skips symbols with active BUY signals. */
+export function buildRankedPaperSellQueue(
+  opinions: StrategyOpinion[],
+  ctx: PortfolioContext,
+  options?: PaperSellQueueOptions
+): PortfolioDecision[] {
+  const minHold =
+    options?.minHoldMinutes ?? ctx.settings.minHoldMinutesBeforeSell ?? 60;
+  const now = Date.now();
+  const buyActive = buyActiveSymbolKeys(opinions);
+  const decisions: PortfolioDecision[] = [];
+
+  for (const op of consolidateSellOpinions(sellOnlyOpinions(opinions))) {
+    const key = symKey(op.symbol, op.exchange);
+    if (!hasOpenPositionForSymbol(ctx.state, op.symbol, op.exchange)) continue;
+    if (buyActive.has(key)) continue;
+    if (options?.boughtThisScan?.has(key)) continue;
+
+    const openPositions = getOpenPositions(ctx.state, {
+      symbol: op.symbol,
+      exchange: op.exchange,
+    });
+    let anchorMs = 0;
+    for (const p of openPositions) {
+      const ms = Date.parse(p.entryTime);
+      if (!Number.isNaN(ms) && ms > anchorMs) anchorMs = ms;
+    }
+    if (anchorMs > 0 && now - anchorMs < minHold * 60 * 1000) continue;
+
+    const exitCheck = canStrategyExitPosition(
+      ctx.state,
+      op.symbol,
+      op.exchange,
+      op.strategyId
+    );
+    if (!exitCheck.allowed || !exitCheck.position) continue;
+
+    decisions.push({
+      action: "SELL",
+      symbol: op.symbol,
+      exchange: op.exchange,
+      ownerStrategyId: op.strategyId,
+      ownerStrategyName: op.strategyName,
+      price: op.price,
+      quantity: Math.min(op.quantity, exitCheck.position.quantity),
+      signalReason: op.reason,
+      exitReason: "OWNER_STRATEGY_EXIT",
+      positionId: exitCheck.position.id,
+    });
+  }
+
+  return decisions;
 }
 
 export function rankBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {

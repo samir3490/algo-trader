@@ -357,6 +357,8 @@ export interface AppSettings {
   noSameDayRebuyAfterSell: boolean;
   /** Minimum minutes to hold before a strategy SELL (risk exits ignore this). */
   minHoldMinutesBeforeSell: number;
+  /** When true, strategy SELL signals exit paper positions after min-hold (buys run first each scan). */
+  enableStrategySellSignals: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -386,6 +388,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxRoundTripsPerSymbolPerDay: 1,
   noSameDayRebuyAfterSell: true,
   minHoldMinutesBeforeSell: 60,
+  enableStrategySellSignals: true,
 };
 
 export async function getSettings(): Promise<AppSettings> {

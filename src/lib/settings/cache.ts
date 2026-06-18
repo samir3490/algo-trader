@@ -48,6 +48,7 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
       | undefined,
     noSameDayRebuyAfterSell: rm?.noSameDayRebuyAfterSell as boolean | undefined,
     minHoldMinutesBeforeSell: rm?.minHoldMinutesBeforeSell as number | undefined,
+    enableStrategySellSignals: rm?.enableStrategySellSignals as boolean | undefined,
   };
 }
 

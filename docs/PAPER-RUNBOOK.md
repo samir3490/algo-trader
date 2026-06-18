@@ -30,7 +30,7 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 | Live Zerodha (manual orders) | Working |
 | Live auto from cron | **Email only** — no server-side orders |
 | Market data for cron | Yahoo (~15 min delayed) |
-| Strategy SELL signals | **Not used** — exits are SL/TP only |
+| Strategy SELL signals | **Enabled** — two-phase scan (buy then sell), min-hold cooldown |
 
 ---
 
@@ -59,7 +59,7 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 - [ ] **Trailing stop-loss** — move SL up as price rises (trail % in Settings)
 - [ ] **Time-based exits** — max hold days, square-off before 3:15 PM for MIS, optional “no progress in X days”
 - [ ] **Strategy performance loop** — auto-pause strategies with negative realized P&L over N days; leaderboard (win rate, avg hold, drawdown)
-- [ ] **Optional strategy SELL signals** — today: BUY from strategies, SELL only via SL/TP; add strategy SELL as exit or combine with SL (whichever hits first)
+- [x] **Optional strategy SELL signals** — two-phase scan: BUY queue first, then SELL on held positions after `minHoldMinutesBeforeSell` (default 60m). Same symbol never buys and sells in one scan; symbols with active BUY signals defer sell. Toggle in Settings → Risk. SL/TP still run first and ignore min-hold.
 
 ---
 
