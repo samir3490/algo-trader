@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   AlertTriangle,
   FlaskConical,
@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { cn, formatPercent } from "@/lib/utils";
 import { STRATEGY_DEFINITIONS } from "@/lib/strategies/definitions";
+import { useTableSort } from "@/hooks/use-table-sort";
+import SortableTh from "@/components/ui/sortable-th";
 
 const INITIAL_CAPITAL = 1_000_000;
 
@@ -65,6 +67,31 @@ export default function BacktestAdvancedPanel() {
   const [error, setError] = useState("");
   const [wfResult, setWfResult] = useState<WalkForwardSummary | null>(null);
   const [gridResult, setGridResult] = useState<GridSearchSummary | null>(null);
+
+  const wfSort = useTableSort({ key: "oosReturn", dir: "desc" });
+  const sortedWfWindows = useMemo(() => {
+    if (!wfResult) return [];
+    return wfSort.sortRows(wfResult.windows, {
+      train: (w) => w.trainStart,
+      test: (w) => w.testStart,
+      isReturn: (w) => w.inSample.totalReturnPct,
+      oosReturn: (w) => w.outOfSample.totalReturnPct,
+      oosSharpe: (w) => w.outOfSample.sharpeRatio,
+    });
+  }, [wfResult, wfSort.sortRows]);
+
+  const gridSort = useTableSort({ key: "sharpe", dir: "desc" });
+  const sortedGridRows = useMemo(() => {
+    if (!gridResult) return [];
+    return gridSort.sortRows(gridResult.rows, {
+      rank: (r) => r.rank,
+      params: (r) => Object.values(r.params).join(","),
+      return: (r) => r.result.totalReturnPct,
+      sharpe: (r) => r.result.sharpeRatio,
+      pf: (r) => r.result.profitFactor,
+      maxDd: (r) => r.result.maxDrawdownPct,
+    });
+  }, [gridResult, gridSort.sortRows]);
 
   const strategies = STRATEGY_DEFINITIONS.filter((s) =>
     ["sma", "ema", "rsi", "mean_reversion"].includes(s.id)
@@ -282,15 +309,15 @@ export default function BacktestAdvancedPanel() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-text-tertiary border-b border-border">
-                  <th className="text-left px-3 py-2">Train</th>
-                  <th className="text-left px-3 py-2">Test</th>
-                  <th className="text-right px-3 py-2">IS return</th>
-                  <th className="text-right px-3 py-2">OOS return</th>
-                  <th className="text-right px-3 py-2">OOS Sharpe</th>
+                  <SortableTh sortKey="train" activeKey={wfSort.sortKey} direction={wfSort.sortDir} onSort={wfSort.toggleSort} className="px-3 py-2">Train</SortableTh>
+                  <SortableTh sortKey="test" activeKey={wfSort.sortKey} direction={wfSort.sortDir} onSort={wfSort.toggleSort} className="px-3 py-2">Test</SortableTh>
+                  <SortableTh sortKey="isReturn" activeKey={wfSort.sortKey} direction={wfSort.sortDir} onSort={wfSort.toggleSort} align="right" className="px-3 py-2">IS return</SortableTh>
+                  <SortableTh sortKey="oosReturn" activeKey={wfSort.sortKey} direction={wfSort.sortDir} onSort={wfSort.toggleSort} align="right" className="px-3 py-2">OOS return</SortableTh>
+                  <SortableTh sortKey="oosSharpe" activeKey={wfSort.sortKey} direction={wfSort.sortDir} onSort={wfSort.toggleSort} align="right" className="px-3 py-2">OOS Sharpe</SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {wfResult.windows.map((w, i) => (
+                {sortedWfWindows.map((w, i) => (
                   <tr
                     key={i}
                     className={cn(
@@ -337,16 +364,16 @@ export default function BacktestAdvancedPanel() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-text-tertiary border-b border-border">
-                  <th className="text-left px-3 py-2">#</th>
-                  <th className="text-left px-3 py-2">Params</th>
-                  <th className="text-right px-3 py-2">Return</th>
-                  <th className="text-right px-3 py-2">Sharpe</th>
-                  <th className="text-right px-3 py-2">PF</th>
-                  <th className="text-right px-3 py-2">Max DD</th>
+                  <SortableTh sortKey="rank" activeKey={gridSort.sortKey} direction={gridSort.sortDir} onSort={gridSort.toggleSort} className="px-3 py-2">#</SortableTh>
+                  <SortableTh sortKey="params" activeKey={gridSort.sortKey} direction={gridSort.sortDir} onSort={gridSort.toggleSort} className="px-3 py-2">Params</SortableTh>
+                  <SortableTh sortKey="return" activeKey={gridSort.sortKey} direction={gridSort.sortDir} onSort={gridSort.toggleSort} align="right" className="px-3 py-2">Return</SortableTh>
+                  <SortableTh sortKey="sharpe" activeKey={gridSort.sortKey} direction={gridSort.sortDir} onSort={gridSort.toggleSort} align="right" className="px-3 py-2">Sharpe</SortableTh>
+                  <SortableTh sortKey="pf" activeKey={gridSort.sortKey} direction={gridSort.sortDir} onSort={gridSort.toggleSort} align="right" className="px-3 py-2">PF</SortableTh>
+                  <SortableTh sortKey="maxDd" activeKey={gridSort.sortKey} direction={gridSort.sortDir} onSort={gridSort.toggleSort} align="right" className="px-3 py-2">Max DD</SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {gridResult.rows.map((row) => (
+                {sortedGridRows.map((row) => (
                   <tr key={row.rank} className="border-b border-border/50">
                     <td className="px-3 py-2">{row.rank}</td>
                     <td className="px-3 py-2 font-mono text-[10px]">

@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTableSort } from "@/hooks/use-table-sort";
+import SortableTh from "@/components/ui/sortable-th";
 import { ScrollText, RefreshCw } from "lucide-react";
 import { cn, formatDateTimeCompactIST, formatDateTimeIST, tableDateTimeThClass, tableDateTimeTdClass } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -38,6 +40,21 @@ export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
     const t = setInterval(() => void load(), 30_000);
     return () => clearInterval(t);
   }, [load]);
+
+  const { sortKey, sortDir, toggleSort, sortRows } = useTableSort({
+    key: "when",
+    dir: "desc",
+  });
+  const sortedLogs = useMemo(
+    () =>
+      sortRows(logs, {
+        when: (l) => Date.parse(l.timestamp) || 0,
+        level: (l) => l.severity,
+        source: (l) => l.source,
+        message: (l) => l.message,
+      }),
+    [logs, sortRows]
+  );
 
   return (
     <section className="card">
@@ -82,14 +99,14 @@ export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border text-text-tertiary text-left">
-              <th className={cn(tableDateTimeThClass, "py-2 pr-2")}>When</th>
-              <th className="py-2 pr-3">Level</th>
-              <th className="py-2 pr-3">Source</th>
-              <th className="py-2">Message</th>
+              <SortableTh sortKey="when" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className={cn(tableDateTimeThClass, "py-2 pr-2")}>When</SortableTh>
+              <SortableTh sortKey="level" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Level</SortableTh>
+              <SortableTh sortKey="source" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Source</SortableTh>
+              <SortableTh sortKey="message" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2">Message</SortableTh>
             </tr>
           </thead>
           <tbody>
-            {logs.map((l) => (
+            {sortedLogs.map((l) => (
               <tr key={l.id} className="border-b border-border/40">
                 <td
                   className={cn(tableDateTimeTdClass, "py-2 pr-2")}
@@ -115,7 +132,7 @@ export default function AuditLogsPanel({ tall = false }: { tall?: boolean }) {
                 <td className="py-2 text-text-primary">{l.message}</td>
               </tr>
             ))}
-            {logs.length === 0 && (
+            {sortedLogs.length === 0 && (
               <tr>
                 <td colSpan={4} className="py-8 text-center text-text-tertiary">
                   {user

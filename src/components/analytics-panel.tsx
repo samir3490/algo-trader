@@ -30,6 +30,8 @@ import type { GroupedAnalytics } from "@/lib/analytics/paper-analytics";
 import type { BenchmarkComparison } from "@/lib/analytics/benchmark";
 import { buildTradeJournalCsv } from "@/lib/export/trade-journal";
 import { downloadCsv, exportDateStamp } from "@/lib/export/csv";
+import { useTableSort } from "@/hooks/use-table-sort";
+import SortableTh from "@/components/ui/sortable-th";
 import type { PaperPosition } from "@/lib/portfolio/types";
 
 function formatPf(pf: number): string {
@@ -94,6 +96,23 @@ function MetricsGrid({
 }
 
 function GroupTable({ title, rows }: { title: string; rows: GroupedAnalytics[] }) {
+  const { sortKey, sortDir, toggleSort, sortRows } = useTableSort({
+    key: "pnl",
+    dir: "desc",
+  });
+  const sorted = useMemo(
+    () =>
+      sortRows(rows, {
+        name: (r) => r.label,
+        trips: (r) => r.roundTrips,
+        pnl: (r) => r.metrics.netPnl,
+        winRate: (r) => r.metrics.winRate,
+        pf: (r) => r.metrics.profitFactor,
+        sharpe: (r) => r.metrics.sharpeRatio,
+      }),
+    [rows, sortRows]
+  );
+
   if (rows.length === 0) {
     return (
       <div className="rounded-xl border border-border bg-bg-secondary p-4">
@@ -108,7 +127,7 @@ function GroupTable({ title, rows }: { title: string; rows: GroupedAnalytics[] }
         <h3 className="text-sm font-semibold text-text-primary">{title}</h3>
       </div>
       <div className="md:hidden divide-y divide-border/50 max-h-64 overflow-y-auto">
-        {rows.map((r) => (
+        {sorted.map((r) => (
           <div key={r.key} className="px-4 py-3 flex justify-between gap-2">
             <div>
               <p className="text-sm font-medium text-text-primary">{r.label}</p>
@@ -131,16 +150,16 @@ function GroupTable({ title, rows }: { title: string; rows: GroupedAnalytics[] }
         <table className="w-full text-xs">
           <thead>
             <tr className="text-text-tertiary border-b border-border">
-              <th className="text-left px-4 py-2 font-medium">Name</th>
-              <th className="text-right px-3 py-2 font-medium">Trips</th>
-              <th className="text-right px-3 py-2 font-medium">Net P&L</th>
-              <th className="text-right px-3 py-2 font-medium">Win%</th>
-              <th className="text-right px-3 py-2 font-medium">PF</th>
-              <th className="text-right px-4 py-2 font-medium">Sharpe</th>
+              <SortableTh sortKey="name" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-2 font-medium">Name</SortableTh>
+              <SortableTh sortKey="trips" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-3 py-2 font-medium">Trips</SortableTh>
+              <SortableTh sortKey="pnl" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-3 py-2 font-medium">Net P&L</SortableTh>
+              <SortableTh sortKey="winRate" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-3 py-2 font-medium">Win%</SortableTh>
+              <SortableTh sortKey="pf" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-3 py-2 font-medium">PF</SortableTh>
+              <SortableTh sortKey="sharpe" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-2 font-medium">Sharpe</SortableTh>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => (
+            {sorted.map((r) => (
               <tr key={r.key} className="border-b border-border/50 hover:bg-bg-tertiary/30">
                 <td className="px-4 py-2 text-text-primary font-medium">{r.label}</td>
                 <td className="px-3 py-2 text-right tabular-nums">{r.roundTrips}</td>

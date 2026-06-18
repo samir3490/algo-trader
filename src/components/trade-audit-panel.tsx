@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ClipboardList, Download, RefreshCw } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { buildTradeAuditLog } from "@/lib/portfolio/trade-audit";
+import { useTableSort } from "@/hooks/use-table-sort";
+import SortableTh from "@/components/ui/sortable-th";
 import { buildTradeAuditCsv } from "@/lib/export/trade-audit-export";
 import { downloadCsv, exportDateStamp } from "@/lib/export/csv";
 import { getPaperTradingState } from "@/lib/firebase";
@@ -77,6 +79,27 @@ export default function TradeAuditPanel() {
 
   const rows = useMemo(() => buildTradeAuditLog(trades), [trades]);
 
+  const { sortKey, sortDir, toggleSort, sortRows } = useTableSort({
+    key: "when",
+    dir: "desc",
+  });
+  const sortedRows = useMemo(
+    () =>
+      sortRows(rows, {
+        strategy: (r) => r.strategyName,
+        symbol: (r) => r.symbol,
+        side: (r) => r.side,
+        signal: (r) => r.signalReason ?? "",
+        strength: (r) => r.signalStrength ?? "",
+        entry: (r) => r.entryPrice ?? 0,
+        exit: (r) => r.exitPrice ?? 0,
+        exitReason: (r) => r.exitReason ?? "",
+        pnl: (r) => r.netPnl ?? 0,
+        when: (r) => (r.executedAt ? Date.parse(r.executedAt) : 0),
+      }),
+    [rows, sortRows]
+  );
+
   function exportCsv() {
     downloadCsv(`trade-audit-${exportDateStamp()}.csv`, buildTradeAuditCsv(rows));
   }
@@ -124,7 +147,7 @@ export default function TradeAuditPanel() {
       ) : (
         <>
           <div className="md:hidden space-y-2 max-h-[min(70vh,560px)] overflow-y-auto">
-            {rows.map((r) => (
+            {sortedRows.map((r) => (
               <AuditCard key={r.id} r={r} />
             ))}
           </div>
@@ -133,19 +156,19 @@ export default function TradeAuditPanel() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="border-b border-border text-text-tertiary text-left">
-                  <th className="py-2 pr-3">Strategy</th>
-                  <th className="py-2 pr-3">Symbol</th>
-                  <th className="py-2 pr-3">Side</th>
-                  <th className="py-2 pr-3">Signal</th>
-                  <th className="py-2 pr-3">Strength</th>
-                  <th className="py-2 pr-3">Entry</th>
-                  <th className="py-2 pr-3">Exit</th>
-                  <th className="py-2 pr-3">Exit reason</th>
-                  <th className="py-2 pr-3 text-right">P&amp;L</th>
+                  <SortableTh sortKey="strategy" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Strategy</SortableTh>
+                  <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Symbol</SortableTh>
+                  <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Side</SortableTh>
+                  <SortableTh sortKey="signal" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Signal</SortableTh>
+                  <SortableTh sortKey="strength" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Strength</SortableTh>
+                  <SortableTh sortKey="entry" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Entry</SortableTh>
+                  <SortableTh sortKey="exit" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Exit</SortableTh>
+                  <SortableTh sortKey="exitReason" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3">Exit reason</SortableTh>
+                  <SortableTh sortKey="pnl" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-2 pr-3">P&amp;L</SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {sortedRows.map((r) => (
                   <tr key={r.id} className="border-b border-border/40">
                     <td className="py-2 pr-3 text-text-primary font-medium">
                       {r.strategyName}

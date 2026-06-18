@@ -57,6 +57,7 @@ import {
   enrichTradesWithStrategy,
   computeStrategyDetailBundles,
   buildStrategyNamesBySymbol,
+  type StrategyTradeEvent,
 } from "@/lib/strategies/strategy-performance";
 import StrategyBadges from "@/components/strategy-badges";
 import {
@@ -73,6 +74,8 @@ import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
 import { PaperOrderPanel } from "@/app/paper-trading/order-panel";
 import PaperExportMenu from "@/components/paper-export-menu";
 import PaperHealthPanel from "@/components/paper-health-panel";
+import { useTableSort } from "@/hooks/use-table-sort";
+import SortableTh from "@/components/ui/sortable-th";
 import {
   resolveTradeCharges,
   formatChargesTooltip,
@@ -1000,6 +1003,61 @@ export default function PaperTradingPage() {
     [enrichedTrades]
   );
 
+  const holdingsSort = useTableSort({ key: "pnl", dir: "desc" });
+  const sortedHoldings = useMemo(
+    () =>
+      holdingsSort.sortRows(holdings, {
+        symbol: (h) => h.symbol,
+        qty: (h) => h.qty,
+        avg: (h) => h.avgPrice,
+        ltp: (h) => h.ltp,
+        invested: (h) => h.qty * h.avgPrice,
+        value: (h) => h.qty * (h.ltp > 0 ? h.ltp : h.avgPrice),
+        pnl: (h) => {
+          const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
+          return h.qty * mark - h.qty * h.avgPrice;
+        },
+        pnlPct: (h) => {
+          const invested = h.qty * h.avgPrice;
+          const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
+          return invested > 0 ? ((h.qty * mark - invested) / invested) * 100 : 0;
+        },
+      }),
+    [holdings, holdingsSort.sortRows]
+  );
+
+  const strategySort = useTableSort({ key: "pnl", dir: "desc" });
+  const sortedStrategyDetails = useMemo(
+    () =>
+      strategySort.sortRows(strategyDetails, {
+        strategy: (b) => b.summary.strategyName,
+        trades: (b) => b.summary.trades,
+        stocks: (b) => b.symbols.length,
+        closed: (b) => b.summary.closedRounds,
+        wins: (b) => b.summary.wins,
+        winRate: (b) => b.summary.winRate,
+        avgHold: (b) => b.summary.avgHoldDays,
+        pnl: (b) => b.summary.realizedPnl,
+      }),
+    [strategyDetails, strategySort.sortRows]
+  );
+
+  const tradesSort = useTableSort({ key: "when", dir: "desc" });
+  const sortedEnrichedTrades = useMemo(
+    () =>
+      tradesSort.sortRows(enrichedTrades, {
+        when: (t) => tradeExecutedAtMs(t),
+        symbol: (t) => t.symbol,
+        strategy: (t) => t.displayStrategyName ?? "",
+        side: (t) => t.side,
+        qty: (t) => t.qty,
+        price: (t) => t.price,
+        total: (t) => t.qty * t.price,
+        netPnl: (t) => t.netPnl ?? 0,
+      }),
+    [enrichedTrades, tradesSort.sortRows]
+  );
+
   const summaryItems = [
     {
       label: "Balance",
@@ -1231,40 +1289,95 @@ export default function PaperTradingPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border">
-                    <th className="py-3 pl-5 pr-2 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                    <SortableTh
+                      sortKey="symbol"
+                      activeKey={holdingsSort.sortKey}
+                      direction={holdingsSort.sortDir}
+                      onSort={holdingsSort.toggleSort}
+                      className="py-3 pl-5 pr-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                    >
                       Symbol
-                    </th>
+                    </SortableTh>
                     <th className="hidden py-3 px-2 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell">
                       Strategies
                     </th>
-                    <th className="py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                    <SortableTh
+                      sortKey="qty"
+                      activeKey={holdingsSort.sortKey}
+                      direction={holdingsSort.sortDir}
+                      onSort={holdingsSort.toggleSort}
+                      align="right"
+                      className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                    >
                       Qty
-                    </th>
-                    <th className="py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                    </SortableTh>
+                    <SortableTh
+                      sortKey="avg"
+                      activeKey={holdingsSort.sortKey}
+                      direction={holdingsSort.sortDir}
+                      onSort={holdingsSort.toggleSort}
+                      align="right"
+                      className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                    >
                       Avg
-                    </th>
-                    <th className="py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                    </SortableTh>
+                    <SortableTh
+                      sortKey="ltp"
+                      activeKey={holdingsSort.sortKey}
+                      direction={holdingsSort.sortDir}
+                      onSort={holdingsSort.toggleSort}
+                      align="right"
+                      className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                    >
                       LTP
-                    </th>
-                    <th className="hidden py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell">
+                    </SortableTh>
+                    <SortableTh
+                      sortKey="invested"
+                      activeKey={holdingsSort.sortKey}
+                      direction={holdingsSort.sortDir}
+                      onSort={holdingsSort.toggleSort}
+                      align="right"
+                      className="hidden py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell"
+                    >
                       Invested
-                    </th>
-                    <th className="hidden py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell">
+                    </SortableTh>
+                    <SortableTh
+                      sortKey="value"
+                      activeKey={holdingsSort.sortKey}
+                      direction={holdingsSort.sortDir}
+                      onSort={holdingsSort.toggleSort}
+                      align="right"
+                      className="hidden py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell"
+                    >
                       Value
-                    </th>
-                    <th className="py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                    </SortableTh>
+                    <SortableTh
+                      sortKey="pnl"
+                      activeKey={holdingsSort.sortKey}
+                      direction={holdingsSort.sortDir}
+                      onSort={holdingsSort.toggleSort}
+                      align="right"
+                      className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                    >
                       P&amp;L
-                    </th>
-                    <th className="hidden py-3 px-2 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell">
+                    </SortableTh>
+                    <SortableTh
+                      sortKey="pnlPct"
+                      activeKey={holdingsSort.sortKey}
+                      direction={holdingsSort.sortDir}
+                      onSort={holdingsSort.toggleSort}
+                      align="right"
+                      className="hidden py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary sm:table-cell"
+                    >
                       P&amp;L %
-                    </th>
+                    </SortableTh>
                     <th className="py-3 pl-2 pr-5 text-center text-xs font-semibold uppercase tracking-wider text-text-tertiary">
                       Action
                     </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {holdings.map((h) => {
+                  {sortedHoldings.map((h) => {
                     const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
                     const currentVal = h.qty * mark;
                     const investedVal = h.qty * h.avgPrice;
@@ -1388,18 +1501,89 @@ export default function PaperTradingPage() {
               <thead>
                 <tr className="border-b border-border">
                   <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5 w-8" />
-                  <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Strategy</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Trades</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Stocks</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Closed</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Win / Loss</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Win %</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Avg hold</th>
-                  <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Realized P&amp;L</th>
+                  <SortableTh
+                    sortKey="strategy"
+                    activeKey={strategySort.sortKey}
+                    direction={strategySort.sortDir}
+                    onSort={strategySort.toggleSort}
+                    className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5"
+                  >
+                    Strategy
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="trades"
+                    activeKey={strategySort.sortKey}
+                    direction={strategySort.sortDir}
+                    onSort={strategySort.toggleSort}
+                    align="right"
+                    className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5"
+                  >
+                    Trades
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="stocks"
+                    activeKey={strategySort.sortKey}
+                    direction={strategySort.sortDir}
+                    onSort={strategySort.toggleSort}
+                    align="right"
+                    className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5"
+                  >
+                    Stocks
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="closed"
+                    activeKey={strategySort.sortKey}
+                    direction={strategySort.sortDir}
+                    onSort={strategySort.toggleSort}
+                    align="right"
+                    className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5"
+                  >
+                    Closed
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="wins"
+                    activeKey={strategySort.sortKey}
+                    direction={strategySort.sortDir}
+                    onSort={strategySort.toggleSort}
+                    align="right"
+                    className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5"
+                  >
+                    Win / Loss
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="winRate"
+                    activeKey={strategySort.sortKey}
+                    direction={strategySort.sortDir}
+                    onSort={strategySort.toggleSort}
+                    align="right"
+                    className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5"
+                  >
+                    Win %
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="avgHold"
+                    activeKey={strategySort.sortKey}
+                    direction={strategySort.sortDir}
+                    onSort={strategySort.toggleSort}
+                    align="right"
+                    className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5"
+                  >
+                    Avg hold
+                  </SortableTh>
+                  <SortableTh
+                    sortKey="pnl"
+                    activeKey={strategySort.sortKey}
+                    direction={strategySort.sortDir}
+                    onSort={strategySort.toggleSort}
+                    align="right"
+                    className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5"
+                  >
+                    Realized P&amp;L
+                  </SortableTh>
                 </tr>
               </thead>
               <tbody>
-                {strategyDetails.map((bundle) => {
+                {sortedStrategyDetails.map((bundle) => {
                   const s = bundle.summary;
                   const isOpen = expandedStrategyKey === bundle.key;
                   const stockCount = bundle.symbols.length;
@@ -1450,7 +1634,7 @@ export default function PaperTradingPage() {
                       </tr>
                       {isOpen && (
                         <tr key={`${bundle.key}-detail`} className="border-b border-border/50 bg-bg-secondary/30">
-                          <td colSpan={7} className="py-4 px-5">
+                          <td colSpan={9} className="py-4 px-5">
                             {bundle.symbols.length === 0 ? (
                               <p className="text-sm text-text-tertiary">No trades recorded for this strategy.</p>
                             ) : (
@@ -1505,82 +1689,7 @@ export default function PaperTradingPage() {
                                           </span>
                                         </div>
                                       </div>
-                                      <table className="w-full text-xs">
-                                        <thead>
-                                          <tr className="text-text-tertiary uppercase tracking-wider border-b border-border/40">
-                                            <th className={cn(tableDateTimeThClass, "py-2 px-4")}>When</th>
-                                            <th className="text-left py-2 px-4 font-medium">Strategies</th>
-                                            <th className="text-left py-2 px-4 font-medium">Side</th>
-                                            <th className="text-right py-2 px-4 font-medium">Qty</th>
-                                            <th className="text-right py-2 px-4 font-medium">Price</th>
-                                            <th className="text-right py-2 px-4 font-medium">Amount</th>
-                                            <th className="text-right py-2 px-4 font-medium">P&amp;L</th>
-                                          </tr>
-                                        </thead>
-                                        <tbody>
-                                          {sym.events.map((ev) => {
-                                            const isBuy = ev.side === "BUY";
-                                            return (
-                                              <tr
-                                                key={ev.tradeId}
-                                                className="border-b border-border/30 last:border-0"
-                                              >
-                                                <td
-                                                  className={cn(tableDateTimeTdClass, "py-2 px-4")}
-                                                  title={ev.dateTimeTitle ?? ev.dateTimeLabel}
-                                                >
-                                                  {ev.dateTimeLabel}
-                                                </td>
-                                                <td className="py-2 px-4">
-                                                  {ev.strategyNames && ev.strategyNames.length > 0 ? (
-                                                    <StrategyBadges
-                                                      names={ev.strategyNames}
-                                                      unknownCount={ev.unknownStrategyCount}
-                                                      size="sm"
-                                                    />
-                                                  ) : (
-                                                    <span className="text-text-tertiary">—</span>
-                                                  )}
-                                                </td>
-                                                <td className="py-2 px-4">
-                                                  <span
-                                                    className={cn(
-                                                      "inline-flex px-1.5 py-0.5 rounded font-semibold",
-                                                      isBuy ? "bg-profit/15 text-profit" : "bg-loss/15 text-loss"
-                                                    )}
-                                                  >
-                                                    {ev.side}
-                                                  </span>
-                                                </td>
-                                                <td className="py-2 px-4 text-right text-text-secondary">
-                                                  {formatNumber(ev.qty)}
-                                                </td>
-                                                <td className="py-2 px-4 text-right text-text-primary">
-                                                  {formatCurrency(ev.price)}
-                                                </td>
-                                                <td className="py-2 px-4 text-right text-text-primary">
-                                                  {formatCurrency(ev.total)}
-                                                </td>
-                                                <td className="py-2 px-4 text-right font-medium">
-                                                  {ev.side === "SELL" && ev.realizedPnl != null ? (
-                                                    <span className={ev.realizedPnl >= 0 ? "text-profit" : "text-loss"}>
-                                                      {ev.realizedPnl >= 0 ? "+" : ""}
-                                                      {formatCurrency(ev.realizedPnl)}
-                                                      {ev.matchedBuyPrice != null && (
-                                                        <span className="block text-[10px] text-text-tertiary font-normal">
-                                                          vs buy {formatCurrency(ev.matchedBuyPrice)}
-                                                        </span>
-                                                      )}
-                                                    </span>
-                                                  ) : (
-                                                    <span className="text-text-tertiary">—</span>
-                                                  )}
-                                                </td>
-                                              </tr>
-                                            );
-                                          })}
-                                        </tbody>
-                                      </table>
+                                      <SymbolEventsTable events={sym.events} />
                                     </div>
                                   );
                                 })}
@@ -1635,13 +1744,13 @@ export default function PaperTradingPage() {
           <table className="w-full text-sm min-w-[640px]">
             <thead>
               <tr className="border-b border-border">
-                <th className={cn(tableDateTimeThClass, "text-xs text-text-tertiary uppercase tracking-wider py-3 pl-5 pr-1")}>When</th>
-                <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Symbol</th>
-                <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Strategy</th>
-                <th className="text-left text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Side</th>
-                <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Qty</th>
-                <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Price</th>
-                <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Total</th>
+                <SortableTh sortKey="when" activeKey={tradesSort.sortKey} direction={tradesSort.sortDir} onSort={tradesSort.toggleSort} className={cn(tableDateTimeThClass, "text-xs text-text-tertiary uppercase tracking-wider py-3 pl-5 pr-1")}>When</SortableTh>
+                <SortableTh sortKey="symbol" activeKey={tradesSort.sortKey} direction={tradesSort.sortDir} onSort={tradesSort.toggleSort} className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Symbol</SortableTh>
+                <SortableTh sortKey="strategy" activeKey={tradesSort.sortKey} direction={tradesSort.sortDir} onSort={tradesSort.toggleSort} className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Strategy</SortableTh>
+                <SortableTh sortKey="side" activeKey={tradesSort.sortKey} direction={tradesSort.sortDir} onSort={tradesSort.toggleSort} className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Side</SortableTh>
+                <SortableTh sortKey="qty" activeKey={tradesSort.sortKey} direction={tradesSort.sortDir} onSort={tradesSort.toggleSort} align="right" className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Qty</SortableTh>
+                <SortableTh sortKey="price" activeKey={tradesSort.sortKey} direction={tradesSort.sortDir} onSort={tradesSort.toggleSort} align="right" className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Price</SortableTh>
+                <SortableTh sortKey="total" activeKey={tradesSort.sortKey} direction={tradesSort.sortDir} onSort={tradesSort.toggleSort} align="right" className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Total</SortableTh>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-3">Brokerage</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-3">STT</th>
                 <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-3">GST</th>
@@ -1657,11 +1766,11 @@ export default function PaperTradingPage() {
                 >
                   Total fees
                 </th>
-                <th className="text-right text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Net P&amp;L</th>
+                <SortableTh sortKey="netPnl" activeKey={tradesSort.sortKey} direction={tradesSort.sortDir} onSort={tradesSort.toggleSort} align="right" className="text-xs text-text-tertiary uppercase tracking-wider py-3 px-5">Net P&amp;L</SortableTh>
               </tr>
             </thead>
             <tbody>
-              {enrichedTrades.map((t) => {
+              {sortedEnrichedTrades.map((t) => {
                 const isBuy = t.side === "BUY";
                 const isManual =
                   t.displayStrategyName === "Manual" &&
@@ -1801,5 +1910,101 @@ export default function PaperTradingPage() {
 
       <PaperHealthPanel className="mt-8" />
     </div>
+  );
+}
+
+function SymbolEventsTable({ events }: { events: StrategyTradeEvent[] }) {
+  const { sortKey, sortDir, toggleSort, sortRows } = useTableSort({
+    key: "when",
+    dir: "desc",
+  });
+  const sorted = useMemo(
+    () =>
+      sortRows(events, {
+        when: (e) => e.executedAtMs,
+        strategy: (e) => e.strategyNames?.[0] ?? "",
+        side: (e) => e.side,
+        qty: (e) => e.qty,
+        price: (e) => e.price,
+        total: (e) => e.total,
+        pnl: (e) => e.realizedPnl ?? 0,
+      }),
+    [events, sortRows]
+  );
+
+  return (
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="text-text-tertiary uppercase tracking-wider border-b border-border/40">
+          <SortableTh sortKey="when" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className={cn(tableDateTimeThClass, "py-2 px-4 font-medium")}>When</SortableTh>
+          <SortableTh sortKey="strategy" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 px-4 font-medium">Strategies</SortableTh>
+          <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 px-4 font-medium">Side</SortableTh>
+          <SortableTh sortKey="qty" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-2 px-4 font-medium">Qty</SortableTh>
+          <SortableTh sortKey="price" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-2 px-4 font-medium">Price</SortableTh>
+          <SortableTh sortKey="total" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-2 px-4 font-medium">Amount</SortableTh>
+          <SortableTh sortKey="pnl" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-2 px-4 font-medium">P&amp;L</SortableTh>
+        </tr>
+      </thead>
+      <tbody>
+        {sorted.map((ev) => {
+          const isBuy = ev.side === "BUY";
+          return (
+            <tr key={ev.tradeId} className="border-b border-border/30 last:border-0">
+              <td
+                className={cn(tableDateTimeTdClass, "py-2 px-4")}
+                title={ev.dateTimeTitle ?? ev.dateTimeLabel}
+              >
+                {ev.dateTimeLabel}
+              </td>
+              <td className="py-2 px-4">
+                {ev.strategyNames && ev.strategyNames.length > 0 ? (
+                  <StrategyBadges
+                    names={ev.strategyNames}
+                    unknownCount={ev.unknownStrategyCount}
+                    size="sm"
+                  />
+                ) : (
+                  <span className="text-text-tertiary">—</span>
+                )}
+              </td>
+              <td className="py-2 px-4">
+                <span
+                  className={cn(
+                    "inline-flex px-1.5 py-0.5 rounded font-semibold",
+                    isBuy ? "bg-profit/15 text-profit" : "bg-loss/15 text-loss"
+                  )}
+                >
+                  {ev.side}
+                </span>
+              </td>
+              <td className="py-2 px-4 text-right text-text-secondary">
+                {formatNumber(ev.qty)}
+              </td>
+              <td className="py-2 px-4 text-right text-text-primary">
+                {formatCurrency(ev.price)}
+              </td>
+              <td className="py-2 px-4 text-right text-text-primary">
+                {formatCurrency(ev.total)}
+              </td>
+              <td className="py-2 px-4 text-right font-medium">
+                {ev.side === "SELL" && ev.realizedPnl != null ? (
+                  <span className={ev.realizedPnl >= 0 ? "text-profit" : "text-loss"}>
+                    {ev.realizedPnl >= 0 ? "+" : ""}
+                    {formatCurrency(ev.realizedPnl)}
+                    {ev.matchedBuyPrice != null && (
+                      <span className="block text-[10px] text-text-tertiary font-normal">
+                        vs buy {formatCurrency(ev.matchedBuyPrice)}
+                      </span>
+                    )}
+                  </span>
+                ) : (
+                  <span className="text-text-tertiary">—</span>
+                )}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }

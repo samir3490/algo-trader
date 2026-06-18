@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense, useMemo } from "react";
+import { useTableSort } from "@/hooks/use-table-sort";
+import SortableTh from "@/components/ui/sortable-th";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   TrendingUp,
@@ -162,23 +164,44 @@ function ActiveStrategiesTable({
   onToggleStatus: (id: string) => void;
   onStop: (id: string) => void;
 }) {
+  const { sortKey, sortDir, toggleSort, sortRows } = useTableSort({
+    key: "pnl",
+    dir: "desc",
+  });
+  const sorted = useMemo(
+    () =>
+      sortRows(activeStrategies, {
+        strategy: (s) => getStrategyDef(s.type).name,
+        symbol: (s) =>
+          s.symbols && s.symbols.length > 1
+            ? `Universe (${s.symbols.length})`
+            : s.symbol,
+        mode: (s) => s.mode,
+        status: (s) => s.status,
+        timeframe: (s) => s.timeframe,
+        signals: (s) => s.signals,
+        pnl: (s) => s.pnl,
+      }),
+    [activeStrategies, sortRows]
+  );
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="border-b border-border text-xs uppercase tracking-wider text-text-tertiary">
-            <th className="px-6 py-3 font-medium">Strategy</th>
-            <th className="px-6 py-3 font-medium">Symbol</th>
-            <th className="px-6 py-3 font-medium">Mode</th>
-            <th className="px-6 py-3 font-medium">Status</th>
-            <th className="px-6 py-3 font-medium">Timeframe</th>
-            <th className="px-6 py-3 font-medium">Signals</th>
-            <th className="px-6 py-3 font-medium">P&amp;L</th>
+            <SortableTh sortKey="strategy" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-6 py-3 font-medium">Strategy</SortableTh>
+            <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-6 py-3 font-medium">Symbol</SortableTh>
+            <SortableTh sortKey="mode" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-6 py-3 font-medium">Mode</SortableTh>
+            <SortableTh sortKey="status" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-6 py-3 font-medium">Status</SortableTh>
+            <SortableTh sortKey="timeframe" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-6 py-3 font-medium">Timeframe</SortableTh>
+            <SortableTh sortKey="signals" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-6 py-3 font-medium">Signals</SortableTh>
+            <SortableTh sortKey="pnl" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-6 py-3 font-medium">P&amp;L</SortableTh>
             <th className="px-6 py-3 font-medium text-right">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
-          {activeStrategies.map((s) => {
+          {sorted.map((s) => {
             const def = getStrategyDef(s.type);
             const Icon = def.icon;
             return (

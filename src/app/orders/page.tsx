@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useTableSort } from "@/hooks/use-table-sort";
+import SortableTh from "@/components/ui/sortable-th";
 import {
   cn,
   formatCurrency,
@@ -219,6 +221,26 @@ export default function OrdersPage() {
     return true;
   });
 
+  const { sortKey, sortDir, toggleSort, sortRows } = useTableSort({
+    key: "when",
+    dir: "desc",
+  });
+  const sortedFiltered = useMemo(
+    () =>
+      sortRows(filtered, {
+        when: (o) => parseDateTimeMs(o.time, o.date),
+        symbol: (o) => o.symbol,
+        side: (o) => o.side,
+        type: (o) => o.type,
+        qty: (o) => o.quantity,
+        price: (o) => o.price,
+        status: (o) => o.status,
+        mode: (o) => o.mode,
+        account: (o) => o.accountId ?? "",
+      }),
+    [filtered, sortRows]
+  );
+
   const counts = {
     all: orders.length,
     paper: orders.filter((o) => o.mode === "PAPER").length,
@@ -313,12 +335,12 @@ export default function OrdersPage() {
             <Loader2 className="h-5 w-5 animate-spin" />
             Loading orders...
           </div>
-        ) : filtered.length === 0 ? (
+        ) : sortedFiltered.length === 0 ? (
           <p className="py-12 text-center text-sm text-text-tertiary">
             No orders found matching your filters.
           </p>
         ) : (
-          filtered.map((order) => {
+          sortedFiltered.map((order) => {
             const sc = statusConfig[order.status] || statusConfig.PENDING;
             const StatusIcon = sc.icon;
             return (
@@ -379,15 +401,15 @@ export default function OrdersPage() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              <th className={cn(tableDateTimeThClass, "px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary")}>When</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Symbol</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Side</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">Type</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">Qty</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-text-tertiary">Price</th>
-              <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-tertiary">Status</th>
-              <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-tertiary">Mode</th>
-              <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-text-tertiary">Account</th>
+              <SortableTh sortKey="when" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className={cn(tableDateTimeThClass, "px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary")}>When</SortableTh>
+              <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Symbol</SortableTh>
+              <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Side</SortableTh>
+              <SortableTh sortKey="type" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Type</SortableTh>
+              <SortableTh sortKey="qty" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Qty</SortableTh>
+              <SortableTh sortKey="price" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Price</SortableTh>
+              <SortableTh sortKey="status" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Status</SortableTh>
+              <SortableTh sortKey="mode" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Mode</SortableTh>
+              <SortableTh sortKey="account" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Account</SortableTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -400,14 +422,14 @@ export default function OrdersPage() {
                   </div>
                 </td>
               </tr>
-            ) : filtered.length === 0 ? (
+            ) : sortedFiltered.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-12 text-center text-text-tertiary">
                   No orders found matching your filters.
                 </td>
               </tr>
             ) : (
-              filtered.map((order) => {
+              sortedFiltered.map((order) => {
                 const sc = statusConfig[order.status] || statusConfig.PENDING;
                 const StatusIcon = sc.icon;
                 return (
@@ -475,10 +497,10 @@ export default function OrdersPage() {
 
       {/* Footer Summary */}
       <div className="flex items-center justify-between text-sm text-text-tertiary">
-        <span>Showing {filtered.length} of {orders.length} orders</span>
+        <span>Showing {sortedFiltered.length} of {orders.length} orders</span>
         <span>
           Total value: {formatCurrency(
-            filtered
+            sortedFiltered
               .filter((o) => o.status === "EXECUTED" || o.status === "COMPLETE")
               .reduce((sum, o) => sum + o.price * o.quantity, 0)
           )}

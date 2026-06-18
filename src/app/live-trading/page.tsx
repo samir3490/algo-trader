@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef, Suspense } from "react";
+import { useState, useEffect, useCallback, useRef, Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
@@ -35,6 +35,8 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { getZerodhaAccounts, type ZerodhaAccount } from "@/lib/firebase";
 import { fetchMarketQuote, fetchZerodhaQuoteDepth } from "@/lib/market-data/fetch-quote-client";
+import { useTableSort } from "@/hooks/use-table-sort";
+import SortableTh from "@/components/ui/sortable-th";
 
 type TransactionType = "BUY" | "SELL";
 type ProductType = "MIS" | "CNC" | "NRML";
@@ -550,6 +552,52 @@ function LiveTradingContent() {
   );
   const holdingsPnlPercent =
     holdingsTotals.invested > 0 ? (holdingsTotals.pnl / holdingsTotals.invested) * 100 : 0;
+
+  const positionsSort = useTableSort({ key: "pnl", dir: "desc" });
+  const sortedPositions = useMemo(
+    () =>
+      positionsSort.sortRows(positions, {
+        symbol: (p) => p.symbol,
+        qty: (p) => p.qty,
+        avg: (p) => p.avgPrice,
+        ltp: (p) => p.ltp,
+        pnl: (p) => p.pnl,
+        product: (p) => p.product,
+      }),
+    [positions, positionsSort.sortRows]
+  );
+
+  const ordersSort = useTableSort({ key: "when", dir: "desc" });
+  const sortedOrders = useMemo(
+    () =>
+      ordersSort.sortRows(orders, {
+        when: (o) => new Date(o.time).getTime(),
+        symbol: (o) => o.symbol,
+        type: (o) => o.type,
+        side: (o) => o.side,
+        qty: (o) => o.qty,
+        price: (o) => o.price,
+        status: (o) => o.status,
+      }),
+    [orders, ordersSort.sortRows]
+  );
+
+  const holdingsSort = useTableSort({ key: "pnl", dir: "desc" });
+  const sortedHoldings = useMemo(
+    () =>
+      holdingsSort.sortRows(holdings, {
+        symbol: (h) => h.symbol,
+        qty: (h) => h.qty,
+        avg: (h) => h.avgPrice,
+        ltp: (h) => h.ltp,
+        invested: (h) => h.invested,
+        value: (h) => h.currentValue,
+        pnl: (h) => h.pnl,
+        pnlPct: (h) => h.pnlPercent,
+        dayPct: (h) => h.dayChange,
+      }),
+    [holdings, holdingsSort.sortRows]
+  );
 
   const handlePlaceOrder = async () => {
     if (!symbol.trim() || !quantity) return;
@@ -1308,17 +1356,17 @@ function LiveTradingContent() {
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="text-text-secondary text-xs border-b border-border">
-                                <th className="text-left py-2 px-3 font-medium">Symbol</th>
-                                <th className="text-right py-2 px-3 font-medium">Qty</th>
-                                <th className="text-right py-2 px-3 font-medium">Avg Price</th>
-                                <th className="text-right py-2 px-3 font-medium">LTP</th>
-                                <th className="text-right py-2 px-3 font-medium">P&L</th>
-                                <th className="text-right py-2 px-3 font-medium">Product</th>
+                                <SortableTh sortKey="symbol" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} className="py-2 px-3 font-medium">Symbol</SortableTh>
+                                <SortableTh sortKey="qty" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Qty</SortableTh>
+                                <SortableTh sortKey="avg" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Avg Price</SortableTh>
+                                <SortableTh sortKey="ltp" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} align="right" className="py-2 px-3 font-medium">LTP</SortableTh>
+                                <SortableTh sortKey="pnl" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} align="right" className="py-2 px-3 font-medium">P&amp;L</SortableTh>
+                                <SortableTh sortKey="product" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Product</SortableTh>
                                 <th className="text-right py-2 px-3 font-medium"></th>
                               </tr>
                             </thead>
                             <tbody>
-                              {positions.map((pos, i) => (
+                              {sortedPositions.map((pos, i) => (
                                 <tr key={i} className="border-b border-border/50 hover:bg-bg-tertiary/30">
                                   <td className="py-2.5 px-3 font-medium">{pos.symbol}</td>
                                   <td className={cn("text-right py-2.5 px-3", pos.qty > 0 ? "text-green-400" : "text-red-400")}>
@@ -1369,18 +1417,18 @@ function LiveTradingContent() {
                         <table className="w-full text-sm">
                           <thead>
                             <tr className="text-text-secondary text-xs border-b border-border">
-                              <th className={cn(tableDateTimeThClass, "py-2 px-3")}>When</th>
-                              <th className="text-left py-2 px-3 font-medium">Symbol</th>
-                              <th className="text-left py-2 px-3 font-medium">Type</th>
-                              <th className="text-left py-2 px-3 font-medium">Side</th>
-                              <th className="text-right py-2 px-3 font-medium">Qty</th>
-                              <th className="text-right py-2 px-3 font-medium">Price</th>
-                              <th className="text-right py-2 px-3 font-medium">Status</th>
+                              <SortableTh sortKey="when" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} className={cn(tableDateTimeThClass, "py-2 px-3 font-medium")}>When</SortableTh>
+                              <SortableTh sortKey="symbol" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} className="py-2 px-3 font-medium">Symbol</SortableTh>
+                              <SortableTh sortKey="type" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} className="py-2 px-3 font-medium">Type</SortableTh>
+                              <SortableTh sortKey="side" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} className="py-2 px-3 font-medium">Side</SortableTh>
+                              <SortableTh sortKey="qty" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} align="right" className="py-2 px-3 font-medium">Qty</SortableTh>
+                              <SortableTh sortKey="price" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} align="right" className="py-2 px-3 font-medium">Price</SortableTh>
+                              <SortableTh sortKey="status" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} align="right" className="py-2 px-3 font-medium">Status</SortableTh>
                               <th className="text-right py-2 px-3 font-medium"></th>
                             </tr>
                           </thead>
                           <tbody>
-                            {orders.map((order, i) => (
+                            {sortedOrders.map((order, i) => (
                               <tr key={i} className="border-b border-border/50 hover:bg-bg-tertiary/30">
                                 <td
                                   className={cn(tableDateTimeTdClass, "py-2.5 px-3")}
@@ -1453,20 +1501,20 @@ function LiveTradingContent() {
                           <table className="w-full text-sm min-w-[720px]">
                             <thead>
                               <tr className="text-text-secondary text-xs border-b border-border">
-                                <th className="text-left py-2 px-3 font-medium">Symbol</th>
-                                <th className="text-right py-2 px-3 font-medium">Qty</th>
-                                <th className="text-right py-2 px-3 font-medium">Avg Price</th>
-                                <th className="text-right py-2 px-3 font-medium">LTP</th>
-                                <th className="text-right py-2 px-3 font-medium">Invested</th>
-                                <th className="text-right py-2 px-3 font-medium">Current Value</th>
-                                <th className="text-right py-2 px-3 font-medium">P&L</th>
-                                <th className="text-right py-2 px-3 font-medium">P&L %</th>
-                                <th className="text-right py-2 px-3 font-medium">Day %</th>
+                                <SortableTh sortKey="symbol" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} className="py-2 px-3 font-medium">Symbol</SortableTh>
+                                <SortableTh sortKey="qty" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Qty</SortableTh>
+                                <SortableTh sortKey="avg" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Avg Price</SortableTh>
+                                <SortableTh sortKey="ltp" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">LTP</SortableTh>
+                                <SortableTh sortKey="invested" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Invested</SortableTh>
+                                <SortableTh sortKey="value" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Current Value</SortableTh>
+                                <SortableTh sortKey="pnl" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">P&amp;L</SortableTh>
+                                <SortableTh sortKey="pnlPct" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">P&amp;L %</SortableTh>
+                                <SortableTh sortKey="dayPct" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Day %</SortableTh>
                                 <th className="text-right py-2 px-3 font-medium">Actions</th>
                               </tr>
                             </thead>
                             <tbody>
-                              {holdings.map((holding, i) => (
+                              {sortedHoldings.map((holding, i) => (
                                 <tr key={i} className="border-b border-border/50 hover:bg-bg-tertiary/30">
                                   <td className="py-2.5 px-3 font-medium">
                                     {holding.symbol}

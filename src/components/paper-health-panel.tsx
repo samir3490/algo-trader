@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTableSort } from "@/hooks/use-table-sort";
+import SortableTh from "@/components/ui/sortable-th";
 import Link from "next/link";
 import {
   Activity,
@@ -97,6 +99,23 @@ export default function PaperHealthPanel({ className }: { className?: string }) 
       setReconciling(false);
     }
   };
+
+  const { sortKey, sortDir, toggleSort, sortRows } = useTableSort({
+    key: "pnl",
+    dir: "desc",
+  });
+  const sortedStrategyPnl = useMemo(
+    () =>
+      health
+        ? sortRows(health.strategyPnl, {
+            strategy: (r) => r.strategyName,
+            pnl: (r) => r.realizedPnl,
+            rounds: (r) => r.closedRounds,
+            wl: (r) => r.wins - r.losses,
+          })
+        : [],
+    [health, sortRows]
+  );
 
   if (!user) return null;
 
@@ -285,14 +304,14 @@ export default function PaperHealthPanel({ className }: { className?: string }) 
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-text-tertiary border-b border-border">
-                      <th className="text-left py-1.5 font-medium">Strategy</th>
-                      <th className="text-right py-1.5 font-medium">Realized</th>
-                      <th className="text-right py-1.5 font-medium">Rounds</th>
-                      <th className="text-right py-1.5 font-medium">W/L</th>
+                      <SortableTh sortKey="strategy" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="text-left py-1.5 font-medium">Strategy</SortableTh>
+                      <SortableTh sortKey="pnl" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-1.5 font-medium">Realized</SortableTh>
+                      <SortableTh sortKey="rounds" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-1.5 font-medium">Rounds</SortableTh>
+                      <SortableTh sortKey="wl" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-1.5 font-medium">W/L</SortableTh>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border/50">
-                    {health.strategyPnl.map((r) => (
+                    {sortedStrategyPnl.map((r) => (
                       <tr key={r.strategyName}>
                         <td className="py-1.5 text-text-secondary">{r.strategyName}</td>
                         <td

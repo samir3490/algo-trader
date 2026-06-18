@@ -39,7 +39,9 @@ import {
   type PaperTrade,
 } from "@/lib/firebase";
 import { enrichTradesWithStrategy } from "@/lib/strategies/strategy-performance";
-import { formatTradeDateTime, formatTradeDateTimeCompact, normalizePaperTrades } from "@/lib/paper-trades/normalize";
+import { formatTradeDateTime, formatTradeDateTimeCompact, normalizePaperTrades, tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
+import { useTableSort } from "@/hooks/use-table-sort";
+import SortableTh from "@/components/ui/sortable-th";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { loadSettingsFromCache } from "@/lib/settings/cache";
 import {
@@ -385,8 +387,25 @@ export default function DashboardPage() {
 
   const recentTradesEnriched = useMemo(() => {
     const normalized = normalizePaperTrades(paperState.trades as PaperTrade[]);
-    return enrichTradesWithStrategy(normalized).slice(0, 10);
+    return enrichTradesWithStrategy(normalized);
   }, [paperState.trades]);
+
+  const { sortKey, sortDir, toggleSort, sortRows } = useTableSort({
+    key: "when",
+    dir: "desc",
+  });
+  const displayedTrades = useMemo(() => {
+    const sorted = sortRows(recentTradesEnriched, {
+      when: (t) => tradeExecutedAtMs(t),
+      symbol: (t) => t.symbol,
+      strategy: (t) => t.displayStrategyName ?? "",
+      side: (t) => t.side,
+      qty: (t) => t.qty,
+      price: (t) => t.price,
+      total: (t) => t.qty * t.price,
+    });
+    return sorted.slice(0, 10);
+  }, [recentTradesEnriched, sortRows]);
 
   const chartData = buildPortfolioChart(
     normalizedTradesForPnl,
@@ -779,17 +798,17 @@ export default function DashboardPage() {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-border text-text-tertiary uppercase tracking-wider">
-                    <th className={cn(tableDateTimeThClass, "text-text-tertiary uppercase tracking-wider")}>When</th>
-                    <th className="text-left py-2 px-5 font-medium">Symbol</th>
-                    <th className="text-left py-2 px-5 font-medium">Strategy</th>
-                    <th className="text-left py-2 px-5 font-medium">Side</th>
-                    <th className="text-right py-2 px-5 font-medium">Qty</th>
-                    <th className="text-right py-2 px-5 font-medium">Price</th>
-                    <th className="text-right py-2 px-5 font-medium">Total</th>
+                    <SortableTh sortKey="when" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className={cn(tableDateTimeThClass, "text-text-tertiary uppercase tracking-wider")}>When</SortableTh>
+                    <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 px-5 font-medium">Symbol</SortableTh>
+                    <SortableTh sortKey="strategy" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 px-5 font-medium">Strategy</SortableTh>
+                    <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 px-5 font-medium">Side</SortableTh>
+                    <SortableTh sortKey="qty" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-2 px-5 font-medium">Qty</SortableTh>
+                    <SortableTh sortKey="price" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-2 px-5 font-medium">Price</SortableTh>
+                    <SortableTh sortKey="total" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="py-2 px-5 font-medium">Total</SortableTh>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/50">
-                  {recentTradesEnriched.map((t) => {
+                  {displayedTrades.map((t) => {
                     const isBuy = t.side === "BUY";
                     return (
                       <tr
