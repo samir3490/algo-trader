@@ -91,6 +91,7 @@ interface AppSettings {
     noSameDayRebuyAfterSell: boolean;
     minHoldMinutesBeforeSell: number;
     enableStrategySellSignals: boolean;
+    strategySellMinSignals: number;
     autoTrailingStop: boolean;
     trailingStopPercent: number;
     maxHoldDays: number;
@@ -132,7 +133,7 @@ const defaultSettings: AppSettings = {
     stopLossPercent: 2,
     takeProfitPercent: 5,
     autoStopLoss: true,
-    autoTakeProfit: true,
+    autoTakeProfit: false,
     maxPositions: 5,
     squareOffTime: "15:15",
     rebuyCooldownMinutes: 240,
@@ -140,6 +141,7 @@ const defaultSettings: AppSettings = {
     noSameDayRebuyAfterSell: true,
     minHoldMinutesBeforeSell: 60,
     enableStrategySellSignals: true,
+    strategySellMinSignals: 2,
     autoTrailingStop: true,
     trailingStopPercent: 2,
     maxHoldDays: 10,
@@ -192,6 +194,7 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       noSameDayRebuyAfterSell: fs.noSameDayRebuyAfterSell !== false,
       minHoldMinutesBeforeSell: fs.minHoldMinutesBeforeSell ?? 60,
       enableStrategySellSignals: fs.enableStrategySellSignals !== false,
+      strategySellMinSignals: fs.strategySellMinSignals ?? 2,
       autoTrailingStop: fs.autoTrailingStop !== false,
       trailingStopPercent: fs.trailingStopPercent ?? 2,
       maxHoldDays: fs.maxHoldDays ?? 10,
@@ -231,6 +234,7 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     noSameDayRebuyAfterSell: s.riskManagement.noSameDayRebuyAfterSell,
     minHoldMinutesBeforeSell: s.riskManagement.minHoldMinutesBeforeSell,
     enableStrategySellSignals: s.riskManagement.enableStrategySellSignals,
+    strategySellMinSignals: s.riskManagement.strategySellMinSignals,
     autoTrailingStop: s.riskManagement.autoTrailingStop,
     trailingStopPercent: s.riskManagement.trailingStopPercent,
     maxHoldDays: s.riskManagement.maxHoldDays,
@@ -1283,7 +1287,7 @@ function SettingsContent() {
               Risk Management
             </h2>
             <p className="text-xs text-text-secondary">
-              Auto stop-loss / take-profit on paper holdings (checked every minute)
+              Stop-loss on losses; trailing stop after min profit; time exits for stale positions
             </p>
           </div>
         </div>
@@ -1297,8 +1301,8 @@ function SettingsContent() {
             },
             {
               key: "autoTakeProfit" as const,
-              label: "Auto Take Profit",
-              desc: `Sell when profit reaches ${settings.riskManagement.takeProfitPercent}%`,
+              label: "Auto Take Profit (fixed exit)",
+              desc: `Optional: sell immediately at min profit ${settings.riskManagement.takeProfitPercent}% — off = strategy sells + trailing only`,
             },
           ].map((item) => (
             <div
@@ -1347,7 +1351,7 @@ function SettingsContent() {
 
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Take Profit (%)
+              Min profit % (strategy sells &amp; trailing arm)
             </label>
             <input
               type="number"
@@ -1487,7 +1491,8 @@ function SettingsContent() {
                 Strategy SELL signals (paper)
               </p>
               <p className="text-xs text-text-tertiary">
-                Buys run first each scan; sells only on held positions after min-hold. Never buy and sell the same symbol in one scan.
+                Buys run first each scan. Sells only on held positions after min-hold and min profit %.
+                Weak single-signal sells are ignored — trailing stop protects gains until more strategies agree.
               </p>
             </div>
           </div>
@@ -1512,7 +1517,31 @@ function SettingsContent() {
               className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
             <p className="text-xs text-text-tertiary mt-1">
-              Stop-loss / take-profit exits are not affected.
+              Stop-loss and trailing exits are not affected.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Min strategy sell signals
+            </label>
+            <input
+              type="number"
+              min="1"
+              max="12"
+              value={settings.riskManagement.strategySellMinSignals}
+              onChange={(e) =>
+                updateSettings("riskManagement", {
+                  strategySellMinSignals: Math.max(
+                    1,
+                    Number(e.target.value) || 1
+                  ),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-xs text-text-tertiary mt-1">
+              Symbols need this many strategy SELL signals (after min profit) before exiting.
             </p>
           </div>
 
@@ -1533,7 +1562,7 @@ function SettingsContent() {
             <div>
               <p className="text-sm font-medium text-text-primary">Trailing stop-loss</p>
               <p className="text-xs text-text-tertiary">
-                Exit when price falls this % from the peak since entry.
+                After min profit %, exit when price falls this % from the peak (ratchets up as price rises).
               </p>
             </div>
           </div>

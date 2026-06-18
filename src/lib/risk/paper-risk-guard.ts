@@ -122,7 +122,7 @@ export function evaluateHoldingRiskExit(
   return null;
 }
 
-/** Stop loss — checked first; overrides trailing stop, time exits, and strategy gates. */
+/** Stop loss — checked first on losses; overrides trailing stop and time exits. */
 export function evaluateStopLossExit(
   position: PaperPosition,
   settings: Pick<AppSettings, "stopLossPercent" | "autoStopLoss">
@@ -143,7 +143,18 @@ export function evaluateStopLossExit(
   return null;
 }
 
-/** Whether a held position has reached the take-profit % gate for strategy SELL signals. */
+/** Whether peak price has reached the min-profit % (arms trailing stop). */
+export function isTrailingStopArmed(
+  position: Pick<PaperPosition, "entryPrice" | "ltp" | "peakPrice">,
+  settings: Pick<AppSettings, "takeProfitPercent">
+): boolean {
+  const minProfit = settings.takeProfitPercent ?? 0;
+  if (minProfit <= 0) return true;
+  const peak = Math.max(position.peakPrice ?? position.entryPrice, position.ltp);
+  return holdingPnlPercent(position.entryPrice, peak) >= minProfit;
+}
+
+/** Whether a held position has reached the min-profit % gate for strategy SELL signals. */
 export function meetsStrategySellProfitTarget(
   position: Pick<PaperPosition, "entryPrice" | "ltp">,
   settings: Pick<AppSettings, "takeProfitPercent">
@@ -153,7 +164,7 @@ export function meetsStrategySellProfitTarget(
   return holdingPnlPercent(position.entryPrice, position.ltp) >= target;
 }
 
-/** Full position risk check: stop loss (first), trailing stop, take profit, time exits, MIS square-off. */
+/** Full position risk check: stop loss (first), trailing stop, optional fixed take profit, time exits, MIS square-off. */
 export function evaluatePositionRiskExit(
   position: PaperPosition,
   settings: AppSettings,
@@ -162,13 +173,6 @@ export function evaluatePositionRiskExit(
   const stopLoss = evaluateStopLossExit(position, settings);
   if (stopLoss) return stopLoss;
 
-  const holdingLike: PaperHoldingLike = {
-    symbol: position.symbol,
-    exchange: position.exchange,
-    qty: position.quantity,
-    avgPrice: position.entryPrice,
-    ltp: position.ltp,
-  };
   const pnlPercent = holdingPnlPercent(position.entryPrice, position.ltp);
   const peak = Math.max(
     position.peakPrice ?? position.entryPrice,
@@ -178,7 +182,8 @@ export function evaluatePositionRiskExit(
   if (
     settings.autoTrailingStop &&
     (settings.trailingStopPercent ?? 0) > 0 &&
-    peak > 0
+    peak > 0 &&
+    isTrailingStopArmed(position, settings)
   ) {
     const floor = peak * (1 - (settings.trailingStopPercent ?? 2) / 100);
     if (position.ltp > 0 && position.ltp <= floor) {

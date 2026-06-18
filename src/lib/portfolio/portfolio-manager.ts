@@ -195,6 +195,9 @@ export function buildRankedPaperSellQueue(
 
     if (!meetsStrategySellProfitTarget(position, ctx.settings)) continue;
 
+    const minSellSignals = ctx.settings.strategySellMinSignals ?? 2;
+    if ((op.sellSignalCount ?? 1) < minSellSignals) continue;
+
     let anchorMs = 0;
     for (const p of openPositions) {
       const ms = Date.parse(p.entryTime);

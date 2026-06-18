@@ -27,10 +27,10 @@ describe("evaluateHoldingRiskExit", () => {
     assert.equal(sig?.reason, "stop_loss");
   });
 
-  it("triggers take profit at +5%", () => {
+  it("triggers take profit at +5% when auto take profit enabled", () => {
     const sig = evaluateHoldingRiskExit(
       { ...holding, ltp: 106 },
-      baseSettings
+      { ...baseSettings, autoTakeProfit: true }
     );
     assert.equal(sig?.reason, "take_profit");
   });
@@ -65,7 +65,26 @@ describe("evaluatePositionRiskExit", () => {
     assert.equal(sig?.reason, "stop_loss");
   });
 
-  it("triggers trailing stop from peak", () => {
+  it("does not trigger trailing stop until min profit reached", () => {
+    const sig = evaluatePositionRiskExit(
+      {
+        id: "p1",
+        symbol: "TCS",
+        exchange: "NSE",
+        quantity: 10,
+        entryPrice: 100,
+        ltp: 103,
+        peakPrice: 104,
+        state: "OPEN",
+        ownerStrategyId: "s1",
+        entryTime: new Date().toISOString(),
+      },
+      { ...baseSettings, autoTrailingStop: true, trailingStopPercent: 2, takeProfitPercent: 5 }
+    );
+    assert.equal(sig, null);
+  });
+
+  it("triggers trailing stop from peak after min profit armed", () => {
     const sig = evaluatePositionRiskExit(
       {
         id: "p1",
@@ -79,7 +98,7 @@ describe("evaluatePositionRiskExit", () => {
         ownerStrategyId: "s1",
         entryTime: new Date().toISOString(),
       },
-      { ...baseSettings, autoTrailingStop: true, trailingStopPercent: 5 }
+      { ...baseSettings, autoTrailingStop: true, trailingStopPercent: 5, autoTakeProfit: false }
     );
     assert.equal(sig?.reason, "trailing_stop");
   });

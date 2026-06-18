@@ -63,7 +63,7 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 - [x] **Trailing stop-loss** — Settings → Risk: trail % from peak since entry
 - [x] **Time-based exits** — max hold days, square-off before 3:15 PM for MIS, optional “no progress in X days”
 - [x] **Strategy performance loop** — win rate & avg hold on Paper Trading; auto-pause losing instances
-- [x] **Optional strategy SELL signals** — two-phase scan after min hold; only on holdings at/above take-profit % (default 5%); sell weight consolidated across strategies per symbol. **Stop loss** (default 2%) always exits first and overrides trailing stop, time exits, and strategy gates.
+- [x] **Optional strategy SELL signals** — after min-hold and min profit % (default 5%); combined sell weight; weak single-signal sells ignored (default 2 strategies). No fixed auto-exit at 5% unless Auto Take Profit is on. Trailing stop arms after min profit and ratchets from peak. Stop loss (2%) on losses. Time exits unchanged.
 
 ---
 

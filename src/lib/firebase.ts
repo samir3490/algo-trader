@@ -365,6 +365,8 @@ export interface AppSettings {
   minHoldMinutesBeforeSell: number;
   /** When true, strategy SELL signals exit paper positions after min-hold (buys run first each scan). */
   enableStrategySellSignals: boolean;
+  /** Min strategy SELL signals on a symbol before strategy exit (weak single signals hold for trailing). */
+  strategySellMinSignals: number;
   /** Paper position sizing: fixed rupee notional, % of balance, or ATR-risk. */
   positionSizingMode: "notional" | "portfolio_pct" | "atr_risk";
   /** % of paper balance per BUY when positionSizingMode is portfolio_pct. */
@@ -403,7 +405,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   stopLossPercent: 2,
   takeProfitPercent: 5,
   autoStopLoss: true,
-  autoTakeProfit: true,
+  autoTakeProfit: false,
   maxPositions: 5,
   squareOffTime: "15:15",
   notifyOrders: true,
@@ -417,6 +419,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   noSameDayRebuyAfterSell: true,
   minHoldMinutesBeforeSell: 60,
   enableStrategySellSignals: true,
+  strategySellMinSignals: 2,
   positionSizingMode: "portfolio_pct",
   positionPct: 10,
   atrRiskPct: 1,

@@ -391,7 +391,14 @@ export default function PaperTradingPage() {
       if (cancelled) return;
 
       const settings = settingsRef.current;
-      if (settings?.autoStopLoss || settings?.autoTakeProfit) {
+      if (!settings) return;
+      if (
+        settings.autoStopLoss ||
+        settings.autoTakeProfit ||
+        settings.autoTrailingStop ||
+        (settings.maxHoldDays ?? 0) > 0 ||
+        (settings.noProgressDays ?? 0) > 0
+      ) {
         const { state, exits } = applyPaperRiskExits(
           buildPaperBase(
             balanceRef.current,
@@ -435,7 +442,7 @@ export default function PaperTradingPage() {
       cancelled = true;
       clearInterval(interval);
     };
-  }, [mounted, holdings.length, appSettings?.autoStopLoss, appSettings?.autoTakeProfit]);
+  }, [mounted, holdings.length, appSettings?.autoStopLoss, appSettings?.autoTakeProfit, appSettings?.autoTrailingStop, appSettings?.maxHoldDays, appSettings?.noProgressDays]);
 
   useEffect(() => {
     async function checkAuth() {
@@ -1111,15 +1118,28 @@ export default function PaperTradingPage() {
           </p>
         )}
 
-        {appSettings && (appSettings.autoStopLoss || appSettings.autoTakeProfit) && (
+        {appSettings &&
+          (appSettings.autoStopLoss ||
+            appSettings.autoTakeProfit ||
+            appSettings.autoTrailingStop ||
+            (appSettings.maxHoldDays ?? 0) > 0 ||
+            (appSettings.noProgressDays ?? 0) > 0) && (
           <div className="mb-4 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 text-xs text-text-secondary">
             <span className="text-accent font-medium">Risk guard active: </span>
             {appSettings.autoStopLoss && (
               <span>stop loss at −{appSettings.stopLossPercent}%</span>
             )}
-            {appSettings.autoStopLoss && appSettings.autoTakeProfit && " · "}
+            {appSettings.autoStopLoss && appSettings.autoTrailingStop && " · "}
+            {appSettings.autoTrailingStop && (
+              <span>
+                trailing {appSettings.trailingStopPercent}% from peak (after +{appSettings.takeProfitPercent}%)
+              </span>
+            )}
             {appSettings.autoTakeProfit && (
-              <span>take profit at +{appSettings.takeProfitPercent}%</span>
+              <>
+                {(appSettings.autoStopLoss || appSettings.autoTrailingStop) && " · "}
+                <span>fixed take profit at +{appSettings.takeProfitPercent}%</span>
+              </>
             )}
             <span className="text-text-tertiary">
               {" "}

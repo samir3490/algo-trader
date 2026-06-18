@@ -49,6 +49,7 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
     noSameDayRebuyAfterSell: rm?.noSameDayRebuyAfterSell as boolean | undefined,
     minHoldMinutesBeforeSell: rm?.minHoldMinutesBeforeSell as number | undefined,
     enableStrategySellSignals: rm?.enableStrategySellSignals as boolean | undefined,
+    strategySellMinSignals: rm?.strategySellMinSignals as number | undefined,
     positionSizingMode: pt?.positionSizingMode as AppSettings["positionSizingMode"],
     positionPct: pt?.positionPct as number | undefined,
     atrRiskPct: pt?.atrRiskPct as number | undefined,
