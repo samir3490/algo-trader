@@ -61,7 +61,7 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 - [x] **Universe scanning** — Strategies → Universe mode: one instance scans lists; top N by confidence per scan
 - [x] **Volatility-based sizing** — Settings → Paper: fixed ₹, % of balance, or ATR-risk
 - [x] **Trailing stop-loss** — Settings → Risk: trail % from peak since entry
-- [ ] **Time-based exits** — max hold days, square-off before 3:15 PM for MIS, optional “no progress in X days”
+- [x] **Time-based exits** — max hold days, square-off before 3:15 PM for MIS, optional “no progress in X days”
 - [x] **Strategy performance loop** — win rate & avg hold on Paper Trading; auto-pause losing instances
 - [x] **Optional strategy SELL signals** — two-phase scan: BUY queue first, then SELL on held positions after `minHoldMinutesBeforeSell` (default 60m). Same symbol never buys and sells in one scan; symbols with active BUY signals defer sell. Toggle in Settings → Risk. SL/TP still run first and ignore min-hold.
 
