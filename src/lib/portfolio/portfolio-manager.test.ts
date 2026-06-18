@@ -102,6 +102,7 @@ describe("portfolio-manager", () => {
     assert.equal(buys.length, 1);
     assert.equal(buys[0].ownerStrategyId, "strategy_b");
     assert.equal(buys[0].buySignalCount, 2);
+    assert.ok((buys[0].confidenceSum ?? 0) >= 1.4);
     assert.deepEqual(buys[0].signalStrategyNames, ["A", "B"]);
   });
 

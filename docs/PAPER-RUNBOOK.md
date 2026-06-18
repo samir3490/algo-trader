@@ -23,7 +23,7 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 | Area | Status |
 |------|--------|
 | Paper auto-trading (15-min cron) | Working |
-| 12 strategies, multi-symbol, strength ranking | Working |
+| 12 universe strategies (Nifty 50), cross-strategy strength ranking | Working |
 | Portfolio gates (no duplicate buy, no same-day rebuy) | Working |
 | Risk exits (SL/TP), brokerage simulation | Working |
 | Backtest on Strategies page | Working |
@@ -31,7 +31,7 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 | Live auto from cron | **Email only** — no server-side orders |
 | Market data for cron | Yahoo (~15 min delayed) |
 | Strategy SELL signals | **Enabled** — two-phase scan with min-hold |
-| Universe scan | **Enabled** — Universe mode on Strategies page |
+| Universe scan | **Enabled** — 12 scanners (one per strategy type) on full Nifty 50 |
 | Volatility sizing | **Enabled** — ₹ / % balance / ATR-risk |
 | Trailing stop & time exits | **Enabled** — Settings → Risk |
 | Auto-pause strategies | **Enabled** — optional, Settings → Risk |
@@ -58,7 +58,7 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 
 **Goal:** Better signals and exits — still **paper only**.
 
-- [x] **Universe scanning** — Strategies → Universe mode: one instance scans lists; top N by confidence per scan
+- [x] **Universe scanning** — one instance per strategy type scans full Nifty 50; portfolio layer ranks all BUYs by **signal count** (same symbol from multiple strategies ranks higher) then combined confidence; fills only **open position slots** (`maxPositions − open holdings`)
 - [x] **Volatility-based sizing** — Settings → Paper: fixed ₹, % of balance, or ATR-risk
 - [x] **Trailing stop-loss** — Settings → Risk: trail % from peak since entry
 - [x] **Time-based exits** — max hold days, square-off before 3:15 PM for MIS, optional “no progress in X days”
@@ -136,15 +136,23 @@ Can run in parallel once you have enough paper trade history.
 
 ## What each scan does
 
-1. Loads running strategies and scans configured symbols
-2. Ranks BUY signals by strength (signal count → alphabetical)
-3. Fills open slots up to **max positions** (default 5)
+1. Runs each **universe strategy** (12 types) against the full symbol list (Nifty 50)
+2. Collects all BUY signals into one ranked list: **signal count** (how many strategies flagged the symbol) → **combined confidence** → symbol name
+3. Buys only as many symbols as **open slots** allow (`maxPositions` default 5 minus current holdings)
 4. Applies **trade gates** (no duplicate buy same day, no same-day rebuy after sell, symbol locks)
 5. Uses **live Yahoo quote** for execution price (hint prices >8% off are corrected)
-6. Applies **stop-loss / take-profit** risk exits on open holdings
-7. Persists paper state, orders, and scan diagnostics to Firestore
+6. Applies **stop-loss / take-profit**, optional **trailing stop**, and **time-based exits** on open holdings
+7. Optional **strategy SELL signals** (two-phase scan after min hold) when enabled in Settings → Risk
+8. Persists paper state, orders, and scan diagnostics to Firestore
 
-SELL strategy signals are **not** used for paper exits — only SL/TP and manual sells close positions.
+### Migrate from per-symbol strategies
+
+If you still have hundreds of per-symbol rows (legacy setup):
+
+1. Deploy latest app
+2. **Strategies → Universe scan (Nifty 50)** — confirms, then replaces all strategies with 12 universe scanners and merges Phase 2 settings into Firestore
+3. Verify **12 running** strategies and Settings show Phase 2 defaults (10% position size, trailing stop, strategy sells on)
+
 
 ## Health dashboard
 

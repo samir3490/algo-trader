@@ -58,6 +58,8 @@ export interface StrategyOpinion {
   /** Strategies that signaled BUY on this symbol in the same scan. */
   buySignalCount?: number;
   signalStrategyNames?: string[];
+  /** Sum of confidence from all strategies signaling BUY on this symbol. */
+  confidenceSum?: number;
 }
 
 export type PortfolioAction = "BUY" | "SELL" | "HOLD" | "SKIP";
@@ -78,6 +80,7 @@ export interface PortfolioDecision {
   buySignalCount?: number;
   signalStrategyNames?: string[];
   scanConfidence?: number;
+  confidenceSum?: number;
 }
 
 export interface StrategyConflict {

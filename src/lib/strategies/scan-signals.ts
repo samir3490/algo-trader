@@ -4,10 +4,7 @@ import { computeATR } from "@/lib/market-data/atr";
 import { resolvePaperExecutionPrice } from "@/lib/market-data/resolve-execution-price";
 import { evaluateStrategyByType } from "@/lib/strategies/evaluate-by-type";
 import { inferStrategyType, type StrategyType } from "@/lib/strategies/definitions";
-import {
-  capUniverseBuySignals,
-  resolveStrategyScanSymbols,
-} from "@/lib/universe/scan-expand";
+import { resolveStrategyScanSymbols } from "@/lib/universe/scan-expand";
 
 export interface StrategyScanInput {
   id: string;
@@ -83,12 +80,7 @@ export async function scanStrategiesForSignals(
       });
     }
 
-    const topN = strat.universeTopN ?? 0;
-    if (topN > 0 && symbols.length > 1) {
-      results.push(...capUniverseBuySignals(batch, strat.id, topN));
-    } else {
-      results.push(...batch);
-    }
+    results.push(...batch);
   }
 
   return { scanned: running.length, signals: results };

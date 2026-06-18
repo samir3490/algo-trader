@@ -68,12 +68,14 @@ export function scanSignalToOpinion(
 function consolidateBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
   const buyCounts = new Map<string, number>();
   const buyStrategyNames = new Map<string, string[]>();
+  const confidenceSums = new Map<string, number>();
   const bestBuy = new Map<string, StrategyOpinion>();
 
   for (const op of opinions) {
     if (op.action !== "BUY") continue;
     const key = symKey(op.symbol, op.exchange);
     buyCounts.set(key, (buyCounts.get(key) ?? 0) + 1);
+    confidenceSums.set(key, (confidenceSums.get(key) ?? 0) + (op.confidence ?? 0));
     const names = buyStrategyNames.get(key) ?? [];
     if (!names.includes(op.strategyName)) names.push(op.strategyName);
     buyStrategyNames.set(key, names);
@@ -85,10 +87,13 @@ function consolidateBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] 
 
   return [...bestBuy.values()].map((op) => {
     const key = symKey(op.symbol, op.exchange);
+    const confidenceSum = confidenceSums.get(key) ?? op.confidence;
     return {
       ...op,
       buySignalCount: buyCounts.get(key) ?? 1,
       signalStrategyNames: buyStrategyNames.get(key) ?? [op.strategyName],
+      confidenceSum,
+      scanConfidence: confidenceSum,
     };
   });
 }
@@ -188,7 +193,8 @@ export function rankBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] 
   return consolidateBuyOpinions(buyOnlyOpinions(opinions)).sort((a, b) => {
     const strength = (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0);
     if (strength !== 0) return strength;
-    const conf = (b.confidence ?? 0) - (a.confidence ?? 0);
+    const conf =
+      (b.confidenceSum ?? b.confidence ?? 0) - (a.confidenceSum ?? a.confidence ?? 0);
     if (conf !== 0) return conf;
     return a.symbol.localeCompare(b.symbol, "en", { sensitivity: "base" });
   });
@@ -212,7 +218,7 @@ export function buildRankedPaperBuyQueue(
       signalReason: op.reason,
       buySignalCount: op.buySignalCount,
       signalStrategyNames: op.signalStrategyNames,
-      scanConfidence: op.confidence,
+      scanConfidence: op.confidenceSum ?? op.confidence,
     }));
 }
 
@@ -372,6 +378,8 @@ export function evaluatePortfolioDecisions(
         signalReason: op.reason,
         buySignalCount: op.buySignalCount,
         signalStrategyNames: op.signalStrategyNames,
+        scanConfidence: op.confidenceSum ?? op.confidence,
+        confidenceSum: op.confidenceSum,
       });
       continue;
     }

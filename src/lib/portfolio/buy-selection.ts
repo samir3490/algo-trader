@@ -8,10 +8,16 @@ export function effectivePaperMaxOrderValue(
   return Math.max(settings.maxOrderValue ?? 0, paperOrderNotional(settings));
 }
 
-/** Rank BUY candidates: signal count, then confidence, then alphabetical. */
+/** Rank BUY candidates: strategy count, then combined confidence, then symbol. */
 export function compareBuyRank(
-  a: Pick<PortfolioDecision, "symbol" | "buySignalCount" | "scanConfidence">,
-  b: Pick<PortfolioDecision, "symbol" | "buySignalCount" | "scanConfidence">
+  a: Pick<
+    PortfolioDecision,
+    "symbol" | "buySignalCount" | "scanConfidence"
+  >,
+  b: Pick<
+    PortfolioDecision,
+    "symbol" | "buySignalCount" | "scanConfidence"
+  >
 ): number {
   const strength = (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0);
   if (strength !== 0) return strength;

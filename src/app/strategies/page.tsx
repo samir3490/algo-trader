@@ -21,6 +21,7 @@ import {
   ScrollText,
   Clock,
   CheckCircle2,
+  RotateCcw,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
@@ -372,9 +373,7 @@ function StrategiesPageContent() {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState<StrategyType>("sma");
   const [modalSymbols, setModalSymbols] = useState("RELIANCE");
-  const [modalUniverseMode, setModalUniverseMode] = useState(false);
-  const [modalUniverseTopN, setModalUniverseTopN] = useState(5);
-  const [modalTimeframe, setModalTimeframe] = useState<Timeframe>("15min");
+  const [modalSymbols, setModalSymbols] = useState("RELIANCE");
   const [modalPaper, setModalPaper] = useState(true);
   const [modalParams, setModalParams] = useState<Record<string, number>>(() =>
     getDefaultParams(STRATEGY_DEFINITIONS[0])
@@ -386,6 +385,7 @@ function StrategiesPageContent() {
   >(null);
   const [scanFeedback, setScanFeedback] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [isMigrating, setIsMigrating] = useState(false);
   const [paperTotalPnl, setPaperTotalPnl] = useState<number | null>(null);
 
   // Load persisted strategies on mount (avoid persisting empty state before hydration)
@@ -452,8 +452,6 @@ function StrategiesPageContent() {
     const def = STRATEGY_DEFINITIONS[0];
     setModalType(def.id);
     setModalSymbols("RELIANCE");
-    setModalUniverseMode(false);
-    setModalUniverseTopN(5);
     setModalTimeframe("15min");
     setModalPaper(true);
     setModalParams(getDefaultParams(def));
@@ -476,15 +474,19 @@ function StrategiesPageContent() {
     const symbols = parseSymbols(modalSymbols);
     const def = getStrategyDef(modalType);
 
-    if (modalUniverseMode && symbols.length > 1) {
+    if (symbols.length > 1) {
+      const presetUniverse =
+        symbols.length === NIFTY50_SYMBOLS.length &&
+        symbols.every((s, i) => s === NIFTY50_SYMBOLS[i])
+          ? ("nifty50" as const)
+          : ("custom" as const);
       const newStrategy: ActiveStrategy = {
         id: `active-${Date.now()}-universe`,
         name: def.name,
         type: modalType,
         symbol: symbols[0],
         symbols,
-        universe: "custom",
-        universeTopN: modalUniverseTopN,
+        universe: presetUniverse,
         exchange: "NSE",
         mode: modalPaper ? "paper" : "live",
         status: "running",
@@ -516,7 +518,48 @@ function StrategiesPageContent() {
 
     setActiveStrategies((prev) => [...prev, ...newStrategies]);
     setModalOpen(false);
-  }, [modalType, modalSymbols, modalPaper, modalParams, modalTimeframe, modalUniverseMode, modalUniverseTopN]);
+  }, [modalType, modalSymbols, modalPaper, modalParams, modalTimeframe]);
+
+  const handleMigrateUniverse = async () => {
+    const n = activeStrategies.length;
+    const msg =
+      n > 0
+        ? `Replace all ${n} active strategies with 12 Nifty 50 universe scanners (one per strategy type)? This cannot be undone.`
+        : "Create 12 Nifty 50 universe scanners (one per strategy type)?";
+    if (!window.confirm(msg)) return;
+
+    setIsMigrating(true);
+    try {
+      const { getAuth } = await import("firebase/auth");
+      const { app } = await import("@/lib/firebase");
+      const auth = getAuth(app);
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) {
+        alert("Sign in required.");
+        return;
+      }
+      const res = await fetch("/api/strategies/migrate-universe", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ mode: "paper", timeframe: "Day" }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        alert((data.error as string) ?? "Migration failed");
+        return;
+      }
+      alert(data.message as string);
+      const fs = await getFirestoreStrategies();
+      setActiveStrategies(firestoreToLocal(fs));
+      saveActiveStrategiesToCache(firestoreToLocal(fs));
+      window.dispatchEvent(new CustomEvent("strategies-updated"));
+    } finally {
+      setIsMigrating(false);
+    }
+  };
 
   const toggleCardActive = useCallback(
     (id: StrategyType) => {
@@ -751,6 +794,19 @@ function StrategiesPageContent() {
           >
             <ScrollText className="h-4 w-4" />
             Audit logs
+          </button>
+          <button
+            type="button"
+            onClick={handleMigrateUniverse}
+            disabled={isMigrating}
+            className="inline-flex items-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-2.5 text-sm font-medium text-amber-400 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
+          >
+            {isMigrating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <RotateCcw className="h-4 w-4" />
+            )}
+            Universe scan (Nifty 50)
           </button>
           <button
             type="button"
@@ -1337,41 +1393,11 @@ function StrategiesPageContent() {
                   ))}
                 </div>
                 {parseSymbols(modalSymbols).length > 1 && (
-                  <div className="mt-2 space-y-2 rounded-lg border border-border bg-bg-tertiary/30 p-3">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={modalUniverseMode}
-                        onChange={(e) => setModalUniverseMode(e.target.checked)}
-                        className="rounded border-border"
-                      />
-                      <span className="text-xs text-text-primary">
-                        Universe mode — one strategy, top N by signal strength
-                      </span>
-                    </label>
-                    {modalUniverseMode && (
-                      <div>
-                        <label className="block text-[10px] text-text-tertiary mb-1">
-                          Top N BUY signals per scan
-                        </label>
-                        <input
-                          type="number"
-                          min={1}
-                          max={20}
-                          value={modalUniverseTopN}
-                          onChange={(e) =>
-                            setModalUniverseTopN(Math.max(1, Number(e.target.value) || 1))
-                          }
-                          className="w-20 rounded border border-border bg-bg-primary px-2 py-1 text-xs"
-                        />
-                      </div>
-                    )}
-                    {!modalUniverseMode && (
-                      <p className="text-[10px] text-text-tertiary">
-                        {parseSymbols(modalSymbols).length} symbols — separate instance per symbol
-                      </p>
-                    )}
-                  </div>
+                  <p className="mt-2 text-[10px] text-text-tertiary rounded-lg border border-border bg-bg-tertiary/30 p-3">
+                    Universe mode: one strategy scans all {parseSymbols(modalSymbols).length} symbols.
+                    Buys are ranked globally by how many strategy types agree on each symbol;
+                    only open position slots are filled each scan (see Settings → max positions).
+                  </p>
                 )}
               </div>
 
