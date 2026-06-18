@@ -20,6 +20,10 @@ import { resolvePaperOrderQty, resolvePaperScanOrderQty } from "./paper-position
 import {
   effectivePaperMaxOrderValue,
 } from "./buy-selection";
+import {
+  meetsStrategySellProfitTarget,
+} from "@/lib/risk/paper-risk-guard";
+import { formatSellStrength } from "@/lib/paper-trading/balance";
 
 export interface PortfolioContext {
   state: PaperTradingState;
@@ -108,18 +112,47 @@ export function sellOnlyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[]
 }
 
 function consolidateSellOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
+  const sellCounts = new Map<string, number>();
+  const sellStrategyNames = new Map<string, string[]>();
+  const confidenceSums = new Map<string, number>();
   const bestSell = new Map<string, StrategyOpinion>();
+
   for (const op of opinions) {
     if (op.action !== "SELL") continue;
     const key = symKey(op.symbol, op.exchange);
+    sellCounts.set(key, (sellCounts.get(key) ?? 0) + 1);
+    confidenceSums.set(key, (confidenceSums.get(key) ?? 0) + (op.confidence ?? 0));
+    const names = sellStrategyNames.get(key) ?? [];
+    if (!names.includes(op.strategyName)) names.push(op.strategyName);
+    sellStrategyNames.set(key, names);
     const existing = bestSell.get(key);
     if (!existing || op.confidence > existing.confidence) {
       bestSell.set(key, op);
     }
   }
-  return [...bestSell.values()].sort((a, b) =>
-    a.symbol.localeCompare(b.symbol, "en", { sensitivity: "base" })
-  );
+
+  return [...bestSell.values()].map((op) => {
+    const key = symKey(op.symbol, op.exchange);
+    const confidenceSum = confidenceSums.get(key) ?? op.confidence;
+    return {
+      ...op,
+      sellSignalCount: sellCounts.get(key) ?? 1,
+      signalStrategyNames: sellStrategyNames.get(key) ?? [op.strategyName],
+      confidenceSum,
+      scanConfidence: confidenceSum,
+    };
+  });
+}
+
+export function rankSellOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
+  return consolidateSellOpinions(sellOnlyOpinions(opinions)).sort((a, b) => {
+    const strength = (b.sellSignalCount ?? 0) - (a.sellSignalCount ?? 0);
+    if (strength !== 0) return strength;
+    const conf =
+      (b.confidenceSum ?? b.confidence ?? 0) - (a.confidenceSum ?? a.confidence ?? 0);
+    if (conf !== 0) return conf;
+    return a.symbol.localeCompare(b.symbol, "en", { sensitivity: "base" });
+  });
 }
 
 function buyActiveSymbolKeys(opinions: StrategyOpinion[]): Set<string> {
@@ -135,7 +168,7 @@ export interface PaperSellQueueOptions {
   minHoldMinutes?: number;
 }
 
-/** Ranked paper SELL queue — only open positions, after min-hold; skips symbols with active BUY signals. */
+/** Ranked paper SELL queue — held symbols at/above take-profit %, consolidated sell weight. */
 export function buildRankedPaperSellQueue(
   opinions: StrategyOpinion[],
   ctx: PortfolioContext,
@@ -147,7 +180,7 @@ export function buildRankedPaperSellQueue(
   const buyActive = buyActiveSymbolKeys(opinions);
   const decisions: PortfolioDecision[] = [];
 
-  for (const op of consolidateSellOpinions(sellOnlyOpinions(opinions))) {
+  for (const op of rankSellOpinions(opinions)) {
     const key = symKey(op.symbol, op.exchange);
     if (!hasOpenPositionForSymbol(ctx.state, op.symbol, op.exchange)) continue;
     if (buyActive.has(key)) continue;
@@ -157,6 +190,11 @@ export function buildRankedPaperSellQueue(
       symbol: op.symbol,
       exchange: op.exchange,
     });
+    const position = openPositions[0];
+    if (!position) continue;
+
+    if (!meetsStrategySellProfitTarget(position, ctx.settings)) continue;
+
     let anchorMs = 0;
     for (const p of openPositions) {
       const ms = Date.parse(p.entryTime);
@@ -168,21 +206,29 @@ export function buildRankedPaperSellQueue(
       ctx.state,
       op.symbol,
       op.exchange,
-      op.strategyId
+      position.ownerStrategyId
     );
     if (!exitCheck.allowed || !exitCheck.position) continue;
+
+    const sellCount = op.sellSignalCount ?? 1;
+    const strengthLabel = formatSellStrength(sellCount);
 
     decisions.push({
       action: "SELL",
       symbol: op.symbol,
       exchange: op.exchange,
-      ownerStrategyId: op.strategyId,
-      ownerStrategyName: op.strategyName,
+      ownerStrategyId: exitCheck.position.ownerStrategyId,
+      ownerStrategyName:
+        exitCheck.position.ownerStrategyName ?? op.strategyName,
       price: op.price,
       quantity: Math.min(op.quantity, exitCheck.position.quantity),
-      signalReason: op.reason,
+      signalReason: `${op.reason} · ${strengthLabel}`,
       exitReason: "OWNER_STRATEGY_EXIT",
       positionId: exitCheck.position.id,
+      sellSignalCount: sellCount,
+      signalStrategyNames: op.signalStrategyNames,
+      scanConfidence: op.confidenceSum ?? op.confidence,
+      confidenceSum: op.confidenceSum,
     });
   }
 

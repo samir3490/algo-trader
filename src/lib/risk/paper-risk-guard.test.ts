@@ -46,6 +46,25 @@ describe("evaluateHoldingRiskExit", () => {
 });
 
 describe("evaluatePositionRiskExit", () => {
+  it("triggers stop loss before trailing stop when both could apply", () => {
+    const sig = evaluatePositionRiskExit(
+      {
+        id: "p1",
+        symbol: "TCS",
+        exchange: "NSE",
+        quantity: 10,
+        entryPrice: 100,
+        ltp: 98,
+        peakPrice: 110,
+        state: "OPEN",
+        ownerStrategyId: "s1",
+        entryTime: new Date().toISOString(),
+      },
+      { ...baseSettings, autoTrailingStop: true, trailingStopPercent: 5 }
+    );
+    assert.equal(sig?.reason, "stop_loss");
+  });
+
   it("triggers trailing stop from peak", () => {
     const sig = evaluatePositionRiskExit(
       {

@@ -122,12 +122,46 @@ export function evaluateHoldingRiskExit(
   return null;
 }
 
-/** Full position risk check: trailing stop, fixed SL/TP, time exits, MIS square-off. */
+/** Stop loss — checked first; overrides trailing stop, time exits, and strategy gates. */
+export function evaluateStopLossExit(
+  position: PaperPosition,
+  settings: Pick<AppSettings, "stopLossPercent" | "autoStopLoss">
+): RiskExitSignal | null {
+  const threshold = settings.stopLossPercent ?? 0;
+  if (threshold <= 0 || settings.autoStopLoss === false) return null;
+
+  const pnlPercent = holdingPnlPercent(position.entryPrice, position.ltp);
+  if (pnlPercent <= -threshold) {
+    return {
+      symbol: position.symbol,
+      exchange: position.exchange,
+      reason: "stop_loss",
+      message: `Stop loss hit (${pnlPercent.toFixed(2)}% ≤ -${threshold}%)`,
+      pnlPercent,
+    };
+  }
+  return null;
+}
+
+/** Whether a held position has reached the take-profit % gate for strategy SELL signals. */
+export function meetsStrategySellProfitTarget(
+  position: Pick<PaperPosition, "entryPrice" | "ltp">,
+  settings: Pick<AppSettings, "takeProfitPercent">
+): boolean {
+  const target = settings.takeProfitPercent ?? 0;
+  if (target <= 0) return true;
+  return holdingPnlPercent(position.entryPrice, position.ltp) >= target;
+}
+
+/** Full position risk check: stop loss (first), trailing stop, take profit, time exits, MIS square-off. */
 export function evaluatePositionRiskExit(
   position: PaperPosition,
   settings: AppSettings,
   now = new Date()
 ): RiskExitSignal | null {
+  const stopLoss = evaluateStopLossExit(position, settings);
+  if (stopLoss) return stopLoss;
+
   const holdingLike: PaperHoldingLike = {
     symbol: position.symbol,
     exchange: position.exchange,
@@ -158,8 +192,30 @@ export function evaluatePositionRiskExit(
     }
   }
 
-  const fixed = evaluateHoldingRiskExit(holdingLike, settings, now);
-  if (fixed) return fixed;
+  if (settings.autoTakeProfit && settings.takeProfitPercent > 0) {
+    if (pnlPercent >= settings.takeProfitPercent) {
+      return {
+        symbol: position.symbol,
+        exchange: position.exchange,
+        reason: "take_profit",
+        message: `Take profit hit (${pnlPercent.toFixed(2)}% ≥ ${settings.takeProfitPercent}%)`,
+        pnlPercent,
+      };
+    }
+  }
+
+  if (
+    settings.paperDefaultProduct === "MIS" &&
+    isPastMisSquareOff(settings.squareOffTime, now)
+  ) {
+    return {
+      symbol: position.symbol,
+      exchange: position.exchange,
+      reason: "mis_square_off",
+      message: `MIS square-off (${settings.squareOffTime} IST)`,
+      pnlPercent,
+    };
+  }
 
   const heldDays = daysHeldSince(position.entryTime, now);
 

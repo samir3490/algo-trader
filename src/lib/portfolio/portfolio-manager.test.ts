@@ -165,7 +165,7 @@ describe("portfolio-manager", () => {
       exchange: "NSE",
       quantity: 10,
       entryPrice: 100,
-      ltp: 100,
+      ltp: 106,
       ownerStrategyId: "strategy_a",
       ownerStrategyName: "A",
       signalReason: "buy",
@@ -203,14 +203,14 @@ describe("portfolio-manager", () => {
     assert.equal(queue.length, 0);
   });
 
-  it("buildRankedPaperSellQueue approves SELL after min hold", () => {
+  it("buildRankedPaperSellQueue approves SELL after min hold at take-profit", () => {
     const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
     const pos = createOpenPosition({
       symbol: "RELIANCE",
       exchange: "NSE",
       quantity: 10,
       entryPrice: 100,
-      ltp: 100,
+      ltp: 106,
       ownerStrategyId: "strategy_a",
       ownerStrategyName: "A",
       signalReason: "buy",
@@ -236,6 +236,88 @@ describe("portfolio-manager", () => {
     );
     assert.equal(queue.length, 1);
     assert.equal(queue[0].action, "SELL");
+  });
+
+  it("buildRankedPaperSellQueue blocks sell below take-profit target", () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const pos = createOpenPosition({
+      symbol: "RELIANCE",
+      exchange: "NSE",
+      quantity: 10,
+      entryPrice: 100,
+      ltp: 103,
+      ownerStrategyId: "strategy_a",
+      ownerStrategyName: "A",
+      signalReason: "buy",
+    });
+    pos.entryTime = twoHoursAgo;
+    const state = addPositionToState(emptyState(), pos);
+
+    const queue = buildRankedPaperSellQueue(
+      [
+        {
+          strategyId: "strategy_a",
+          strategyName: "A",
+          symbol: "RELIANCE",
+          exchange: "NSE",
+          action: "SELL",
+          price: 103,
+          quantity: 10,
+          reason: "sell",
+          confidence: 0.9,
+        },
+      ],
+      { state, settings: { ...settings, takeProfitPercent: 5 } }
+    );
+    assert.equal(queue.length, 0);
+  });
+
+  it("buildRankedPaperSellQueue consolidates sell weight across strategies", () => {
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const pos = createOpenPosition({
+      symbol: "RELIANCE",
+      exchange: "NSE",
+      quantity: 10,
+      entryPrice: 100,
+      ltp: 108,
+      ownerStrategyId: "strategy_a",
+      ownerStrategyName: "A",
+      signalReason: "buy",
+    });
+    pos.entryTime = twoHoursAgo;
+    const state = addPositionToState(emptyState(), pos);
+
+    const queue = buildRankedPaperSellQueue(
+      [
+        {
+          strategyId: "strategy_a",
+          strategyName: "A",
+          symbol: "RELIANCE",
+          exchange: "NSE",
+          action: "SELL",
+          price: 108,
+          quantity: 10,
+          reason: "macd cross",
+          confidence: 0.7,
+        },
+        {
+          strategyId: "strategy_b",
+          strategyName: "B",
+          symbol: "RELIANCE",
+          exchange: "NSE",
+          action: "SELL",
+          price: 108,
+          quantity: 10,
+          reason: "rsi overbought",
+          confidence: 0.9,
+        },
+      ],
+      { state, settings }
+    );
+    assert.equal(queue.length, 1);
+    assert.equal(queue[0].sellSignalCount, 2);
+    assert.deepEqual(queue[0].signalStrategyNames, ["A", "B"]);
+    assert.equal(queue[0].ownerStrategyId, "strategy_a");
   });
 
   it("buildRankedPaperSellQueue blocks sell within min hold", () => {

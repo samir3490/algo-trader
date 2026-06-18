@@ -18,6 +18,9 @@ export function formatBuyStrength(signalCount: number): string {
   return `Single · ${signalCount} signal${signalCount !== 1 ? "s" : ""}`;
 }
 
+/** Same tier labels for consolidated strategy SELL consensus. */
+export const formatSellStrength = formatBuyStrength;
+
 export function buyStrengthTier(
   signalCount: number
 ): "single" | "light" | "moderate" | "strong" {
