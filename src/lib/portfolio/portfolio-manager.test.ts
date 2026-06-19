@@ -12,7 +12,11 @@ function emptyState(): PaperTradingState {
   return { balance: 100_000, holdings: [], trades: [], positions: [] };
 }
 
-const settings = { ...DEFAULT_SETTINGS, paperOrderNotional: 100_000 };
+const settings = {
+  ...DEFAULT_SETTINGS,
+  paperOrderNotional: 100_000,
+  paperMinOrderValue: 0,
+};
 
 describe("portfolio-manager", () => {
   it("approves first BUY opinion", () => {

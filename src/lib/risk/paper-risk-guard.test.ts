@@ -137,11 +137,22 @@ describe("canPlacePaperBuy", () => {
   it("blocks when order too large", () => {
     const r = canPlacePaperBuy({
       balance: 1_000_000,
-      orderValue: baseSettings.maxOrderValue + 1,
+      orderValue: baseSettings.paperMaxOrderValue + 1,
       holdingsCount: 0,
       settings: baseSettings,
     });
     assert.equal(r.allowed, false);
+  });
+
+  it("blocks when order below min purchase", () => {
+    const r = canPlacePaperBuy({
+      balance: 1_000_000,
+      orderValue: 10_000,
+      holdingsCount: 0,
+      settings: baseSettings,
+    });
+    assert.equal(r.allowed, false);
+    assert.match(r.message ?? "", /min purchase/i);
   });
 });
 

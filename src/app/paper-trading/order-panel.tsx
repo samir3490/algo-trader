@@ -321,7 +321,7 @@ export function PaperOrderPanel({
                   ≈{" "}
                   {formatCurrency(
                     paperOrderNotional(
-                      appSettings ?? { paperOrderNotional: 100_000, maxOrderValue: 100_000 }
+                      appSettings ?? { paperOrderNotional: 100_000 }
                     )
                   )}
                   {estimatedPrice && estimatedPrice > 0

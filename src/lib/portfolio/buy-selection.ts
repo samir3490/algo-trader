@@ -1,11 +1,11 @@
 import type { AppSettings } from "@/lib/firebase";
 import type { PortfolioDecision } from "./types";
-import { paperOrderNotional } from "./paper-position-size";
+import { effectivePaperOrderCap } from "./paper-position-size";
 
 export function effectivePaperMaxOrderValue(
-  settings: Pick<AppSettings, "maxOrderValue" | "paperOrderNotional">
+  settings: Pick<AppSettings, "paperMaxOrderValue">
 ): number {
-  return Math.max(settings.maxOrderValue ?? 0, paperOrderNotional(settings));
+  return effectivePaperOrderCap(settings);
 }
 
 /** Rank BUY candidates: strategy count, then combined confidence, then symbol. */

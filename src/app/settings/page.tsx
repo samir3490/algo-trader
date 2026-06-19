@@ -58,6 +58,10 @@ interface AppSettings {
     simulateBrokerage: boolean;
     /** Target rupee value per paper BUY (default ₹1,00,000). */
     orderNotional: number;
+    /** Hard cap per paper BUY (default ₹5,00,000). */
+    maxPerTrade: number;
+    /** Minimum rupee turnover per paper BUY (default ₹25,000). */
+    minPerTrade: number;
     defaultProductType: "CNC" | "MIS";
     positionSizingMode: "notional" | "portfolio_pct" | "atr_risk";
     positionPct: number;
@@ -108,6 +112,8 @@ const defaultSettings: AppSettings = {
     startingBalance: 1000000,
     simulateBrokerage: true,
     orderNotional: 100_000,
+    maxPerTrade: 500_000,
+    minPerTrade: 25_000,
     defaultProductType: "CNC",
     positionSizingMode: "portfolio_pct",
     positionPct: 10,
@@ -159,6 +165,8 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       startingBalance: fs.paperStartingBalance,
       simulateBrokerage: fs.simulateBrokerage,
       orderNotional: fs.paperOrderNotional ?? 100_000,
+      maxPerTrade: fs.paperMaxOrderValue ?? 500_000,
+      minPerTrade: fs.paperMinOrderValue ?? 25_000,
       defaultProductType: (fs.paperDefaultProduct as "CNC" | "MIS") ?? "CNC",
       positionSizingMode:
         (fs.positionSizingMode as "notional" | "portfolio_pct" | "atr_risk") ??
@@ -208,16 +216,17 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
 }
 
 function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
-  const orderNotional = s.paperTrading.orderNotional ?? 100_000;
   return {
     defaultExchange: s.tradingPreferences.defaultExchange,
     defaultProduct: s.tradingPreferences.defaultProductType,
     defaultOrderType: s.tradingPreferences.defaultOrderType,
-    maxOrderValue: Math.max(s.tradingPreferences.maxOrderValue ?? 0, orderNotional),
+    maxOrderValue: s.tradingPreferences.maxOrderValue,
     maxDailyLoss: s.tradingPreferences.maxDailyLoss,
     paperStartingBalance: s.paperTrading.startingBalance,
     simulateBrokerage: s.paperTrading.simulateBrokerage,
     paperOrderNotional: s.paperTrading.orderNotional,
+    paperMaxOrderValue: Math.max(1000, s.paperTrading.maxPerTrade ?? 500_000),
+    paperMinOrderValue: Math.max(0, s.paperTrading.minPerTrade ?? 25_000),
     paperDefaultProduct: s.paperTrading.defaultProductType,
     positionSizingMode: s.paperTrading.positionSizingMode,
     positionPct: s.paperTrading.positionPct,
@@ -919,6 +928,46 @@ function SettingsContent() {
               />
               <p className="mt-1 text-[10px] text-text-tertiary">
                 Used when sizing mode is Fixed rupee (₹) notional.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Max per trade (₹)
+              </label>
+              <input
+                type="number"
+                min={1000}
+                step={1000}
+                value={settings.paperTrading.maxPerTrade}
+                onChange={(e) =>
+                  updateSettings("paperTrading", {
+                    maxPerTrade: Math.max(1000, Number(e.target.value) || 500_000),
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+              <p className="mt-1 text-[10px] text-text-tertiary">
+                Per-trade ceiling applied first; fixed ₹, % of balance, and ATR sizing all work within this cap.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Min per trade (₹)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={1000}
+                value={settings.paperTrading.minPerTrade}
+                onChange={(e) =>
+                  updateSettings("paperTrading", {
+                    minPerTrade: Math.max(0, Number(e.target.value) || 25_000),
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              />
+              <p className="mt-1 text-[10px] text-text-tertiary">
+                Skip buys below this turnover (fees/taxes make tiny trades unprofitable). Set 0 to disable.
               </p>
             </div>
             <div>

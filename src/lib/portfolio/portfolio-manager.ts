@@ -20,6 +20,7 @@ import { resolvePaperOrderQty, resolvePaperScanOrderQty } from "./paper-position
 import {
   effectivePaperMaxOrderValue,
 } from "./buy-selection";
+import { effectivePaperMinOrderValue } from "./paper-position-size";
 import {
   meetsStrategySellProfitTarget,
 } from "@/lib/risk/paper-risk-guard";
@@ -295,6 +296,7 @@ export function evaluatePortfolioDecisions(
   const multi = ctx.multiStrategyMode === true;
 
   const maxOrder = effectivePaperMaxOrderValue(ctx.settings);
+  const minOrder = effectivePaperMinOrderValue(ctx.settings);
 
   for (const op of mergedOpinions) {
     if (op.action === "HOLD") {
@@ -393,7 +395,22 @@ export function evaluatePortfolioDecisions(
           price: op.price,
           quantity: op.quantity,
           signalReason: op.reason,
-          skipReason: `Exceeds max order value (${maxOrder})`,
+          skipReason: `Exceeds paper max per trade (₹${maxOrder})`,
+        });
+        continue;
+      }
+
+      if (minOrder > 0 && orderValue < minOrder) {
+        decisions.push({
+          action: "SKIP",
+          symbol: op.symbol,
+          exchange: op.exchange,
+          ownerStrategyId: op.strategyId,
+          ownerStrategyName: op.strategyName,
+          price: op.price,
+          quantity: op.quantity,
+          signalReason: op.reason,
+          skipReason: `Below paper min purchase (₹${minOrder})`,
         });
         continue;
       }

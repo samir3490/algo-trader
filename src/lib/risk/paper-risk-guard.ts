@@ -4,6 +4,7 @@ import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import {
   paperBuyCashRequired,
   effectivePaperOrderCap,
+  effectivePaperMinOrderValue,
 } from "@/lib/portfolio/paper-position-size";
 import {
   ensurePositions,
@@ -312,7 +313,14 @@ export function canPlacePaperBuy(params: {
   if (maxOrder > 0 && orderValue > maxOrder) {
     return {
       allowed: false,
-      message: `Order exceeds max order value (${maxOrder})`,
+      message: `Order exceeds paper max per trade (₹${maxOrder})`,
+    };
+  }
+  const minOrder = effectivePaperMinOrderValue(settings);
+  if (minOrder > 0 && orderValue < minOrder) {
+    return {
+      allowed: false,
+      message: `Order below paper min purchase (₹${minOrder})`,
     };
   }
   if (holdingsCount >= (settings.maxPositions ?? 10)) {

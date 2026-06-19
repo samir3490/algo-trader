@@ -337,6 +337,10 @@ export interface AppSettings {
   defaultQuantity: number;
   /** Target rupee value per paper BUY (default ₹1,00,000). */
   paperOrderNotional: number;
+  /** Hard cap per paper BUY — applies to all sizing modes (default ₹5,00,000). */
+  paperMaxOrderValue: number;
+  /** Minimum rupee turnover per paper BUY (default ₹25,000). Set 0 to disable. */
+  paperMinOrderValue: number;
   /** Paper simulated product — delivery (CNC) recommended. */
   paperDefaultProduct: "CNC" | "MIS";
   maxOrderValue: number;
@@ -400,6 +404,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultOrderType: "MARKET",
   defaultQuantity: 1,
   paperOrderNotional: 100_000,
+  paperMaxOrderValue: 500_000,
+  paperMinOrderValue: 25_000,
   paperDefaultProduct: "CNC",
   maxOrderValue: 100_000,
   maxDailyLoss: 0,
