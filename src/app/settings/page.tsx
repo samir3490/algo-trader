@@ -967,7 +967,7 @@ function SettingsContent() {
                 className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
               <p className="mt-1 text-[10px] text-text-tertiary">
-                Skip buys below this turnover (fees/taxes make tiny trades unprofitable). Set 0 to disable.
+                Skip buys when sizing (fixed ₹, %, ATR) produces turnover below this — no bump-up; scan tries the next symbol.
               </p>
             </div>
             <div>

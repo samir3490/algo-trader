@@ -130,23 +130,35 @@ describe("resolvePaperOrderQty", () => {
     );
   });
 
-  it("skips buy when turnover below min per trade", () => {
+  it("skips explicit qty below min without bumping", () => {
     assert.equal(
-      resolvePaperOrderQty(10_000, settings, {
-        balance: 20_000,
-        strategyParams: { quantity: 1 },
+      resolvePaperOrderQty(1000, settings, {
+        strategyParams: { quantity: 5 },
       }),
       0
     );
   });
 
-  it("bumps qty up to meet min per trade when affordable", () => {
-    // min ₹25k @ ₹1000/share → 25 shares = ₹25k
+  it("skips when mode budget is below min per trade", () => {
     assert.equal(
-      resolvePaperOrderQty(1000, { ...settings, paperMinOrderValue: 25_000 }, {
-        strategyParams: { quantity: 5 },
+      resolvePaperOrderQty(100, {
+        ...settings,
+        paperOrderNotional: 15_000,
+        paperMinOrderValue: 25_000,
       }),
-      25
+      0
+    );
+  });
+
+  it("skips atr sizing when risk budget is below min", () => {
+    assert.equal(
+      resolvePaperOrderQty(100, {
+        ...settings,
+        positionSizingMode: "atr_risk" as const,
+        atrRiskPct: 0.5,
+        paperMinOrderValue: 25_000,
+      }, { balance: 4_000_000, atr: 10 }),
+      0
     );
   });
 

@@ -59,18 +59,33 @@ export function effectivePaperMinOrderValue(
 }
 
 /**
- * Step 1 — per-trade ceiling: min(max per trade, available balance).
- * All sizing modes work within this rupee budget.
+ * Step 1 — spend band: ceiling (max cap ∧ balance) and floor (min purchase).
+ * Returns null when min exceeds ceiling (trade impossible — skip symbol).
  */
+export function resolvePaperSpendBand(
+  settings: Pick<AppSettings, "paperMaxOrderValue" | "paperMinOrderValue">,
+  balance?: number
+): { ceiling: number; floor: number } | null {
+  const cap = effectivePaperOrderCap(settings);
+  const ceiling =
+    balance != null && Number.isFinite(balance) && balance > 0
+      ? Math.min(cap, balance)
+      : cap;
+  const floor = effectivePaperMinOrderValue(settings);
+  if (floor > 0 && floor > ceiling) return null;
+  return { ceiling, floor };
+}
+
+/** @deprecated use resolvePaperSpendBand */
 export function resolvePaperSpendCeiling(
   settings: Pick<AppSettings, "paperMaxOrderValue">,
   balance?: number
 ): number {
-  const cap = effectivePaperOrderCap(settings);
-  if (balance != null && Number.isFinite(balance) && balance > 0) {
-    return Math.min(cap, balance);
-  }
-  return cap;
+  const band = resolvePaperSpendBand(
+    { ...settings, paperMinOrderValue: 0 },
+    balance
+  );
+  return band?.ceiling ?? effectivePaperOrderCap(settings);
 }
 
 /**
@@ -110,45 +125,52 @@ export type PaperSizingSettings = Pick<
 >;
 
 /**
- * Step 2 — rupee budget within the ceiling for notional / % modes.
- * ATR mode uses {@link resolveAtrRiskQty} instead (qty from volatility, still ≤ ceiling).
+ * Step 2 — mode-specific rupee budget within [floor, ceiling].
+ * Returns 0 when the mode's target is below floor (skip — do not bump up).
  */
 export function resolvePaperSizingBudget(
   settings: PaperSizingSettings,
+  band: { ceiling: number; floor: number },
   options?: { balance?: number; atr?: number | null }
 ): number {
-  const ceiling = resolvePaperSpendCeiling(settings, options?.balance);
+  const { ceiling, floor } = band;
   const mode = settings.positionSizingMode ?? "notional";
   const balance = options?.balance;
 
+  let target = 0;
+
   if (mode === "portfolio_pct" && balance != null && balance > 0) {
     const pct = Math.max(0.1, settings.positionPct ?? 10);
-    return Math.min(ceiling, balance * (pct / 100));
+    target = balance * (pct / 100);
+  } else if (mode === "atr_risk") {
+    target = Math.min(paperOrderNotional(settings), ceiling);
+  } else {
+    target = paperOrderNotional(settings);
   }
 
-  if (mode === "atr_risk") {
-    // Fallback when ATR unavailable — use fixed notional within ceiling.
-    return Math.min(paperOrderNotional(settings), ceiling);
-  }
-
-  return Math.min(paperOrderNotional(settings), ceiling);
+  const budget = Math.min(target, ceiling);
+  if (floor > 0 && budget < floor) return 0;
+  return budget;
 }
 
 /**
- * ATR sizing within ceiling: risk budget = min(ceiling, balance × risk%),
- * qty = floor(riskBudget / ATR), then clamp position value to ceiling.
+ * ATR sizing within band: riskBudget = min(ceiling, balance × risk%).
+ * Skip when riskBudget &lt; floor or resulting turnover &lt; floor.
  */
 function resolveAtrRiskQty(
   price: number,
   settings: PaperSizingSettings,
-  ceiling: number,
+  band: { ceiling: number; floor: number },
   balance: number,
   atr: number
 ): number {
   if (!Number.isFinite(atr) || atr <= 0) return 0;
 
+  const { ceiling, floor } = band;
   const riskPct = Math.max(0.1, settings.atrRiskPct ?? 1);
   const riskBudget = Math.min(ceiling, balance * (riskPct / 100));
+
+  if (floor > 0 && riskBudget < floor) return 0;
 
   let qty = Math.floor(riskBudget / atr);
   if (qty < 1) return 0;
@@ -161,6 +183,7 @@ function resolveAtrRiskQty(
   if (maxQtyByBalance < 1) return 0;
   qty = Math.min(qty, maxQtyByBalance);
 
+  if (floor > 0 && qty * price < floor) return 0;
   return qty;
 }
 
@@ -182,48 +205,19 @@ function qtyWithinCeiling(
   return capped >= 1 ? capped : 0;
 }
 
-/**
- * Step 3 — enforce minimum purchase: bump qty up to meet min turnover if possible
- * within ceiling and balance; otherwise skip (0).
- */
-export function applyMinPaperPurchaseQty(
+/** Reject qty when turnover is below floor — never bump up to meet min. */
+export function rejectBelowMinPaperPurchase(
   qty: number,
   price: number,
-  settings: Pick<AppSettings, "paperMinOrderValue">,
-  ceiling: number,
-  balance?: number
+  floor: number
 ): number {
   if (qty < 1) return 0;
-
-  const minValue = effectivePaperMinOrderValue(settings);
-  if (minValue <= 0) return qty;
-  if (minValue > ceiling) return 0;
-
-  const turnover = qty * price;
-  if (turnover >= minValue) return qty;
-
-  const minQty = Math.ceil(minValue / price);
-  return qtyWithinCeiling(minQty, price, ceiling, balance);
-}
-
-function finalizePaperBuyQty(
-  qty: number,
-  price: number,
-  settings: PaperSizingSettings,
-  ceiling: number,
-  balance?: number
-): number {
-  return applyMinPaperPurchaseQty(
-    qtyWithinCeiling(qty, price, ceiling, balance),
-    price,
-    settings,
-    ceiling,
-    balance
-  );
+  if (floor <= 0) return qty;
+  return qty * price >= floor ? qty : 0;
 }
 
 /**
- * Paper BUY size: cap first, then notional / % / ATR within that ceiling.
+ * Paper BUY size: band (max ∧ min), then mode budget/qty; skip if below min.
  * Strategy card `quantity` overrides when explicitly set &gt; 1.
  */
 export function resolvePaperOrderQty(
@@ -236,23 +230,23 @@ export function resolvePaperOrderQty(
   }
 ): number {
   const balance = options?.balance;
-  const ceiling = resolvePaperSpendCeiling(settings, balance);
+  const band = resolvePaperSpendBand(settings, balance);
+  if (!band) return 0;
 
   const explicit = options?.strategyParams?.quantity;
   if (explicit != null && explicit > 0) {
-    return finalizePaperBuyQty(
+    const qty = qtyWithinCeiling(
       Math.max(1, Math.floor(explicit)),
       price,
-      settings,
-      ceiling,
+      band.ceiling,
       balance
     );
+    return rejectBelowMinPaperPurchase(qty, price, band.floor);
   }
 
   const mode = settings.positionSizingMode ?? "notional";
   const atr = options?.atr;
 
-  let qty = 0;
   if (
     mode === "atr_risk" &&
     atr != null &&
@@ -260,13 +254,14 @@ export function resolvePaperOrderQty(
     balance != null &&
     balance > 0
   ) {
-    qty = resolveAtrRiskQty(price, settings, ceiling, balance, atr);
-  } else {
-    const budget = resolvePaperSizingBudget(settings, { balance, atr });
-    qty = integerShareQtyForBudget(price, budget, balance);
+    return resolveAtrRiskQty(price, settings, band, balance, atr);
   }
 
-  return finalizePaperBuyQty(qty, price, settings, ceiling, balance);
+  const budget = resolvePaperSizingBudget(settings, band, { balance, atr });
+  if (budget <= 0) return 0;
+
+  const qty = integerShareQtyForBudget(price, budget, balance);
+  return rejectBelowMinPaperPurchase(qty, price, band.floor);
 }
 
 /** Auto-scan sizing: use sizing mode unless strategy sets quantity &gt; 1 explicitly. */
@@ -301,6 +296,9 @@ export function resolvePaperScanOrderQty(
   if (qty < 1) return 0;
 
   const balance = options?.balance;
+  const band = resolvePaperSpendBand(settings, balance);
+  if (!band) return 0;
+
   if (balance != null && settings.simulateBrokerage) {
     while (
       qty >= 1 &&
@@ -314,9 +312,8 @@ export function resolvePaperScanOrderQty(
     }
   }
 
-  const ceiling = resolvePaperSpendCeiling(settings, balance);
-  qty = qtyWithinCeiling(qty, price, ceiling, balance);
-  qty = applyMinPaperPurchaseQty(qty, price, settings, ceiling, balance);
+  qty = qtyWithinCeiling(qty, price, band.ceiling, balance);
+  qty = rejectBelowMinPaperPurchase(qty, price, band.floor);
 
   return qty >= 1 ? qty : 0;
 }

@@ -722,7 +722,7 @@ export async function runStrategiesForUser(
         diagnostics.skipReasons,
         price <= 0
           ? "Could not resolve live price"
-          : "Insufficient budget or balance for 1 share"
+          : "Below min purchase or insufficient for 1 share"
       );
       continue;
     }
