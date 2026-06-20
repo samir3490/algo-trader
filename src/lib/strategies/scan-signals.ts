@@ -23,6 +23,7 @@ export interface StrategyScanInput {
 
 export interface ScanSignal {
   strategyId: string;
+  strategyType?: StrategyType;
   symbol: string;
   action: string;
   price: number;
@@ -71,6 +72,7 @@ export async function scanStrategiesForSignals(
 
       batch.push({
         strategyId: strat.id,
+        strategyType: type as StrategyType,
         symbol: sym,
         action: signal.action,
         price: resolved.price,

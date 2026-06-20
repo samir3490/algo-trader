@@ -53,7 +53,13 @@ import {
   pruneSymbolLocksForToday,
 } from "@/lib/strategies/portfolio-gate";
 import { tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
-import { inferStrategyType } from "@/lib/strategies/definitions";
+import { inferStrategyType, type StrategyType } from "@/lib/strategies/definitions";
+import { fetchYahooHistory } from "@/lib/market-data/history";
+import {
+  computeRegimeSnapshot,
+  formatRegimeSummary,
+  type RegimeSnapshot,
+} from "@/lib/strategies/regime";
 import {
   sendOrderEmail,
   sendScanDigestEmail,
@@ -330,6 +336,37 @@ export async function runStrategiesForUser(
   }));
 
   const userSettings = await loadUserSettings(db, userId);
+
+  let regimeSnapshot: RegimeSnapshot | null = null;
+  if (userSettings.enableRegimeWeighting !== false) {
+    try {
+      const indexSymbol = userSettings.regimeIndexSymbol ?? "^NSEI";
+      const indexBars = await fetchYahooHistory(indexSymbol, "NSE", "Day");
+      regimeSnapshot = computeRegimeSnapshot(indexBars, userSettings);
+      if (regimeSnapshot) {
+        writeSystemLog("INFO", "Regime", "index_adx", {
+          summary: formatRegimeSummary(regimeSnapshot),
+          regime: regimeSnapshot.regime,
+          adx: regimeSnapshot.adx,
+          adxSlope: regimeSnapshot.adxSlope,
+          score: regimeSnapshot.regimeScore,
+        });
+      }
+    } catch (e) {
+      writeSystemLog("WARN", "Regime", "index_fetch_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
+  }
+
+  const typeByStrategyId = new Map<string, StrategyType>();
+  const strategyParamsById = new Map<string, Record<string, number>>();
+  for (const s of running) {
+    const t = inferStrategyType(s.name);
+    typeByStrategyId.set(s.id, t);
+    strategyParamsById.set(s.id, s.params ?? {});
+  }
+
   const { scanned, signals: rawSignals } = await scanStrategiesForSignals(payload, {
     atrPeriod: userSettings.atrPeriod ?? 14,
   });
@@ -540,12 +577,12 @@ export async function runStrategiesForUser(
     todayRealizedLoss: todayRealizedLoss(paperState.trades),
   };
 
-  const rankedForDisplay = rankBuyOpinions(opinions).map((op) => ({
+  const rankedForDisplay = rankBuyOpinions(opinions, regimeSnapshot).map((op) => ({
     symbol: op.symbol,
     signalCount: op.buySignalCount ?? 1,
   }));
 
-  const buyQueue = buildRankedPaperBuyQueue(opinions, portfolioCtx);
+  const buyQueue = buildRankedPaperBuyQueue(opinions, portfolioCtx, regimeSnapshot);
   const openPositionCount = getOpenPositions(paperState).length;
   const maxPositions = userSettings.maxPositions ?? 5;
   diagnostics.openPositions = openPositionCount;
@@ -859,8 +896,24 @@ export async function runStrategiesForUser(
 
   if (userSettings.enableStrategySellSignals !== false) {
     portfolioCtx.state = paperState;
+    const barsBySymbol = new Map<string, import("@/types").OHLC[]>();
+    if (userSettings.enableEntryConnectedExits !== false) {
+      for (const pos of getOpenPositions(paperState)) {
+        const sym = pos.symbol.toUpperCase();
+        if (barsBySymbol.has(sym)) continue;
+        try {
+          const bars = await fetchYahooHistory(sym, pos.exchange || "NSE", "Day");
+          barsBySymbol.set(sym, bars);
+        } catch {
+          /* skip bar fetch for symbol */
+        }
+      }
+    }
     const sellQueue = buildRankedPaperSellQueue(opinions, portfolioCtx, {
       boughtThisScan: boughtThisRun,
+      typeByStrategyId,
+      strategyParamsById,
+      barsBySymbol,
     });
     diagnostics.sellDecisions = sellQueue.length;
     diagnostics.sellQueueSize = sellQueue.length;

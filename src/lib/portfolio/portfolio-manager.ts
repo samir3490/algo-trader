@@ -1,6 +1,17 @@
 import type { AppSettings, PaperTradingState } from "@/lib/firebase";
 import type { ScanSignal } from "@/lib/strategies/scan-signals";
 import type { ActiveStrategy } from "@/lib/firebase";
+import type { StrategyType } from "@/lib/strategies/definitions";
+import { inferStrategyType } from "@/lib/strategies/definitions";
+import { getEntryArchetype } from "@/lib/strategies/entry-exit-compat";
+import {
+  consolidateCompatibleSellOpinions,
+} from "@/lib/strategies/entry-exit-compat";
+import {
+  regimeWeightForArchetype,
+  type RegimeSnapshot,
+} from "@/lib/strategies/regime";
+import type { OHLC } from "@/types";
 import {
   detectStrategyConflicts,
   opinionsBlockedByConflict,
@@ -41,9 +52,14 @@ export function scanSignalToOpinion(
   sig: ScanSignal,
   strat: ActiveStrategy,
   settings: AppSettings,
-  balance?: number
+  balance?: number,
+  strategyType?: StrategyType
 ): StrategyOpinion {
   const action = sig.action as "BUY" | "SELL" | "HOLD";
+  const type =
+    sig.strategyType ??
+    strategyType ??
+    inferStrategyType(strat.name);
   const quantity =
     action === "BUY"
       ? resolvePaperScanOrderQty(sig.price, settings, {
@@ -56,6 +72,7 @@ export function scanSignalToOpinion(
   return {
     strategyId: sig.strategyId,
     strategyName: strat.name,
+    strategyType: type,
     symbol: sig.symbol,
     exchange: strat.exchange || "NSE",
     action,
@@ -70,7 +87,10 @@ export function scanSignalToOpinion(
 /**
  * Portfolio-level decision layer: strategies advise, PortfolioManager decides.
  */
-function consolidateBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
+function consolidateBuyOpinions(
+  opinions: StrategyOpinion[],
+  regime?: RegimeSnapshot | null
+): StrategyOpinion[] {
   const buyCounts = new Map<string, number>();
   const buyStrategyNames = new Map<string, string[]>();
   const confidenceSums = new Map<string, number>();
@@ -80,7 +100,15 @@ function consolidateBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] 
     if (op.action !== "BUY") continue;
     const key = symKey(op.symbol, op.exchange);
     buyCounts.set(key, (buyCounts.get(key) ?? 0) + 1);
-    confidenceSums.set(key, (confidenceSums.get(key) ?? 0) + (op.confidence ?? 0));
+    const type = op.strategyType ?? inferStrategyType(op.strategyName);
+    const weight =
+      regime && regime.weights
+        ? regimeWeightForArchetype(getEntryArchetype(type), regime.weights)
+        : 1;
+    confidenceSums.set(
+      key,
+      (confidenceSums.get(key) ?? 0) + (op.confidence ?? 0) * weight
+    );
     const names = buyStrategyNames.get(key) ?? [];
     if (!names.includes(op.strategyName)) names.push(op.strategyName);
     buyStrategyNames.set(key, names);
@@ -167,6 +195,71 @@ function buyActiveSymbolKeys(opinions: StrategyOpinion[]): Set<string> {
 export interface PaperSellQueueOptions {
   boughtThisScan?: Set<string>;
   minHoldMinutes?: number;
+  barsBySymbol?: Map<string, OHLC[]>;
+  typeByStrategyId?: Map<string, StrategyType>;
+  strategyParamsById?: Map<string, Record<string, number>>;
+}
+
+function tryApproveSellDecision(
+  op: StrategyOpinion,
+  ctx: PortfolioContext,
+  options: PaperSellQueueOptions | undefined,
+  now: number,
+  minHold: number,
+  buyActive: Set<string>
+): PortfolioDecision | null {
+  const key = symKey(op.symbol, op.exchange);
+  if (!hasOpenPositionForSymbol(ctx.state, op.symbol, op.exchange)) return null;
+  if (buyActive.has(key)) return null;
+  if (options?.boughtThisScan?.has(key)) return null;
+
+  const openPositions = getOpenPositions(ctx.state, {
+    symbol: op.symbol,
+    exchange: op.exchange,
+  });
+  const position = openPositions[0];
+  if (!position) return null;
+
+  if (!meetsStrategySellProfitTarget(position, ctx.settings)) return null;
+
+  const minSellSignals = ctx.settings.strategySellMinSignals ?? 2;
+  if ((op.sellSignalCount ?? 1) < minSellSignals) return null;
+
+  let anchorMs = 0;
+  for (const p of openPositions) {
+    const ms = Date.parse(p.entryTime);
+    if (!Number.isNaN(ms) && ms > anchorMs) anchorMs = ms;
+  }
+  if (anchorMs > 0 && now - anchorMs < minHold * 60 * 1000) return null;
+
+  const exitCheck = canStrategyExitPosition(
+    ctx.state,
+    op.symbol,
+    op.exchange,
+    position.ownerStrategyId
+  );
+  if (!exitCheck.allowed || !exitCheck.position) return null;
+
+  const sellCount = op.sellSignalCount ?? 1;
+  const strengthLabel = formatSellStrength(sellCount);
+
+  return {
+    action: "SELL",
+    symbol: op.symbol,
+    exchange: op.exchange,
+    ownerStrategyId: exitCheck.position.ownerStrategyId,
+    ownerStrategyName:
+      exitCheck.position.ownerStrategyName ?? op.strategyName,
+    price: op.price,
+    quantity: Math.min(op.quantity, exitCheck.position.quantity),
+    signalReason: `${op.reason} · ${strengthLabel}`,
+    exitReason: "OWNER_STRATEGY_EXIT",
+    positionId: exitCheck.position.id,
+    sellSignalCount: sellCount,
+    signalStrategyNames: op.signalStrategyNames,
+    scanConfidence: op.confidenceSum ?? op.confidence,
+    confidenceSum: op.confidenceSum,
+  };
 }
 
 /** Ranked paper SELL queue — held symbols at/above take-profit %, consolidated sell weight. */
@@ -180,67 +273,56 @@ export function buildRankedPaperSellQueue(
   const now = Date.now();
   const buyActive = buyActiveSymbolKeys(opinions);
   const decisions: PortfolioDecision[] = [];
+  const entryConnected = ctx.settings.enableEntryConnectedExits !== false;
+
+  if (entryConnected && options?.typeByStrategyId) {
+    for (const position of getOpenPositions(ctx.state)) {
+      const bars = options.barsBySymbol?.get(position.symbol.toUpperCase());
+      const consolidated = consolidateCompatibleSellOpinions(
+        opinions,
+        position,
+        ctx.settings,
+        {
+          bars,
+          typeByStrategyId: options.typeByStrategyId,
+          strategyParamsById: options.strategyParamsById,
+        }
+      );
+      for (const op of consolidated) {
+        const decision = tryApproveSellDecision(
+          op,
+          ctx,
+          options,
+          now,
+          minHold,
+          buyActive
+        );
+        if (decision) decisions.push(decision);
+      }
+    }
+    return decisions;
+  }
 
   for (const op of rankSellOpinions(opinions)) {
-    const key = symKey(op.symbol, op.exchange);
-    if (!hasOpenPositionForSymbol(ctx.state, op.symbol, op.exchange)) continue;
-    if (buyActive.has(key)) continue;
-    if (options?.boughtThisScan?.has(key)) continue;
-
-    const openPositions = getOpenPositions(ctx.state, {
-      symbol: op.symbol,
-      exchange: op.exchange,
-    });
-    const position = openPositions[0];
-    if (!position) continue;
-
-    if (!meetsStrategySellProfitTarget(position, ctx.settings)) continue;
-
-    const minSellSignals = ctx.settings.strategySellMinSignals ?? 2;
-    if ((op.sellSignalCount ?? 1) < minSellSignals) continue;
-
-    let anchorMs = 0;
-    for (const p of openPositions) {
-      const ms = Date.parse(p.entryTime);
-      if (!Number.isNaN(ms) && ms > anchorMs) anchorMs = ms;
-    }
-    if (anchorMs > 0 && now - anchorMs < minHold * 60 * 1000) continue;
-
-    const exitCheck = canStrategyExitPosition(
-      ctx.state,
-      op.symbol,
-      op.exchange,
-      position.ownerStrategyId
+    const decision = tryApproveSellDecision(
+      op,
+      ctx,
+      options,
+      now,
+      minHold,
+      buyActive
     );
-    if (!exitCheck.allowed || !exitCheck.position) continue;
-
-    const sellCount = op.sellSignalCount ?? 1;
-    const strengthLabel = formatSellStrength(sellCount);
-
-    decisions.push({
-      action: "SELL",
-      symbol: op.symbol,
-      exchange: op.exchange,
-      ownerStrategyId: exitCheck.position.ownerStrategyId,
-      ownerStrategyName:
-        exitCheck.position.ownerStrategyName ?? op.strategyName,
-      price: op.price,
-      quantity: Math.min(op.quantity, exitCheck.position.quantity),
-      signalReason: `${op.reason} · ${strengthLabel}`,
-      exitReason: "OWNER_STRATEGY_EXIT",
-      positionId: exitCheck.position.id,
-      sellSignalCount: sellCount,
-      signalStrategyNames: op.signalStrategyNames,
-      scanConfidence: op.confidenceSum ?? op.confidence,
-      confidenceSum: op.confidenceSum,
-    });
+    if (decision) decisions.push(decision);
   }
 
   return decisions;
 }
 
-export function rankBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] {
-  return consolidateBuyOpinions(buyOnlyOpinions(opinions)).sort((a, b) => {
+export function rankBuyOpinions(
+  opinions: StrategyOpinion[],
+  regime?: RegimeSnapshot | null
+): StrategyOpinion[] {
+  return consolidateBuyOpinions(buyOnlyOpinions(opinions), regime).sort((a, b) => {
     const strength = (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0);
     if (strength !== 0) return strength;
     const conf =
@@ -253,23 +335,29 @@ export function rankBuyOpinions(opinions: StrategyOpinion[]): StrategyOpinion[] 
 /** Ranked paper BUY queue — matches display list; skips symbols already held. */
 export function buildRankedPaperBuyQueue(
   opinions: StrategyOpinion[],
-  ctx: PortfolioContext
+  ctx: PortfolioContext,
+  regime?: RegimeSnapshot | null
 ): PortfolioDecision[] {
-  return rankBuyOpinions(opinions)
+  return rankBuyOpinions(opinions, regime)
     .filter((op) => !hasOpenPositionForSymbol(ctx.state, op.symbol, op.exchange))
-    .map((op) => ({
+    .map((op) => {
+      const type = op.strategyType ?? inferStrategyType(op.strategyName);
+      return {
       action: "BUY" as const,
       symbol: op.symbol,
       exchange: op.exchange,
       ownerStrategyId: op.strategyId,
       ownerStrategyName: op.strategyName,
+      ownerStrategyType: type,
+      ownerEntryArchetype: getEntryArchetype(type),
       price: op.price,
       quantity: op.quantity,
       signalReason: op.reason,
       buySignalCount: op.buySignalCount,
       signalStrategyNames: op.signalStrategyNames,
       scanConfidence: op.confidenceSum ?? op.confidence,
-    }));
+    };
+    });
 }
 
 /** @deprecated Use buildRankedPaperBuyQueue */

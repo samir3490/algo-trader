@@ -105,6 +105,12 @@ interface AppSettings {
     autoPauseLookbackDays: number;
     autoPauseMaxLoss: number;
   };
+  marketRegime: {
+    enableRegimeWeighting: boolean;
+    enableEntryConnectedExits: boolean;
+    regimeAdxThreshold: number;
+    momentumRsiOverbought: number;
+  };
 }
 
 const defaultSettings: AppSettings = {
@@ -156,6 +162,12 @@ const defaultSettings: AppSettings = {
     autoPauseEnabled: false,
     autoPauseLookbackDays: 14,
     autoPauseMaxLoss: 5000,
+  },
+  marketRegime: {
+    enableRegimeWeighting: true,
+    enableEntryConnectedExits: true,
+    regimeAdxThreshold: 23,
+    momentumRsiOverbought: 85,
   },
 };
 
@@ -212,6 +224,12 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       autoPauseLookbackDays: fs.autoPauseLookbackDays ?? 14,
       autoPauseMaxLoss: fs.autoPauseMaxLoss ?? 5000,
     },
+    marketRegime: {
+      enableRegimeWeighting: fs.enableRegimeWeighting !== false,
+      enableEntryConnectedExits: fs.enableEntryConnectedExits !== false,
+      regimeAdxThreshold: fs.regimeAdxThreshold ?? 23,
+      momentumRsiOverbought: fs.momentumRsiOverbought ?? 85,
+    },
   };
 }
 
@@ -252,6 +270,13 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     autoPauseEnabled: s.riskManagement.autoPauseEnabled,
     autoPauseLookbackDays: s.riskManagement.autoPauseLookbackDays,
     autoPauseMaxLoss: s.riskManagement.autoPauseMaxLoss,
+    enableRegimeWeighting: s.marketRegime.enableRegimeWeighting,
+    enableEntryConnectedExits: s.marketRegime.enableEntryConnectedExits,
+    regimeIndexSymbol: "^NSEI",
+    regimeAdxPeriod: 14,
+    regimeAdxThreshold: s.marketRegime.regimeAdxThreshold,
+    regimeAdxSlopeWindow: 5,
+    momentumRsiOverbought: s.marketRegime.momentumRsiOverbought,
     notifyOrders: s.notifications.orderExecution,
     notifyEmailDigest: s.notifications.emailDigest,
     notifySkipped: s.notifications.skippedOrders,
@@ -1322,6 +1347,118 @@ function SettingsContent() {
               </label>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* ── Market Regime & Entry-Connected Exits ─────────────────────────── */}
+      <section className="rounded-xl border border-border bg-bg-secondary p-4 sm:p-6 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">
+            Market Regime &amp; Exits
+          </h2>
+          <p className="text-xs text-text-tertiary mt-1">
+            Index ADX (^NSEI) weights buy strategies. Entry-connected exits only count sell
+            signals compatible with how the position was opened. Your stop loss and{" "}
+            {settings.riskManagement.takeProfitPercent}% min-profit gate for strategy sells
+            are unchanged.
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                checked={settings.marketRegime.enableRegimeWeighting}
+                onChange={(e) =>
+                  updateSettings("marketRegime", {
+                    enableRegimeWeighting: e.target.checked,
+                  })
+                }
+                className="peer sr-only"
+              />
+              <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+            <div>
+              <p className="text-sm font-medium text-text-primary">
+                Regime-weighted buys
+              </p>
+              <p className="text-xs text-text-tertiary">
+                ADX &gt; threshold → favor trend/momentum entries; ADX ≤ threshold → favor
+                mean reversion. Stock universe (Top 100 vs Nifty 50) is unchanged.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3 sm:col-span-2">
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                checked={settings.marketRegime.enableEntryConnectedExits}
+                onChange={(e) =>
+                  updateSettings("marketRegime", {
+                    enableEntryConnectedExits: e.target.checked,
+                  })
+                }
+                className="peer sr-only"
+              />
+              <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+            </label>
+            <div>
+              <p className="text-sm font-medium text-text-primary">
+                Entry-connected strategy sells
+              </p>
+              <p className="text-xs text-text-tertiary">
+                Momentum breakout positions ignore incompatible sells (e.g. BB reversion).
+                RSI exhaustion uses a higher overbought bar on momentum entries.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              ADX regime threshold
+            </label>
+            <input
+              type="number"
+              min="10"
+              max="40"
+              step="1"
+              value={settings.marketRegime.regimeAdxThreshold}
+              onChange={(e) =>
+                updateSettings("marketRegime", {
+                  regimeAdxThreshold: Math.max(10, Number(e.target.value) || 23),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Momentum RSI sell (overbought)
+            </label>
+            <input
+              type="number"
+              min="70"
+              max="95"
+              step="1"
+              value={settings.marketRegime.momentumRsiOverbought}
+              onChange={(e) =>
+                updateSettings("marketRegime", {
+                  momentumRsiOverbought: Math.min(
+                    95,
+                    Math.max(70, Number(e.target.value) || 85)
+                  ),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="text-xs text-text-tertiary mt-1">
+              Default RSI sell is 70 — raised on momentum entries so RSI &gt; 70 at buy does
+              not exit immediately.
+            </p>
+          </div>
         </div>
       </section>
 

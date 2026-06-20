@@ -2,6 +2,8 @@ import type { PaperHolding, PaperTrade } from "@/lib/firebase";
 import type { PaperPosition } from "./types";
 import { OWNER_MANUAL } from "./types";
 import { tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
+import { inferStrategyType } from "@/lib/strategies/definitions";
+import { getEntryArchetype } from "@/lib/strategies/entry-exit-compat";
 
 function symKey(symbol: string, exchange: string): string {
   return `${symbol.trim().toUpperCase()}:${(exchange || "NSE").trim().toUpperCase()}`;
@@ -56,6 +58,8 @@ export function migrateHoldingsToPositions(
         }
       : inferOwnerFromTrades(trades, h.symbol, h.exchange);
     const meta = inferOwnerFromTrades(trades, h.symbol, h.exchange);
+    const ownerName = owner.ownerStrategyName ?? meta.ownerStrategyName;
+    const ownerType = ownerName ? inferStrategyType(ownerName) : undefined;
     positions.push({
       id: `pos-mig-${h.symbol}-${h.exchange}-${positions.length}`,
       symbol: h.symbol.trim().toUpperCase(),
@@ -64,7 +68,9 @@ export function migrateHoldingsToPositions(
       entryPrice: h.avgPrice,
       ltp: h.ltp > 0 ? h.ltp : h.avgPrice,
       ownerStrategyId: owner.ownerStrategyId,
-      ownerStrategyName: owner.ownerStrategyName ?? meta.ownerStrategyName,
+      ownerStrategyName: ownerName,
+      ownerStrategyType: ownerType,
+      ownerEntryArchetype: ownerType ? getEntryArchetype(ownerType) : undefined,
       state: "OPEN",
       entryTime: meta.entryTime ?? new Date().toISOString(),
       signalReason: meta.signalReason,

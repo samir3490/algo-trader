@@ -45,6 +45,8 @@ export function sanitizePaperTradingPayload(state: {
       entryTime: String(p.entryTime ?? new Date().toISOString()),
     };
     if (p.ownerStrategyName) row.ownerStrategyName = p.ownerStrategyName;
+    if (p.ownerStrategyType) row.ownerStrategyType = p.ownerStrategyType;
+    if (p.ownerEntryArchetype) row.ownerEntryArchetype = p.ownerEntryArchetype;
     if (p.signalReason) row.signalReason = p.signalReason;
     if (p.stopLoss != null) row.stopLoss = finiteNumber(p.stopLoss);
     if (p.target != null) row.target = finiteNumber(p.target);

@@ -58,7 +58,9 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 
 **Goal:** Better signals and exits — still **paper only**.
 
-- [x] **Universe scanning** — one instance per strategy type scans full Nifty 50; portfolio layer ranks all BUYs by **signal count** (same symbol from multiple strategies ranks higher) then combined confidence; fills only **open position slots** (`maxPositions − open holdings`)
+- [x] **Universe scanning** — one instance per strategy type scans your configured universe (e.g. Top 100 or Nifty 50); portfolio layer ranks BUYs by signal count then regime-weighted confidence; fills only open position slots
+- [x] **Market regime (index ADX)** — each scan fetches **Nifty 50 index** (`^NSEI`) ADX(14) + slope. ADX > 23 → weight trend 70% / momentum 20% / reversion 10%; ADX ≤ 23 → reverse. Index regime is independent of which stocks you scan.
+- [x] **Entry-connected strategy sells** — only compatible sell strategies count toward exit consensus (momentum entries ignore BB/mean-reversion sells). Momentum entries use RSI overbought **85** for sells (default 70 elsewhere) so RSI > 70 at entry does not trigger an immediate exit.
 - [x] **Volatility-based sizing** — Settings → Paper: fixed ₹, % of balance, or ATR-risk
 - [x] **Trailing stop-loss** — Settings → Risk: trail % from peak since entry
 - [x] **Time-based exits** — max hold days, square-off before 3:15 PM for MIS, optional “no progress in X days”

@@ -64,6 +64,10 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
     autoPauseEnabled: rm?.autoPauseEnabled as boolean | undefined,
     autoPauseLookbackDays: rm?.autoPauseLookbackDays as number | undefined,
     autoPauseMaxLoss: rm?.autoPauseMaxLoss as number | undefined,
+    enableRegimeWeighting: rm?.enableRegimeWeighting as boolean | undefined,
+    enableEntryConnectedExits: rm?.enableEntryConnectedExits as boolean | undefined,
+    regimeAdxThreshold: rm?.regimeAdxThreshold as number | undefined,
+    momentumRsiOverbought: rm?.momentumRsiOverbought as number | undefined,
   };
 }
 

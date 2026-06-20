@@ -396,6 +396,16 @@ export interface AppSettings {
   autoPauseLookbackDays: number;
   /** Pause when rolling loss exceeds this rupee amount. */
   autoPauseMaxLoss: number;
+  /** Weight BUY signals by index ADX regime (Nifty ^NSEI). */
+  enableRegimeWeighting: boolean;
+  /** Only count SELL signals compatible with entry archetype. */
+  enableEntryConnectedExits: boolean;
+  regimeIndexSymbol: string;
+  regimeAdxPeriod: number;
+  regimeAdxThreshold: number;
+  regimeAdxSlopeWindow: number;
+  /** RSI overbought for SELL when entry was momentum/breakout. */
+  momentumRsiOverbought: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -441,6 +451,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   autoPauseEnabled: false,
   autoPauseLookbackDays: 14,
   autoPauseMaxLoss: 5000,
+  enableRegimeWeighting: true,
+  enableEntryConnectedExits: true,
+  regimeIndexSymbol: "^NSEI",
+  regimeAdxPeriod: 14,
+  regimeAdxThreshold: 23,
+  regimeAdxSlopeWindow: 5,
+  momentumRsiOverbought: 85,
 };
 
 export async function getSettings(): Promise<AppSettings> {

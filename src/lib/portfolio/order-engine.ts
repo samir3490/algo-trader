@@ -131,6 +131,8 @@ export function executePortfolioDecision(
       ltp: price,
       ownerStrategyId: decision.ownerStrategyId,
       ownerStrategyName: decision.ownerStrategyName,
+      ownerStrategyType: decision.ownerStrategyType,
+      ownerEntryArchetype: decision.ownerEntryArchetype,
       signalReason: decision.signalReason,
       product,
       buySignalCount: decision.buySignalCount,

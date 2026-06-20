@@ -1,3 +1,6 @@
+import type { StrategyType } from "@/lib/strategies/definitions";
+import type { EntryArchetype } from "@/lib/strategies/entry-exit-compat";
+
 /** Position lifecycle — invalid transitions are rejected by PositionManager. */
 export type PositionState =
   | "PENDING"
@@ -29,6 +32,8 @@ export interface PaperPosition {
   ltp: number;
   ownerStrategyId: string;
   ownerStrategyName?: string;
+  ownerStrategyType?: StrategyType;
+  ownerEntryArchetype?: EntryArchetype;
   state: PositionState;
   entryTime: string;
   signalReason?: string;
@@ -46,6 +51,7 @@ export interface PaperPosition {
 export interface StrategyOpinion {
   strategyId: string;
   strategyName: string;
+  strategyType?: StrategyType;
   symbol: string;
   exchange: string;
   action: "BUY" | "SELL" | "HOLD";
@@ -73,6 +79,8 @@ export interface PortfolioDecision {
   exchange: string;
   ownerStrategyId: string;
   ownerStrategyName: string;
+  ownerStrategyType?: StrategyType;
+  ownerEntryArchetype?: EntryArchetype;
   price: number;
   quantity: number;
   signalReason: string;

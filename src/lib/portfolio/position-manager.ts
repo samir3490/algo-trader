@@ -166,6 +166,8 @@ export function createOpenPosition(params: {
   ltp: number;
   ownerStrategyId: string;
   ownerStrategyName?: string;
+  ownerStrategyType?: import("@/lib/strategies/definitions").StrategyType;
+  ownerEntryArchetype?: import("@/lib/strategies/entry-exit-compat").EntryArchetype;
   signalReason?: string;
   stopLoss?: number;
   target?: number;
@@ -183,6 +185,8 @@ export function createOpenPosition(params: {
     ltp: params.ltp,
     ownerStrategyId: params.ownerStrategyId,
     ownerStrategyName: params.ownerStrategyName,
+    ownerStrategyType: params.ownerStrategyType,
+    ownerEntryArchetype: params.ownerEntryArchetype,
     state: "OPEN",
     entryTime: now,
     signalReason: params.signalReason,
