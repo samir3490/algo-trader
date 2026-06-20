@@ -61,6 +61,10 @@ import {
   type RegimeSnapshot,
 } from "@/lib/strategies/regime";
 import {
+  automationAsAppSettings,
+  resolveAutomationSettings,
+} from "@/lib/settings/automation-settings";
+import {
   sendOrderEmail,
   sendScanDigestEmail,
   type ScanDigestLine,
@@ -336,13 +340,15 @@ export async function runStrategiesForUser(
   }));
 
   const userSettings = await loadUserSettings(db, userId);
+  const paperAutomation = resolveAutomationSettings(userSettings, "paper");
+  const cronSettings = automationAsAppSettings(userSettings, paperAutomation);
 
   let regimeSnapshot: RegimeSnapshot | null = null;
-  if (userSettings.enableRegimeWeighting !== false) {
+  if (paperAutomation.enableRegimeWeighting !== false) {
     try {
-      const indexSymbol = userSettings.regimeIndexSymbol ?? "^NSEI";
+      const indexSymbol = cronSettings.regimeIndexSymbol ?? "^NSEI";
       const indexBars = await fetchYahooHistory(indexSymbol, "NSE", "Day");
-      regimeSnapshot = computeRegimeSnapshot(indexBars, userSettings);
+      regimeSnapshot = computeRegimeSnapshot(indexBars, cronSettings);
       if (regimeSnapshot) {
         writeSystemLog("INFO", "Regime", "index_adx", {
           summary: formatRegimeSummary(regimeSnapshot),
@@ -483,7 +489,7 @@ export async function runStrategiesForUser(
   }
 
   const tradesBeforeRisk = paperState.trades ?? [];
-  const riskResult = applyPaperRiskExits(paperState, userSettings);
+  const riskResult = applyPaperRiskExits(paperState, cronSettings);
   if (riskResult.exits.length > 0) {
     paperState = riskResult.state;
     await persistPaperState(db, userId, paperState, recentOrders);
@@ -553,7 +559,7 @@ export async function runStrategiesForUser(
     buyOnlyOpinions(opinions),
     {
       state: paperState,
-      settings: userSettings,
+      settings: cronSettings,
       todayRealizedLoss: todayRealizedLoss(paperState.trades),
     }
   );
@@ -573,7 +579,7 @@ export async function runStrategiesForUser(
   const signalStrategyIds = new Set<string>();
   const portfolioCtx = {
     state: paperState,
-    settings: userSettings,
+    settings: cronSettings,
     todayRealizedLoss: todayRealizedLoss(paperState.trades),
   };
 
@@ -584,7 +590,7 @@ export async function runStrategiesForUser(
 
   const buyQueue = buildRankedPaperBuyQueue(opinions, portfolioCtx, regimeSnapshot);
   const openPositionCount = getOpenPositions(paperState).length;
-  const maxPositions = userSettings.maxPositions ?? 5;
+  const maxPositions = cronSettings.maxPositions ?? 5;
   diagnostics.openPositions = openPositionCount;
   diagnostics.paperBalance = paperState.balance ?? 0;
   diagnostics.maxPositions = maxPositions;
@@ -692,7 +698,7 @@ export async function runStrategiesForUser(
       holdings: paperState.holdings ?? [],
       positions: paperState.positions,
       trades: paperState.trades ?? [],
-      settings: userSettings,
+      settings: cronSettings,
       soldThisRun,
       symbolCooldownUntil,
       symbolsLockedToday,
@@ -894,10 +900,10 @@ export async function runStrategiesForUser(
     }
   }
 
-  if (userSettings.enableStrategySellSignals !== false) {
+  if (cronSettings.enableStrategySellSignals !== false) {
     portfolioCtx.state = paperState;
     const barsBySymbol = new Map<string, import("@/types").OHLC[]>();
-    if (userSettings.enableEntryConnectedExits !== false) {
+    if (cronSettings.enableEntryConnectedExits !== false) {
       for (const pos of getOpenPositions(paperState)) {
         const sym = pos.symbol.toUpperCase();
         if (barsBySymbol.has(sym)) continue;
@@ -930,7 +936,7 @@ export async function runStrategiesForUser(
         holdings: paperState.holdings ?? [],
         positions: paperState.positions,
         trades: paperState.trades ?? [],
-        settings: userSettings,
+        settings: cronSettings,
         soldThisRun,
         boughtThisRun,
         symbolCooldownUntil,

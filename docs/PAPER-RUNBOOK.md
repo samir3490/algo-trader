@@ -6,7 +6,7 @@ Operational guide for running AlgoTrader paper auto-trading reliably, plus the f
 
 ## Algo trading roadmap
 
-High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 1 is stable and Phase 3 prerequisites are met.
+High-level plan for AlgoTrader. **Canonical built vs left tracking:** [PRODUCT-PLAN.md](./PRODUCT-PLAN.md). **Do not skip ahead to live money** until Phase 1 is stable and Phase 3 prerequisites are met.
 
 | Phase | Goal | Timeline | Status |
 |-------|------|----------|--------|
@@ -23,7 +23,9 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 | Area | Status |
 |------|--------|
 | Paper auto-trading (15-min cron) | Working |
-| 12 universe strategies (Nifty 50), cross-strategy strength ranking | Working |
+| 12 universe strategies, cross-strategy strength ranking | Working |
+| Top 100 / Nifty 50 universe (user config) | Working |
+| Index ADX regime + entry-connected sells | Working |
 | Portfolio gates (no duplicate buy, no same-day rebuy) | Working |
 | Risk exits (SL/TP), brokerage simulation | Working |
 | Backtest on Strategies page | Working |
@@ -42,7 +44,7 @@ High-level plan for AlgoTrader. **Do not skip ahead to live money** until Phase 
 
 **Goal:** Run paper auto-trading for weeks without surprises.
 
-- [x] Paper trading health dashboard (**Dashboard → Paper trading health**)
+- [x] Paper trading health dashboard (**Paper Trading → Paper trading health**; compact strip on Dashboard)
 - [x] Cron / scan health email alerts (failures, stale cron, zero trades, price corrections)
 - [x] Price correction tracking in scan diagnostics
 - [ ] Zerodha quotes preferred in cron when connected (Yahoo still used for automated scans)
@@ -138,14 +140,15 @@ Can run in parallel once you have enough paper trade history.
 
 ## What each scan does
 
-1. Runs each **universe strategy** (12 types) against the full symbol list (Nifty 50)
-2. Collects all BUY signals into one ranked list: **signal count** (how many strategies flagged the symbol) → **combined confidence** → symbol name
-3. Buys only as many symbols as **open slots** allow (`maxPositions` default 5 minus current holdings)
-4. Applies **trade gates** (no duplicate buy same day, no same-day rebuy after sell, symbol locks)
-5. Uses **live Yahoo quote** for execution price (hint prices >8% off are corrected)
-6. Applies **stop-loss / take-profit**, optional **trailing stop**, and **time-based exits** on open holdings
-7. Optional **strategy SELL signals** (two-phase scan after min hold) when enabled in Settings → Risk
-8. Persists paper state, orders, and scan diagnostics to Firestore
+1. Fetches **index regime** from `^NSEI` ADX(14) (weights buy confidence by trend/momentum/reversion)
+2. Runs each **universe strategy** (12 types) against your symbol list (Top 100, Nifty 50, or custom)
+3. Collects all BUY signals into one ranked list: **signal count** → **regime-weighted confidence** → symbol name
+4. Buys only as many symbols as **open slots** allow (`maxPositions` default 5 minus current holdings)
+5. Applies **trade gates** (no duplicate buy same day, no same-day rebuy after sell, symbol locks)
+6. Uses **live Yahoo quote** for execution price (hint prices >8% off are corrected)
+7. Applies **stop-loss / take-profit**, optional **trailing stop**, and **time-based exits** on open holdings
+8. Optional **strategy SELL signals** — entry-connected (compatible strategies only); min-hold + 5% profit gate; momentum RSI @ 85
+9. Persists paper state, orders, and scan diagnostics to Firestore
 
 ### Migrate from per-symbol strategies
 
@@ -158,13 +161,13 @@ If you still have hundreds of per-symbol rows (legacy setup):
 
 ## Health dashboard
 
-**Dashboard → Paper trading health**
+**Paper Trading → Paper trading health** (full panel). Dashboard shows a compact health strip with link to Paper Trading.
 
 | Signal | Meaning | Action |
 |--------|---------|--------|
 | Cron stale | No automated run in 25+ min during market hours | Check GitHub Actions logs, `CRON_SECRET`, Vercel deploy |
 | Signals but 0 trades | Gates, full slots, or balance | See Strategies → Last scan panel skip reasons |
-| Portfolio drift | Holdings ≠ positions | Click **Reconcile** on Dashboard |
+| Portfolio drift | Holdings ≠ positions | Click **Reconcile** on Paper Trading health panel |
 | Price corrections | Signal hint diverged from Yahoo | Review symbol data; connect Zerodha for better quotes when trading manually |
 
 Email alerts fire for cron failures, stale cron, zero-trade scans, and price corrections (max once per 15-min window per alert type).
@@ -173,7 +176,7 @@ Email alerts fire for cron failures, stale cron, zero-trade scans, and price cor
 
 When holdings, positions, or trades drift (e.g. after a failed save or legacy data):
 
-1. Open **Dashboard**
+1. Open **Paper Trading**
 2. Click **Reconcile** in the Paper trading health panel
 3. Or call `POST /api/paper/reconcile` with Firebase auth token
 
@@ -202,11 +205,11 @@ Paper auto-trading uses the same core rules as backtest when settings match:
 - Stop-loss and take-profit percentages
 - Max positions and gates (backtest does not simulate all gates — expect some drift)
 
-Compare per-strategy realized P&L on the Dashboard health panel with backtest results on the Strategies page. Large gaps may indicate overfitting, delayed Yahoo prices, or gate blocks not present in backtest.
+Compare per-strategy realized P&L on the Paper Trading health panel with backtest results on the Strategies page. Large gaps may indicate overfitting, delayed Yahoo prices, or gate blocks not present in backtest.
 
 ## Daily checklist (market days)
 
-- [ ] Dashboard health = **Healthy** (or known warnings only)
+- [ ] Paper Trading health = **Healthy** (or known warnings only)
 - [ ] Last cron within 15–20 minutes during session
 - [ ] Paper balance and open positions look correct
 - [ ] No unexplained duplicate orders on Orders page
@@ -262,6 +265,7 @@ Run **Reconcile**. If persists, check Firestore `users/{uid}/data/paperTrading` 
 
 ## Related docs
 
+- [PRODUCT-PLAN.md](./PRODUCT-PLAN.md) — **single plan doc**: built vs left, phases, regime detail
 - `docs/SERVER-STRATEGY-CRON.md` — cron setup
-- Dashboard → Paper trading health — live status
+- Paper Trading → Paper trading health — full status; Dashboard strip for quick glance
 - Strategies → Last scan panel — scan diagnostics

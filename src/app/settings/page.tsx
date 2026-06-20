@@ -111,6 +111,98 @@ interface AppSettings {
     regimeAdxThreshold: number;
     momentumRsiOverbought: number;
   };
+  /** Live auto-trading automation (Phase 3). When mirror is on, paper values apply. */
+  liveTrading: {
+    mirrorPaperAutomation: boolean;
+    enableRegimeWeighting: boolean;
+    enableEntryConnectedExits: boolean;
+    regimeAdxThreshold: number;
+    momentumRsiOverbought: number;
+    stopLossPercent: number;
+    takeProfitPercent: number;
+    maxPositions: number;
+    enableStrategySellSignals: boolean;
+    strategySellMinSignals: number;
+    autoTrailingStop: boolean;
+    trailingStopPercent: number;
+    minHoldMinutesBeforeSell: number;
+  };
+}
+
+type SettingsTab = "paper" | "live" | "general";
+
+function SettingsTabBar({
+  active,
+  onChange,
+}: {
+  active: SettingsTab;
+  onChange: (tab: SettingsTab) => void;
+}) {
+  const tabs: { id: SettingsTab; label: string; hint: string }[] = [
+    { id: "paper", label: "Paper Trading", hint: "Simulated" },
+    { id: "live", label: "Live Trading", hint: "Real money" },
+    { id: "general", label: "General", hint: "Alerts & accounts" },
+  ];
+  return (
+    <div
+      className="flex flex-wrap gap-2 rounded-xl border border-border bg-bg-secondary p-1.5"
+      role="tablist"
+      aria-label="Settings mode"
+    >
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={active === tab.id}
+          onClick={() => onChange(tab.id)}
+          className={cn(
+            "flex min-w-[7rem] flex-1 flex-col items-center rounded-lg px-4 py-2.5 text-center transition-colors sm:flex-none sm:min-w-[9rem]",
+            active === tab.id
+              ? tab.id === "live"
+                ? "bg-amber-500/20 text-amber-100 ring-1 ring-amber-500/40"
+                : tab.id === "paper"
+                  ? "bg-sky-500/15 text-sky-100 ring-1 ring-sky-500/35"
+                  : "bg-bg-elevated text-text-primary ring-1 ring-border"
+              : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
+          )}
+        >
+          <span className="text-sm font-semibold">{tab.label}</span>
+          <span className="text-[10px] uppercase tracking-wide opacity-80">
+            {tab.hint}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function ModeBanner({ mode }: { mode: "paper" | "live" }) {
+  if (mode === "paper") {
+    return (
+      <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3">
+        <p className="text-sm font-medium text-sky-100">
+          Paper trading only — simulated cash, no Zerodha orders
+        </p>
+        <p className="text-xs text-sky-200/70 mt-1">
+          Changes here affect the Paper Trading tab and strategy auto-scan cron only.
+          They do not change live order limits below unless you edit the Live tab.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
+      <p className="text-sm font-medium text-amber-100">
+        Live trading — real Zerodha orders and real money
+      </p>
+      <p className="text-xs text-amber-200/80 mt-1">
+        Max order value and daily loss caps apply to Live Trading page orders. Auto-trading
+        from cron is still paper-only until Phase 3; live automation settings are ready for
+        when that ships.
+      </p>
+    </div>
+  );
 }
 
 const defaultSettings: AppSettings = {
@@ -168,6 +260,21 @@ const defaultSettings: AppSettings = {
     enableEntryConnectedExits: true,
     regimeAdxThreshold: 23,
     momentumRsiOverbought: 85,
+  },
+  liveTrading: {
+    mirrorPaperAutomation: true,
+    enableRegimeWeighting: true,
+    enableEntryConnectedExits: true,
+    regimeAdxThreshold: 23,
+    momentumRsiOverbought: 85,
+    stopLossPercent: 2,
+    takeProfitPercent: 5,
+    maxPositions: 5,
+    enableStrategySellSignals: true,
+    strategySellMinSignals: 2,
+    autoTrailingStop: true,
+    trailingStopPercent: 2,
+    minHoldMinutesBeforeSell: 60,
   },
 };
 
@@ -230,6 +337,30 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       regimeAdxThreshold: fs.regimeAdxThreshold ?? 23,
       momentumRsiOverbought: fs.momentumRsiOverbought ?? 85,
     },
+    liveTrading: {
+      mirrorPaperAutomation: fs.liveMirrorPaperAutomation !== false,
+      enableRegimeWeighting:
+        fs.liveEnableRegimeWeighting ?? fs.enableRegimeWeighting !== false,
+      enableEntryConnectedExits:
+        fs.liveEnableEntryConnectedExits ?? fs.enableEntryConnectedExits !== false,
+      regimeAdxThreshold:
+        fs.liveRegimeAdxThreshold ?? fs.regimeAdxThreshold ?? 23,
+      momentumRsiOverbought:
+        fs.liveMomentumRsiOverbought ?? fs.momentumRsiOverbought ?? 85,
+      stopLossPercent: fs.liveStopLossPercent ?? fs.stopLossPercent ?? 2,
+      takeProfitPercent: fs.liveTakeProfitPercent ?? fs.takeProfitPercent ?? 5,
+      maxPositions: fs.liveMaxPositions ?? fs.maxPositions ?? 5,
+      enableStrategySellSignals:
+        fs.liveEnableStrategySellSignals ?? fs.enableStrategySellSignals !== false,
+      strategySellMinSignals:
+        fs.liveStrategySellMinSignals ?? fs.strategySellMinSignals ?? 2,
+      autoTrailingStop:
+        fs.liveAutoTrailingStop ?? fs.autoTrailingStop !== false,
+      trailingStopPercent:
+        fs.liveTrailingStopPercent ?? fs.trailingStopPercent ?? 2,
+      minHoldMinutesBeforeSell:
+        fs.liveMinHoldMinutesBeforeSell ?? fs.minHoldMinutesBeforeSell ?? 60,
+    },
   };
 }
 
@@ -277,6 +408,19 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     regimeAdxThreshold: s.marketRegime.regimeAdxThreshold,
     regimeAdxSlopeWindow: 5,
     momentumRsiOverbought: s.marketRegime.momentumRsiOverbought,
+    liveMirrorPaperAutomation: s.liveTrading.mirrorPaperAutomation,
+    liveEnableRegimeWeighting: s.liveTrading.enableRegimeWeighting,
+    liveEnableEntryConnectedExits: s.liveTrading.enableEntryConnectedExits,
+    liveRegimeAdxThreshold: s.liveTrading.regimeAdxThreshold,
+    liveMomentumRsiOverbought: s.liveTrading.momentumRsiOverbought,
+    liveStopLossPercent: s.liveTrading.stopLossPercent,
+    liveTakeProfitPercent: s.liveTrading.takeProfitPercent,
+    liveMaxPositions: s.liveTrading.maxPositions,
+    liveEnableStrategySellSignals: s.liveTrading.enableStrategySellSignals,
+    liveStrategySellMinSignals: s.liveTrading.strategySellMinSignals,
+    liveAutoTrailingStop: s.liveTrading.autoTrailingStop,
+    liveTrailingStopPercent: s.liveTrading.trailingStopPercent,
+    liveMinHoldMinutesBeforeSell: s.liveTrading.minHoldMinutesBeforeSell,
     notifyOrders: s.notifications.orderExecution,
     notifyEmailDigest: s.notifications.emailDigest,
     notifySkipped: s.notifications.skippedOrders,
@@ -288,6 +432,10 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
 
 function SettingsContent() {
   const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab");
+  const initialTab: SettingsTab =
+    tabParam === "live" ? "live" : tabParam === "general" ? "general" : "paper";
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const { user } = useAuth();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [saving, setSaving] = useState(false);
@@ -614,8 +762,12 @@ function SettingsContent() {
         </button>
       </div>
 
-      {/* ── Zerodha Accounts ──────────────────────────────────────────── */}
-      <section className="card">
+      <SettingsTabBar active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "live" && (
+        <>
+          <ModeBanner mode="live" />
+      <section className="card border-amber-500/20">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-accent-muted p-2">
@@ -899,8 +1051,259 @@ function SettingsContent() {
         )}
       </section>
 
+      {/* ── Live order defaults ─────────────────────────────────────────── */}
+      <section className="card border-amber-500/20">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="rounded-lg bg-amber-500/15 p-2">
+            <TrendingUp className="h-5 w-5 text-amber-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-text-primary">
+              Live Order Limits
+            </h2>
+            <p className="text-xs text-text-secondary">
+              Caps for manual and future auto orders on the Live Trading page (Zerodha)
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Default Exchange
+            </label>
+            <select
+              value={settings.tradingPreferences.defaultExchange}
+              onChange={(e) =>
+                updateSettings("tradingPreferences", {
+                  defaultExchange: e.target.value as "NSE" | "BSE",
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+              <option value="NSE">NSE</option>
+              <option value="BSE">BSE</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Default Product Type
+            </label>
+            <select
+              value={settings.tradingPreferences.defaultProductType}
+              onChange={(e) =>
+                updateSettings("tradingPreferences", {
+                  defaultProductType: e.target.value as "MIS" | "CNC" | "NRML",
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+              <option value="MIS">MIS (Intraday)</option>
+              <option value="CNC">CNC (Delivery)</option>
+              <option value="NRML">NRML (F&amp;O)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Default Order Type
+            </label>
+            <select
+              value={settings.tradingPreferences.defaultOrderType}
+              onChange={(e) =>
+                updateSettings("tradingPreferences", {
+                  defaultOrderType: e.target.value as "MARKET" | "LIMIT",
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            >
+              <option value="MARKET">Market</option>
+              <option value="LIMIT">Limit</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Max Order Value (₹)
+            </label>
+            <input
+              type="number"
+              value={settings.tradingPreferences.maxOrderValue}
+              onChange={(e) =>
+                updateSettings("tradingPreferences", {
+                  maxOrderValue: Number(e.target.value),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Max Daily Loss (₹)
+            </label>
+            <input
+              type="number"
+              value={settings.tradingPreferences.maxDailyLoss}
+              onChange={(e) =>
+                updateSettings("tradingPreferences", {
+                  maxDailyLoss: Number(e.target.value),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* ── Live auto-trading (Phase 3) ─────────────────────────────────── */}
+      <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-6 space-y-4">
+        <div>
+          <h2 className="text-base font-semibold text-text-primary">
+            Live Auto-Trading Automation
+          </h2>
+          <p className="text-xs text-text-tertiary mt-1">
+            Cron live orders are not enabled yet. Configure now so Phase 3 can mirror or
+            override paper automation without surprises.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="relative inline-flex cursor-pointer items-center">
+            <input
+              type="checkbox"
+              checked={settings.liveTrading.mirrorPaperAutomation}
+              onChange={(e) =>
+                updateSettings("liveTrading", {
+                  mirrorPaperAutomation: e.target.checked,
+                })
+              }
+              className="peer sr-only"
+            />
+            <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+          </label>
+          <div>
+            <p className="text-sm font-medium text-text-primary">
+              Use same automation as Paper tab
+            </p>
+            <p className="text-xs text-text-tertiary">
+              Regime, exits, stop loss, and strategy sells match paper settings (recommended
+              while testing).
+            </p>
+          </div>
+        </div>
+
+        {!settings.liveTrading.mirrorPaperAutomation && (
+          <div className="grid gap-4 sm:grid-cols-2 border-t border-amber-500/20 pt-4">
+            <div className="flex items-center gap-3 sm:col-span-2">
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={settings.liveTrading.enableRegimeWeighting}
+                  onChange={(e) =>
+                    updateSettings("liveTrading", {
+                      enableRegimeWeighting: e.target.checked,
+                    })
+                  }
+                  className="peer sr-only"
+                />
+                <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+              </label>
+              <span className="text-sm text-text-primary">Live regime-weighted buys</span>
+            </div>
+            <div className="flex items-center gap-3 sm:col-span-2">
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={settings.liveTrading.enableEntryConnectedExits}
+                  onChange={(e) =>
+                    updateSettings("liveTrading", {
+                      enableEntryConnectedExits: e.target.checked,
+                    })
+                  }
+                  className="peer sr-only"
+                />
+                <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+              </label>
+              <span className="text-sm text-text-primary">Live entry-connected sells</span>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Live stop loss (%)
+              </label>
+              <input
+                type="number"
+                step="0.5"
+                value={settings.liveTrading.stopLossPercent}
+                onChange={(e) =>
+                  updateSettings("liveTrading", {
+                    stopLossPercent: Number(e.target.value),
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Live min profit for strategy sells (%)
+              </label>
+              <input
+                type="number"
+                step="0.5"
+                value={settings.liveTrading.takeProfitPercent}
+                onChange={(e) =>
+                  updateSettings("liveTrading", {
+                    takeProfitPercent: Number(e.target.value),
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Live max positions
+              </label>
+              <input
+                type="number"
+                min={1}
+                value={settings.liveTrading.maxPositions}
+                onChange={(e) =>
+                  updateSettings("liveTrading", {
+                    maxPositions: Math.max(1, Number(e.target.value) || 1),
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                Live momentum RSI overbought
+              </label>
+              <input
+                type="number"
+                min={70}
+                max={95}
+                value={settings.liveTrading.momentumRsiOverbought}
+                onChange={(e) =>
+                  updateSettings("liveTrading", {
+                    momentumRsiOverbought: Number(e.target.value),
+                  })
+                }
+                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+        )}
+      </section>
+        </>
+      )}
+
+      {activeTab === "paper" && (
+        <>
+          <ModeBanner mode="paper" />
       {/* ── Paper Trading Settings ──────────────────────────────────────── */}
-      <section className="card">
+      <section className="card border-sky-500/25">
         <div className="flex items-center gap-3 mb-5">
           <div className="rounded-lg bg-accent-muted p-2">
             <Wallet className="h-5 w-5 text-accent" />
@@ -910,7 +1313,7 @@ function SettingsContent() {
               Paper Trading
             </h2>
             <p className="text-xs text-text-secondary">
-              Used by Paper Trading and strategy auto-trades (delivery CNC by default)
+              Simulated portfolio, sizing, and reset — does not affect live Zerodha orders
             </p>
           </div>
         </div>
@@ -1167,194 +1570,11 @@ function SettingsContent() {
         </div>
       </section>
 
-      {/* ── Trading Preferences ─────────────────────────────────────────── */}
-      <section className="card">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="rounded-lg bg-accent-muted p-2">
-            <TrendingUp className="h-5 w-5 text-accent" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-text-primary">
-              Trading Preferences
-            </h2>
-            <p className="text-xs text-text-secondary">
-              Defaults for Live Trading (Zerodha orders only)
-            </p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Default Exchange
-            </label>
-            <select
-              value={settings.tradingPreferences.defaultExchange}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  defaultExchange: e.target.value as "NSE" | "BSE",
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            >
-              <option value="NSE">NSE</option>
-              <option value="BSE">BSE</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Default Product Type
-            </label>
-            <select
-              value={settings.tradingPreferences.defaultProductType}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  defaultProductType: e.target.value as "MIS" | "CNC" | "NRML",
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            >
-              <option value="MIS">MIS (Intraday)</option>
-              <option value="CNC">CNC (Delivery)</option>
-              <option value="NRML">NRML (F&amp;O)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Default Order Type
-            </label>
-            <select
-              value={settings.tradingPreferences.defaultOrderType}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  defaultOrderType: e.target.value as "MARKET" | "LIMIT",
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            >
-              <option value="MARKET">Market</option>
-              <option value="LIMIT">Limit</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Max Order Value (₹)
-            </label>
-            <input
-              type="number"
-              value={settings.tradingPreferences.maxOrderValue}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  maxOrderValue: Number(e.target.value),
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Max Daily Loss (₹)
-            </label>
-            <input
-              type="number"
-              value={settings.tradingPreferences.maxDailyLoss}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  maxDailyLoss: Number(e.target.value),
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </div>
-        </div>
-      </section>
-
-      {/* ── Notifications ───────────────────────────────────────────────── */}
-      <section className="card">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="rounded-lg bg-accent-muted p-2">
-            <Bell className="h-5 w-5 text-accent" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-text-primary">
-              Notifications
-            </h2>
-            <p className="text-xs text-text-secondary">
-              Strategy scans send at most one summary email per 15 min when digest is on
-            </p>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {[
-            {
-              key: "orderExecution" as const,
-              label: "Trade emails",
-              desc: "Enable email notifications for trades (required for digest)",
-            },
-            {
-              key: "emailDigest" as const,
-              label: "One email per scan (recommended)",
-              desc: "Single summary per 15-min strategy run instead of one email per stock",
-            },
-            {
-              key: "riskExits" as const,
-              label: "Stop-loss / take-profit exits",
-              desc: "Include auto risk sells in emails",
-            },
-            {
-              key: "skippedOrders" as const,
-              label: "Skipped orders (noisy)",
-              desc: "Email when a strategy signal could not run (e.g. low balance)",
-            },
-            {
-              key: "strategySignals" as const,
-              label: "Live strategy signals only",
-              desc: "Email for live-mode signals that need manual placement (off by default)",
-            },
-            {
-              key: "pnlAlerts" as const,
-              label: "Daily P&L email",
-              desc: "End-of-day paper portfolio summary after market close (15:35 IST)",
-            },
-          ].map((item) => (
-            <div
-              key={item.key}
-              className="flex items-center justify-between rounded-lg bg-bg-tertiary p-4"
-            >
-              <div>
-                <p className="text-sm font-medium text-text-primary">
-                  {item.label}
-                </p>
-                <p className="text-xs text-text-tertiary">{item.desc}</p>
-              </div>
-              <label className="relative inline-flex cursor-pointer items-center">
-                <input
-                  type="checkbox"
-                  checked={settings.notifications[item.key]}
-                  onChange={(e) =>
-                    updateSettings("notifications", {
-                      [item.key]: e.target.checked,
-                    })
-                  }
-                  className="peer sr-only"
-                />
-                <div className="h-5 w-9 rounded-full bg-bg-hover peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
-              </label>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Market Regime & Entry-Connected Exits ─────────────────────────── */}
-      <section className="rounded-xl border border-border bg-bg-secondary p-4 sm:p-6 space-y-4">
+      {/* ── Market Regime & Entry-Connected Exits (paper auto-scan) ─────── */}
+      <section className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-4 sm:p-6 space-y-4">
         <div>
           <h2 className="text-base font-semibold text-text-primary">
-            Market Regime &amp; Exits
+            Paper Auto-Scan — Market Regime &amp; Exits
           </h2>
           <p className="text-xs text-text-tertiary mt-1">
             Index ADX (^NSEI) weights buy strategies. Entry-connected exits only count sell
@@ -1462,18 +1682,19 @@ function SettingsContent() {
         </div>
       </section>
 
-      {/* ── Risk Management ─────────────────────────────────────────────── */}
-      <section className="card">
+      {/* ── Paper risk & strategy exits ─────────────────────────────────── */}
+      <section className="card border-sky-500/25">
         <div className="flex items-center gap-3 mb-5">
-          <div className="rounded-lg bg-accent-muted p-2">
-            <ShieldCheck className="h-5 w-5 text-accent" />
+          <div className="rounded-lg bg-sky-500/15 p-2">
+            <ShieldCheck className="h-5 w-5 text-sky-400" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-text-primary">
-              Risk Management
+              Paper Auto-Scan — Risk &amp; Strategy Exits
             </h2>
             <p className="text-xs text-text-secondary">
-              Stop-loss on losses; trailing stop after min profit; time exits for stale positions
+              Stop-loss on losses; trailing stop after min profit; strategy sells after{" "}
+              {settings.riskManagement.takeProfitPercent}% gate (paper cron only)
             </p>
           </div>
         </div>
@@ -1889,6 +2110,88 @@ function SettingsContent() {
           )}
         </div>
       </section>
+        </>
+      )}
+
+      {activeTab === "general" && (
+        <>
+      <section className="card">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="rounded-lg bg-accent-muted p-2">
+            <Bell className="h-5 w-5 text-accent" />
+          </div>
+          <div>
+            <h2 className="text-lg font-semibold text-text-primary">
+              Notifications
+            </h2>
+            <p className="text-xs text-text-secondary">
+              Email alerts for paper scans, live signals, and risk exits
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          {[
+            {
+              key: "orderExecution" as const,
+              label: "Trade emails",
+              desc: "Enable email notifications for trades (required for digest)",
+            },
+            {
+              key: "emailDigest" as const,
+              label: "One email per scan (recommended)",
+              desc: "Single summary per 15-min strategy run instead of one email per stock",
+            },
+            {
+              key: "riskExits" as const,
+              label: "Stop-loss / take-profit exits",
+              desc: "Include auto risk sells in emails",
+            },
+            {
+              key: "skippedOrders" as const,
+              label: "Skipped orders (noisy)",
+              desc: "Email when a strategy signal could not run (e.g. low balance)",
+            },
+            {
+              key: "strategySignals" as const,
+              label: "Live strategy signals only",
+              desc: "Email for live-mode signals that need manual placement (off by default)",
+            },
+            {
+              key: "pnlAlerts" as const,
+              label: "Daily P&L email",
+              desc: "End-of-day paper portfolio summary after market close (15:35 IST)",
+            },
+          ].map((item) => (
+            <div
+              key={item.key}
+              className="flex items-center justify-between rounded-lg bg-bg-tertiary p-4"
+            >
+              <div>
+                <p className="text-sm font-medium text-text-primary">
+                  {item.label}
+                </p>
+                <p className="text-xs text-text-tertiary">{item.desc}</p>
+              </div>
+              <label className="relative inline-flex cursor-pointer items-center">
+                <input
+                  type="checkbox"
+                  checked={settings.notifications[item.key]}
+                  onChange={(e) =>
+                    updateSettings("notifications", {
+                      [item.key]: e.target.checked,
+                    })
+                  }
+                  className="peer sr-only"
+                />
+                <div className="h-5 w-9 rounded-full bg-bg-hover peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+              </label>
+            </div>
+          ))}
+        </div>
+      </section>
+        </>
+      )}
 
       {/* Toast Notification */}
       {toast && (

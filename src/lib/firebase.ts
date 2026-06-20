@@ -406,6 +406,25 @@ export interface AppSettings {
   regimeAdxSlopeWindow: number;
   /** RSI overbought for SELL when entry was momentum/breakout. */
   momentumRsiOverbought: number;
+  /** When true (default), live auto-trading uses paper automation fields. */
+  liveMirrorPaperAutomation: boolean;
+  liveEnableRegimeWeighting?: boolean;
+  liveEnableEntryConnectedExits?: boolean;
+  liveRegimeAdxThreshold?: number;
+  liveMomentumRsiOverbought?: number;
+  liveStopLossPercent?: number;
+  liveTakeProfitPercent?: number;
+  liveAutoStopLoss?: boolean;
+  liveAutoTakeProfit?: boolean;
+  liveMaxPositions?: number;
+  liveEnableStrategySellSignals?: boolean;
+  liveStrategySellMinSignals?: number;
+  liveAutoTrailingStop?: boolean;
+  liveTrailingStopPercent?: number;
+  liveMinHoldMinutesBeforeSell?: number;
+  liveMaxHoldDays?: number;
+  liveNoProgressDays?: number;
+  liveNoProgressMinPct?: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -458,6 +477,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   regimeAdxThreshold: 23,
   regimeAdxSlopeWindow: 5,
   momentumRsiOverbought: 85,
+  liveMirrorPaperAutomation: true,
 };
 
 export async function getSettings(): Promise<AppSettings> {
