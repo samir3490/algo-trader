@@ -92,7 +92,7 @@ export default function MarketTrendHero({ marketOpen }: { marketOpen: boolean })
           {data && (
             <div className="flex flex-wrap items-end gap-4">
               <div>
-                <p className="text-3xl font-bold text-text-primary tabular-nums">
+                <p className="text-3xl font-bold text-text-primary tabular-nums leading-tight break-words">
                   {data.lastPrice > 0
                     ? data.lastPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })
                     : "—"}

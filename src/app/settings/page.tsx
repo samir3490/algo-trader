@@ -157,18 +157,18 @@ function SettingsTabBar({
           aria-selected={active === tab.id}
           onClick={() => onChange(tab.id)}
           className={cn(
-            "flex min-w-[7rem] flex-1 flex-col items-center rounded-lg px-4 py-2.5 text-center transition-colors sm:flex-none sm:min-w-[9rem]",
+            "flex min-w-[5.5rem] flex-1 flex-col items-center rounded-lg px-3 py-2.5 text-center transition-colors sm:flex-none sm:min-w-[9rem] sm:px-4",
             active === tab.id
               ? tab.id === "live"
-                ? "bg-amber-500/20 text-amber-100 ring-1 ring-amber-500/40"
+                ? "bg-amber-100 text-amber-950 ring-1 ring-amber-400/50"
                 : tab.id === "paper"
-                  ? "bg-sky-500/15 text-sky-100 ring-1 ring-sky-500/35"
+                  ? "bg-sky-100 text-sky-950 ring-1 ring-sky-400/50"
                   : "bg-bg-elevated text-text-primary ring-1 ring-border"
               : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
           )}
         >
           <span className="text-sm font-semibold">{tab.label}</span>
-          <span className="text-[10px] uppercase tracking-wide opacity-80">
+          <span className="text-[10px] uppercase tracking-wide text-inherit opacity-75">
             {tab.hint}
           </span>
         </button>
@@ -180,11 +180,11 @@ function SettingsTabBar({
 function ModeBanner({ mode }: { mode: "paper" | "live" }) {
   if (mode === "paper") {
     return (
-      <div className="rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-3">
-        <p className="text-sm font-medium text-sky-100">
+      <div className="rounded-lg border border-sky-200 bg-sky-50 px-4 py-3">
+        <p className="text-sm font-medium text-sky-950">
           Paper trading only — simulated cash, no Zerodha orders
         </p>
-        <p className="text-xs text-sky-200/70 mt-1">
+        <p className="text-xs text-sky-800 mt-1">
           Changes here affect the Paper Trading tab and strategy auto-scan cron only.
           They do not change live order limits below unless you edit the Live tab.
         </p>
@@ -192,11 +192,11 @@ function ModeBanner({ mode }: { mode: "paper" | "live" }) {
     );
   }
   return (
-    <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3">
-      <p className="text-sm font-medium text-amber-100">
+    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+      <p className="text-sm font-medium text-amber-950">
         Live trading — real Zerodha orders and real money
       </p>
-      <p className="text-xs text-amber-200/80 mt-1">
+      <p className="text-xs text-amber-900 mt-1">
         Max order value and daily loss caps apply to Live Trading page orders. Auto-trading
         from cron is still paper-only until Phase 3; live automation settings are ready for
         when that ships.
@@ -767,7 +767,7 @@ function SettingsContent() {
       {activeTab === "live" && (
         <>
           <ModeBanner mode="live" />
-      <section className="card border-amber-500/20">
+      <section className="card border-amber-200">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-accent-muted p-2">
@@ -807,15 +807,15 @@ function SettingsContent() {
           )}
         </div>
 
-        <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-4 py-3 mb-4">
-          <p className="text-xs text-amber-200/90">
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 mb-4">
+          <p className="text-xs text-amber-950">
             <strong>Add funds:</strong> Zerodha does not allow adding money through third-party apps.
             Deposit via{" "}
             <a
               href="https://kite.zerodha.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-amber-300 underline hover:text-amber-200"
+              className="text-amber-800 underline font-medium hover:text-amber-950"
             >
               Kite web
             </a>{" "}
@@ -823,8 +823,8 @@ function SettingsContent() {
           </p>
         </div>
 
-        <div className="rounded-lg bg-blue-500/10 border border-blue-500/20 px-4 py-3 mb-4">
-          <p className="text-xs text-blue-300">
+        <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 mb-4">
+          <p className="text-xs text-blue-950">
             <strong>Adding a new account?</strong>
             {availableApps.length > 1
               ? " Select the Kite Connect app that matches the account you want to add. Each account needs its own app."
@@ -1052,10 +1052,10 @@ function SettingsContent() {
       </section>
 
       {/* ── Live order defaults ─────────────────────────────────────────── */}
-      <section className="card border-amber-500/20">
+      <section className="card border-amber-200">
         <div className="flex items-center gap-3 mb-5">
-          <div className="rounded-lg bg-amber-500/15 p-2">
-            <TrendingUp className="h-5 w-5 text-amber-400" />
+          <div className="rounded-lg bg-amber-100 p-2">
+            <TrendingUp className="h-5 w-5 text-amber-800" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-text-primary">
@@ -1158,7 +1158,7 @@ function SettingsContent() {
       </section>
 
       {/* ── Live auto-trading (Phase 3) ─────────────────────────────────── */}
-      <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 sm:p-6 space-y-4">
+      <section className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 sm:p-6 space-y-4">
         <div>
           <h2 className="text-base font-semibold text-text-primary">
             Live Auto-Trading Automation
@@ -1195,7 +1195,7 @@ function SettingsContent() {
         </div>
 
         {!settings.liveTrading.mirrorPaperAutomation && (
-          <div className="grid gap-4 sm:grid-cols-2 border-t border-amber-500/20 pt-4">
+          <div className="grid gap-4 sm:grid-cols-2 border-t border-amber-200 pt-4">
             <div className="flex items-center gap-3 sm:col-span-2">
               <label className="relative inline-flex cursor-pointer items-center">
                 <input
@@ -1303,7 +1303,7 @@ function SettingsContent() {
         <>
           <ModeBanner mode="paper" />
       {/* ── Paper Trading Settings ──────────────────────────────────────── */}
-      <section className="card border-sky-500/25">
+      <section className="card border-sky-200">
         <div className="flex items-center gap-3 mb-5">
           <div className="rounded-lg bg-accent-muted p-2">
             <Wallet className="h-5 w-5 text-accent" />
@@ -1559,7 +1559,7 @@ function SettingsContent() {
                 className={cn(
                   "text-sm rounded-lg px-3 py-2",
                   resetMessage.ok
-                    ? "bg-emerald-500/10 text-emerald-300"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                     : "bg-loss-muted text-loss"
                 )}
               >
@@ -1571,7 +1571,7 @@ function SettingsContent() {
       </section>
 
       {/* ── Market Regime & Entry-Connected Exits (paper auto-scan) ─────── */}
-      <section className="rounded-xl border border-sky-500/25 bg-sky-500/5 p-4 sm:p-6 space-y-4">
+      <section className="rounded-xl border border-sky-200 bg-sky-50/80 p-4 sm:p-6 space-y-4">
         <div>
           <h2 className="text-base font-semibold text-text-primary">
             Paper Auto-Scan — Market Regime &amp; Exits
@@ -1683,10 +1683,10 @@ function SettingsContent() {
       </section>
 
       {/* ── Paper risk & strategy exits ─────────────────────────────────── */}
-      <section className="card border-sky-500/25">
+      <section className="card border-sky-200">
         <div className="flex items-center gap-3 mb-5">
-          <div className="rounded-lg bg-sky-500/15 p-2">
-            <ShieldCheck className="h-5 w-5 text-sky-400" />
+          <div className="rounded-lg bg-sky-100 p-2">
+            <ShieldCheck className="h-5 w-5 text-sky-800" />
           </div>
           <div>
             <h2 className="text-lg font-semibold text-text-primary">

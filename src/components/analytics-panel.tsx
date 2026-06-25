@@ -71,7 +71,7 @@ function MetricsGrid({
     <div
       className={cn(
         "grid gap-2",
-        compact ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+        compact ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
       )}
     >
       {items.map((item) => (
@@ -82,7 +82,7 @@ function MetricsGrid({
           <p className="text-[10px] text-text-tertiary uppercase">{item.label}</p>
           <p
             className={cn(
-              "text-sm font-semibold",
+              "text-sm font-semibold tabular-nums break-words leading-snug",
               item.positive === true && "text-profit",
               item.positive === false && "text-loss"
             )}

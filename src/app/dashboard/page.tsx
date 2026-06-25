@@ -259,7 +259,7 @@ export default function DashboardPage() {
               <IndianRupee className="h-4 w-4 text-accent" />
             </div>
           </div>
-          <p className="text-2xl font-bold text-text-primary">
+          <p className="text-2xl font-bold text-text-primary tabular-nums break-words">
             {formatCurrency(portfolioValue)}
           </p>
           <div className="flex items-center gap-1 mt-1">
@@ -274,8 +274,11 @@ export default function DashboardPage() {
             <span className="text-xs text-text-tertiary ml-1">realized</span>
           </div>
           {invested > 0 && (
-            <p className="text-xs text-text-tertiary mt-1">
-              Invested {formatCurrency(invested)} · Mkt {formatCurrency(portfolio.currentValue)}
+            <p className="text-xs text-text-tertiary mt-1 leading-relaxed">
+              Invested {formatCurrency(invested)}
+              <br className="sm:hidden" />
+              <span className="hidden sm:inline"> · </span>
+              Mkt {formatCurrency(portfolio.currentValue)}
             </p>
           )}
           <Link
@@ -299,7 +302,7 @@ export default function DashboardPage() {
           </div>
           <p
             className={cn(
-              "text-2xl font-bold",
+              "text-2xl font-bold tabular-nums break-words",
               realizedPnl >= 0 ? "text-profit" : "text-loss"
             )}
           >

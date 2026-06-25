@@ -109,7 +109,7 @@ export default function PaperHealthStrip() {
               </span>
             )}
           </div>
-          <p className="text-xs text-text-tertiary truncate">
+          <p className="text-xs text-text-tertiary leading-snug break-words">
             {cronLabel} · {driftLabel}
             {health?.checkedAt && (
               <> · {formatDateTimeIST(health.checkedAt)}</>

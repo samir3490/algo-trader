@@ -91,7 +91,7 @@ export default function SectorPerformanceChart({
 
       {chartData.length > 0 ? (
         <>
-          <div className="h-[360px] mb-4">
+          <div className="h-[280px] sm:h-[360px] mb-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={chartData}
@@ -108,8 +108,8 @@ export default function SectorPerformanceChart({
                 <YAxis
                   type="category"
                   dataKey="name"
-                  width={120}
-                  tick={{ fill: "#a3a3a3", fontSize: 11 }}
+                  width={96}
+                  tick={{ fill: "#595959", fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
                 />

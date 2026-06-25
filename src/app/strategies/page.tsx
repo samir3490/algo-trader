@@ -938,7 +938,7 @@ function StrategiesPageContent() {
                       {def.winRate}% win · {def.riskLevel} risk
                     </span>
                   </div>
-                  <p className="text-xs text-text-tertiary truncate">{def.description}</p>
+                  <p className="text-xs text-text-tertiary line-clamp-2 sm:line-clamp-1">{def.description}</p>
                 </div>
                 <span
                   className={cn(

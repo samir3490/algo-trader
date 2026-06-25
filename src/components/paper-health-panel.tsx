@@ -218,7 +218,7 @@ export default function PaperHealthPanel({ className }: { className?: string }) 
             </ul>
           )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
             <Metric
               label="Last cron"
               value={
@@ -365,8 +365,8 @@ function Metric({
       <p className="text-text-tertiary">{label}</p>
       <p
         className={cn(
-          "font-semibold text-text-primary truncate",
-          warn && "text-amber-400"
+          "font-semibold text-text-primary break-words leading-snug",
+          warn && "text-amber-600"
         )}
         title={value}
       >

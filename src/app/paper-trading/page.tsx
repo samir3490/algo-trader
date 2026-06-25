@@ -73,6 +73,7 @@ import { PaperOrderPanel } from "@/app/paper-trading/order-panel";
 import PaperExportMenu from "@/components/paper-export-menu";
 import PaperHealthPanel from "@/components/paper-health-panel";
 import PaperTabBar, { type PaperTradingTab } from "@/components/paper-trading/paper-tab-bar";
+import StatCard from "@/components/ui/stat-card";
 import { useTableSort } from "@/hooks/use-table-sort";
 import SortableTh from "@/components/ui/sortable-th";
 import {
@@ -1014,30 +1015,32 @@ export default function PaperTradingPage() {
   const summaryItems = [
     {
       label: "Balance",
-      value: formatCurrency(portfolio.balance),
+      primary: formatCurrency(portfolio.balance),
       icon: Wallet,
-      color: "text-blue-400",
+      colorClass: "text-blue-600",
       hint: "Available cash",
     },
     {
       label: "Unrealized P&L",
-      value: `${pnlBreakdown.unrealizedPnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.unrealizedPnl)} (${formatPercent(pnlBreakdown.unrealizedPnlPercent)})`,
+      primary: `${pnlBreakdown.unrealizedPnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.unrealizedPnl)}`,
+      secondary: formatPercent(pnlBreakdown.unrealizedPnlPercent),
       icon: pnlBreakdown.unrealizedPnl >= 0 ? ArrowUpRight : ArrowDownRight,
-      color: pnlBreakdown.unrealizedPnl >= 0 ? "text-profit" : "text-loss",
+      colorClass: pnlBreakdown.unrealizedPnl >= 0 ? "text-profit" : "text-loss",
       hint: isMarketOpen() ? "Open positions · live prices" : "Open positions · frozen after close",
     },
     {
       label: "Realized P&L",
-      value: `${pnlBreakdown.realizedPnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.realizedPnl)}`,
+      primary: `${pnlBreakdown.realizedPnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.realizedPnl)}`,
       icon: pnlBreakdown.realizedPnl >= 0 ? TrendingUp : TrendingDown,
-      color: pnlBreakdown.realizedPnl >= 0 ? "text-profit" : "text-loss",
+      colorClass: pnlBreakdown.realizedPnl >= 0 ? "text-profit" : "text-loss",
       hint: "Closed sell trades",
     },
     {
       label: "All-time P&L",
-      value: `${pnlBreakdown.allTimePnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.allTimePnl)} (${formatPercent(pnlBreakdown.allTimePnlPercent)})`,
+      primary: `${pnlBreakdown.allTimePnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.allTimePnl)}`,
+      secondary: formatPercent(pnlBreakdown.allTimePnlPercent),
       icon: pnlBreakdown.allTimePnl >= 0 ? ArrowUpRight : ArrowDownRight,
-      color: pnlBreakdown.allTimePnl >= 0 ? "text-profit" : "text-loss",
+      colorClass: pnlBreakdown.allTimePnl >= 0 ? "text-profit" : "text-loss",
       hint: "Cash + cost basis (excludes unrealized)",
     },
   ];
@@ -1051,7 +1054,7 @@ export default function PaperTradingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-primary p-4 md:p-6 lg:p-8">
+    <div className="min-h-screen bg-bg-primary p-3 sm:p-4 md:p-6 lg:p-8 pb-6">
       {/* Header */}
       <div className="mb-6">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
@@ -1126,31 +1129,24 @@ export default function PaperTradingPage() {
         )}
 
         {riskToast && (
-          <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200 flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-700" />
             {riskToast}
           </div>
         )}
 
-        {/* Portfolio Summary Bar */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        {/* Portfolio Summary */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {summaryItems.map((item) => (
-            <div key={item.label} className="card flex items-center gap-3">
-              <div className={cn("p-2 rounded-lg bg-bg-tertiary", item.color)}>
-                <item.icon className="w-5 h-5" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-xs text-text-tertiary uppercase tracking-wider">
-                  {item.label}
-                </p>
-                <p className={cn("text-sm md:text-base font-semibold truncate", item.color)}>
-                  {item.value}
-                </p>
-                {"hint" in item && item.hint && (
-                  <p className="text-[10px] text-text-tertiary mt-0.5 truncate">{item.hint}</p>
-                )}
-              </div>
-            </div>
+            <StatCard
+              key={item.label}
+              label={item.label}
+              primary={item.primary}
+              secondary={item.secondary}
+              hint={item.hint}
+              icon={item.icon}
+              colorClass={item.colorClass}
+            />
           ))}
         </div>
 
@@ -1178,9 +1174,21 @@ export default function PaperTradingPage() {
             </h2>
             <div className="flex flex-wrap items-center gap-3 sm:justify-end">
               {holdings.length > 0 && (
-                <div className="text-xs text-text-tertiary">
-                  <span>Invested: {formatCurrency(portfolio.invested)}</span>
-                  <span className="mx-2">·</span>
+                <div className="w-full sm:w-auto rounded-lg border border-border bg-bg-tertiary/50 px-3 py-2 text-xs text-text-secondary space-y-1 sm:space-y-0">
+                  <div className="flex flex-wrap gap-x-3 gap-y-1">
+                    <span>
+                      Invested:{" "}
+                      <span className="font-semibold text-text-primary tabular-nums">
+                        {formatCurrency(portfolio.invested)}
+                      </span>
+                    </span>
+                    <span>
+                      Mkt value:{" "}
+                      <span className="font-semibold text-text-primary tabular-nums">
+                        {formatCurrency(portfolio.currentValue)}
+                      </span>
+                    </span>
+                  </div>
                   <span className={portfolio.pnl >= 0 ? "text-profit" : "text-loss"}>
                     Unrealized: {portfolio.pnl >= 0 ? "+" : ""}
                     {formatCurrency(portfolio.pnl)} ({formatPercent(portfolio.pnlPercent)})
@@ -1243,7 +1251,7 @@ export default function PaperTradingPage() {
                         </p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
                       <div>
                         <p className="text-text-tertiary">Qty</p>
                         <p className="font-medium text-text-primary tabular-nums">{formatNumber(h.qty)}</p>
@@ -1255,6 +1263,14 @@ export default function PaperTradingPage() {
                       <div>
                         <p className="text-text-tertiary">LTP</p>
                         <p className="font-medium text-text-primary tabular-nums">{formatCurrency(h.ltp)}</p>
+                      </div>
+                      <div>
+                        <p className="text-text-tertiary">Invested</p>
+                        <p className="font-medium text-text-primary tabular-nums">{formatCurrency(investedVal)}</p>
+                      </div>
+                      <div className="col-span-2 sm:col-span-1">
+                        <p className="text-text-tertiary">Mkt value</p>
+                        <p className="font-medium text-text-primary tabular-nums">{formatCurrency(currentVal)}</p>
                       </div>
                     </div>
                     {(stratInfo?.names.length || signalCount) ? (
@@ -1804,7 +1820,7 @@ export default function PaperTradingPage() {
               Fees = brokerage + STT + GST + other. Enable <em>Simulate brokerage</em> in Settings.
             </span>
             {holdingsNotInHistory.length > 0 && (
-              <span className="block text-amber-400/90 mt-1">
+              <span className="block text-amber-700 mt-1 leading-snug">
                 {holdingsNotInHistory.length} holding
                 {holdingsNotInHistory.length !== 1 ? "s" : ""} not in history (
                 {holdingsNotInHistory.map((h) => h.symbol).join(", ")})
@@ -1844,7 +1860,7 @@ export default function PaperTradingPage() {
                     {t.side}
                   </span>
                 </div>
-                <div className="text-sm text-text-secondary tabular-nums">
+                <div className="text-sm text-text-secondary tabular-nums break-words">
                   {formatNumber(t.qty)} × {formatCurrency(t.price)} ={" "}
                   <span className="font-medium text-text-primary">{formatCurrency(t.qty * t.price)}</span>
                 </div>

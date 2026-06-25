@@ -17,7 +17,7 @@ interface PaperTabBarProps {
 const TABS: { id: PaperTradingTab; label: string; countKey?: keyof PaperTabBarProps["counts"] }[] =
   [
     { id: "holdings", label: "Holdings", countKey: "holdings" },
-    { id: "strategies", label: "Strategies", countKey: "strategies" },
+    { id: "strategies", label: "Strategies Performance", countKey: "strategies" },
     { id: "trades", label: "Trades", countKey: "trades" },
     { id: "health", label: "Health" },
   ];
