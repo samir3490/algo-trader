@@ -8,6 +8,7 @@ import {
 const DEFAULT_PAPER_NOTIONAL = 100_000;
 export const DEFAULT_PAPER_MAX_ORDER_VALUE = 500_000;
 export const DEFAULT_PAPER_MIN_ORDER_VALUE = 25_000;
+export const DEFAULT_ATR_STOP_MULTIPLIER = 2;
 
 /** Cash required for a paper BUY (includes simulated charges when enabled). */
 export function paperBuyCashRequired(
@@ -122,6 +123,7 @@ export type PaperSizingSettings = Pick<
   | "positionPct"
   | "atrRiskPct"
   | "atrPeriod"
+  | "atrStopMultiplier"
 >;
 
 /**
@@ -154,8 +156,8 @@ export function resolvePaperSizingBudget(
 }
 
 /**
- * ATR sizing within band: riskBudget = min(ceiling, balance × risk%).
- * Skip when riskBudget &lt; floor or resulting turnover &lt; floor.
+ * ATR stop-distance sizing: riskRupees = balance × risk%; stop = multiplier × ATR;
+ * qty = floor(riskRupees / stop), capped by max per trade and balance; skip if below min.
  */
 function resolveAtrRiskQty(
   price: number,
@@ -168,11 +170,16 @@ function resolveAtrRiskQty(
 
   const { ceiling, floor } = band;
   const riskPct = Math.max(0.1, settings.atrRiskPct ?? 1);
-  const riskBudget = Math.min(ceiling, balance * (riskPct / 100));
+  const multiplier = Math.max(
+    0.5,
+    settings.atrStopMultiplier ?? DEFAULT_ATR_STOP_MULTIPLIER
+  );
+  const riskRupees = balance * (riskPct / 100);
+  const stopDistance = multiplier * atr;
 
-  if (floor > 0 && riskBudget < floor) return 0;
+  if (stopDistance <= 0) return 0;
 
-  let qty = Math.floor(riskBudget / atr);
+  let qty = Math.floor(riskRupees / stopDistance);
   if (qty < 1) return 0;
 
   const maxQtyByCeiling = Math.floor(ceiling / price);
@@ -279,6 +286,7 @@ export function resolvePaperScanOrderQty(
     | "positionPct"
     | "atrRiskPct"
     | "atrPeriod"
+    | "atrStopMultiplier"
   >,
   options?: {
     strategyParams?: Record<string, number>;

@@ -74,6 +74,7 @@ export async function POST(request: NextRequest) {
       positionPct: phase2Settings.positionPct,
       atrRiskPct: phase2Settings.atrRiskPct,
       atrPeriod: phase2Settings.atrPeriod,
+      atrStopMultiplier: phase2Settings.atrStopMultiplier,
       autoTrailingStop: phase2Settings.autoTrailingStop,
       trailingStopPercent: phase2Settings.trailingStopPercent,
       maxHoldDays: phase2Settings.maxHoldDays,

@@ -378,10 +378,12 @@ export interface AppSettings {
   positionSizingMode: "notional" | "portfolio_pct" | "atr_risk";
   /** % of paper balance per BUY when positionSizingMode is portfolio_pct. */
   positionPct: number;
-  /** % of balance to risk per ATR when positionSizingMode is atr_risk. */
+  /** % of balance at risk per trade when positionSizingMode is atr_risk. */
   atrRiskPct: number;
   /** ATR lookback for atr_risk sizing. */
   atrPeriod: number;
+  /** Stop distance = multiplier × ATR (e.g. 2 = 2×ATR stop) for position sizing. */
+  atrStopMultiplier: number;
   /** Ratchet stop from position high-water mark. */
   autoTrailingStop: boolean;
   trailingStopPercent: number;
@@ -462,6 +464,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   positionPct: 10,
   atrRiskPct: 1,
   atrPeriod: 14,
+  atrStopMultiplier: 2,
   autoTrailingStop: true,
   trailingStopPercent: 2,
   maxHoldDays: 10,

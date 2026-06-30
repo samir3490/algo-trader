@@ -194,7 +194,7 @@ Reconcile will:
 - Symbol locked for the day after automated sell
 - Rebuy cooldown after sell (default 240 min)
 - Max concurrent positions (default 5)
-- Position sizing ~₹1L per buy (from Settings)
+- Position sizing ~₹1L per buy (from Settings), or **ATR-risk**: `qty = floor(balance × risk% / (multiplier × ATR))`, capped at max per trade (₹5L) and skipped if below min (₹25k)
 
 ## Backtest vs paper alignment
 

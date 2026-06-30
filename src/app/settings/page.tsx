@@ -67,6 +67,7 @@ interface AppSettings {
     positionPct: number;
     atrRiskPct: number;
     atrPeriod: number;
+    atrStopMultiplier: number;
   };
   tradingPreferences: {
     defaultExchange: "NSE" | "BSE";
@@ -217,6 +218,7 @@ const defaultSettings: AppSettings = {
     positionPct: 10,
     atrRiskPct: 1,
     atrPeriod: 14,
+    atrStopMultiplier: 2,
   },
   tradingPreferences: {
     defaultExchange: "NSE",
@@ -293,6 +295,7 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       positionPct: fs.positionPct ?? 10,
       atrRiskPct: fs.atrRiskPct ?? 1,
       atrPeriod: fs.atrPeriod ?? 14,
+      atrStopMultiplier: fs.atrStopMultiplier ?? 2,
     },
     tradingPreferences: {
       defaultExchange: fs.defaultExchange as "NSE" | "BSE",
@@ -381,6 +384,7 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     positionPct: s.paperTrading.positionPct,
     atrRiskPct: s.paperTrading.atrRiskPct,
     atrPeriod: s.paperTrading.atrPeriod,
+    atrStopMultiplier: s.paperTrading.atrStopMultiplier,
     stopLossPercent: s.riskManagement.stopLossPercent,
     takeProfitPercent: s.riskManagement.takeProfitPercent,
     autoStopLoss: s.riskManagement.autoStopLoss,
@@ -1442,7 +1446,7 @@ function SettingsContent() {
               <>
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                    Risk % of balance per ATR
+                    Risk % of balance per trade
                   </label>
                   <input
                     type="number"
@@ -1456,6 +1460,29 @@ function SettingsContent() {
                     }
                     className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
                   />
+                  <p className="mt-1 text-[10px] text-text-tertiary">
+                    Rupees at risk if stopped at ATR × multiplier below (e.g. 1% of ₹10L = ₹10k risk).
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    ATR stop multiplier
+                  </label>
+                  <input
+                    type="number"
+                    min={0.5}
+                    step={0.5}
+                    value={settings.paperTrading.atrStopMultiplier}
+                    onChange={(e) =>
+                      updateSettings("paperTrading", {
+                        atrStopMultiplier: Math.max(0.5, Number(e.target.value) || 2),
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                  />
+                  <p className="mt-1 text-[10px] text-text-tertiary">
+                    Stop distance = multiplier × ATR (default 2). Higher vol → smaller position.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-text-secondary mb-1.5">

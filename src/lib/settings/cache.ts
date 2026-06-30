@@ -56,6 +56,7 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
     positionPct: pt?.positionPct as number | undefined,
     atrRiskPct: pt?.atrRiskPct as number | undefined,
     atrPeriod: pt?.atrPeriod as number | undefined,
+    atrStopMultiplier: pt?.atrStopMultiplier as number | undefined,
     autoTrailingStop: rm?.autoTrailingStop as boolean | undefined,
     trailingStopPercent: rm?.trailingStopPercent as number | undefined,
     maxHoldDays: rm?.maxHoldDays as number | undefined,

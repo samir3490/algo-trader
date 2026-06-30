@@ -17,6 +17,7 @@ const settings = {
   positionPct: 10,
   atrRiskPct: 1,
   atrPeriod: 14,
+  atrStopMultiplier: 2,
   simulateBrokerage: false,
   paperDefaultProduct: "CNC" as const,
 };
@@ -88,11 +89,33 @@ describe("resolvePaperOrderQty", () => {
     );
   });
 
-  it("caps atr sizing to max per trade", () => {
+  it("atr sizing scales down when volatility is high", () => {
+    const atrSettings = {
+      ...settings,
+      positionSizingMode: "atr_risk" as const,
+      atrRiskPct: 1,
+      atrStopMultiplier: 2,
+      paperMaxOrderValue: 500_000,
+    };
+    const lowVol = resolvePaperOrderQty(1000, atrSettings, {
+      balance: 1_000_000,
+      atr: 15,
+    });
+    const highVol = resolvePaperOrderQty(1000, atrSettings, {
+      balance: 1_000_000,
+      atr: 60,
+    });
+    assert.ok(lowVol > highVol);
+    assert.equal(lowVol * 1000, 333_000);
+    assert.equal(highVol * 1000, 83_000);
+  });
+
+  it("atr sizing caps at max per trade", () => {
     const atrSettings = {
       ...settings,
       positionSizingMode: "atr_risk" as const,
       atrRiskPct: 50,
+      atrStopMultiplier: 2,
       paperMaxOrderValue: 500_000,
     };
     assert.equal(
@@ -101,15 +124,14 @@ describe("resolvePaperOrderQty", () => {
     );
   });
 
-  it("applies cap before atr risk budget", () => {
+  it("atr sizing respects ceiling with wide stop", () => {
     const atrSettings = {
       ...settings,
       positionSizingMode: "atr_risk" as const,
       atrRiskPct: 10,
+      atrStopMultiplier: 2,
       paperMaxOrderValue: 100_000,
     };
-    // ceiling 100k, risk 10% of 4M = 400k → risk budget 100k, qty = 100k/atr 50 = 2000
-    // position 2000 × ₹50 = ₹100k (at ceiling)
     assert.equal(
       resolvePaperOrderQty(50, atrSettings, { balance: 4_000_000, atr: 50 }),
       2000
@@ -123,7 +145,6 @@ describe("resolvePaperOrderQty", () => {
       positionPct: 10,
       paperMaxOrderValue: 100_000,
     };
-    // 10% of 4M = 400k but ceiling 100k → budget 100k → 1000 shares @ ₹100
     assert.equal(
       resolvePaperOrderQty(100, pctSettings, { balance: 4_000_000 }),
       1000
@@ -150,14 +171,15 @@ describe("resolvePaperOrderQty", () => {
     );
   });
 
-  it("skips atr sizing when risk budget is below min", () => {
+  it("skips atr sizing when turnover is below min", () => {
     assert.equal(
       resolvePaperOrderQty(100, {
         ...settings,
         positionSizingMode: "atr_risk" as const,
         atrRiskPct: 0.5,
+        atrStopMultiplier: 2,
         paperMinOrderValue: 25_000,
-      }, { balance: 4_000_000, atr: 10 }),
+      }, { balance: 100_000, atr: 10 }),
       0
     );
   });
