@@ -40,6 +40,8 @@ export interface ScanDiagnostics {
   openPositions?: number;
   paperBalance?: number;
   maxPositions?: number;
+  /** Active position sizing mode (from settings at scan time). */
+  sizingSummary?: string;
   /** Symbol lists for clickable stats in the UI. */
   details?: Partial<Record<ScanDetailKey, ScanSymbolDetail[]>>;
 }

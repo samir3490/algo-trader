@@ -325,3 +325,79 @@ export function resolvePaperScanOrderQty(
 
   return qty >= 1 ? qty : 0;
 }
+
+function formatRupeeCompact(amount: number): string {
+  const n = Math.round(amount);
+  if (n >= 100_000) {
+    const lakhs = n / 100_000;
+    return `₹${Number.isInteger(lakhs) ? lakhs : lakhs.toFixed(1)}L`;
+  }
+  if (n >= 1000) return `₹${Math.round(n / 1000)}k`;
+  return `₹${n}`;
+}
+
+/** Human-readable active paper sizing mode for UI and scan summaries. */
+export function formatPaperSizingSummary(settings: PaperSizingSettings): string {
+  const mode = settings.positionSizingMode ?? "notional";
+  const min = effectivePaperMinOrderValue(settings);
+  const max = effectivePaperOrderCap(settings);
+  const band =
+    min > 0
+      ? `${formatRupeeCompact(min)}–${formatRupeeCompact(max)}`
+      : `up to ${formatRupeeCompact(max)}`;
+
+  if (mode === "atr_risk") {
+    const risk = settings.atrRiskPct ?? 1;
+    const mult = settings.atrStopMultiplier ?? DEFAULT_ATR_STOP_MULTIPLIER;
+    return `ATR risk · ${risk}% of balance at risk · ${mult}× ATR stop · ${band}`;
+  }
+  if (mode === "portfolio_pct") {
+    const pct = settings.positionPct ?? 10;
+    return `${pct}% of balance per BUY · ${band}`;
+  }
+  return `Fixed ${formatRupeeCompact(paperOrderNotional(settings))} per BUY · ${band}`;
+}
+
+/** Per-trade sizing note for scan digest and diagnostics. */
+export function formatPaperBuySizingNote(
+  settings: PaperSizingSettings,
+  params: {
+    qty: number;
+    price: number;
+    balance?: number;
+    atr?: number | null;
+  }
+): string {
+  const turnover = params.qty * params.price;
+  const mode = settings.positionSizingMode ?? "notional";
+  const max = effectivePaperOrderCap(settings);
+  const nearCap = max > 0 && turnover >= max * 0.98;
+
+  const parts: string[] = [];
+
+  if (mode === "atr_risk") {
+    const risk = settings.atrRiskPct ?? 1;
+    const mult = settings.atrStopMultiplier ?? DEFAULT_ATR_STOP_MULTIPLIER;
+    if (params.atr != null && params.atr > 0) {
+      const stop = mult * params.atr;
+      parts.push(
+        `ATR ${risk}%/${mult}× · ATR ₹${params.atr.toFixed(1)} · stop ₹${stop.toFixed(1)}`
+      );
+    } else {
+      parts.push(`ATR ${risk}%/${mult}× · no ATR (notional fallback)`);
+    }
+  } else if (mode === "portfolio_pct") {
+    const pct = settings.positionPct ?? 10;
+    if (params.balance != null && params.balance > 0) {
+      parts.push(`${pct}% of ₹${Math.round(params.balance / 1000)}k bal`);
+    } else {
+      parts.push(`${pct}% of balance`);
+    }
+  } else {
+    parts.push(`fixed ${formatRupeeCompact(paperOrderNotional(settings))}`);
+  }
+
+  parts.push(`turnover ${formatRupeeCompact(turnover)}`);
+  if (nearCap) parts.push("@ max cap");
+  return parts.join(" · ");
+}

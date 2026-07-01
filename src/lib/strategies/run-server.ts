@@ -30,7 +30,11 @@ import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trad
 import {
   selectTopBuyDecisionsForScan,
 } from "@/lib/portfolio/buy-selection";
-import { resolvePaperScanOrderQty } from "@/lib/portfolio/paper-position-size";
+import {
+  formatPaperBuySizingNote,
+  formatPaperSizingSummary,
+  resolvePaperScanOrderQty,
+} from "@/lib/portfolio/paper-position-size";
 import { normalizeAppSettings } from "@/lib/settings/normalize-settings";
 import {
   ensurePaperTradingBalance,
@@ -594,6 +598,7 @@ export async function runStrategiesForUser(
   diagnostics.openPositions = openPositionCount;
   diagnostics.paperBalance = paperState.balance ?? 0;
   diagnostics.maxPositions = maxPositions;
+  diagnostics.sizingSummary = formatPaperSizingSummary(userSettings);
   for (const pos of getOpenPositions(paperState)) {
     addScanDetail(
       diagnostics,
@@ -807,7 +812,7 @@ export async function runStrategiesForUser(
         diagnostics,
         "paperExec",
         decision.symbol,
-        `BUY · ${decision.ownerStrategyName}`
+        `BUY · ${decision.ownerStrategyName} · ${sizingNote}`
       );
 
       const tradeQty = executedQty ?? qty;
@@ -815,9 +820,16 @@ export async function runStrategiesForUser(
         decision.buySignalCount != null && decision.buySignalCount > 0
           ? formatBuyStrength(decision.buySignalCount)
           : undefined;
-      const execStatus = strengthLabel
-        ? `EXECUTED · ${strengthLabel}`
-        : "EXECUTED";
+      const sizingNote = formatPaperBuySizingNote(userSettings, {
+        qty: tradeQty,
+        price: decision.price,
+        balance: paperState.balance ?? INITIAL_BALANCE,
+        atr: signalAtr,
+      });
+      const execStatus = [
+        strengthLabel ? `EXECUTED · ${strengthLabel}` : "EXECUTED",
+        sizingNote,
+      ].join(" · ");
 
       queueEmail(
         "executed",
@@ -1164,7 +1176,9 @@ export async function runStrategiesForUser(
     const digestKey = `EMAIL:DIGEST:${todayKeyIST()}:${slot}`;
     if (!emailDedupe.has(digestKey)) {
       emailDedupe.add(digestKey);
-      await sendScanDigestEmail(digestLines);
+      await sendScanDigestEmail(digestLines, {
+        sizingSummary: diagnostics.sizingSummary,
+      });
     }
   }
 

@@ -2,6 +2,8 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   effectivePaperOrderCap,
+  formatPaperBuySizingNote,
+  formatPaperSizingSummary,
   integerShareQtyForBudget,
   paperOrderNotional,
   resolvePaperOrderQty,
@@ -238,5 +240,66 @@ describe("effectivePaperOrderCap", () => {
 
   it("defaults to 5 lakh when unset", () => {
     assert.equal(effectivePaperOrderCap({}), 500_000);
+  });
+});
+
+describe("formatPaperSizingSummary", () => {
+  it("describes ATR risk mode", () => {
+    const text = formatPaperSizingSummary({
+      ...settings,
+      positionSizingMode: "atr_risk",
+      atrRiskPct: 1,
+      atrStopMultiplier: 2,
+    });
+    assert.match(text, /ATR risk/);
+    assert.match(text, /1%/);
+    assert.match(text, /2× ATR/);
+  });
+
+  it("describes portfolio pct mode", () => {
+    const text = formatPaperSizingSummary({
+      ...settings,
+      positionSizingMode: "portfolio_pct",
+      positionPct: 10,
+    });
+    assert.match(text, /10% of balance/);
+  });
+
+  it("describes fixed notional mode", () => {
+    const text = formatPaperSizingSummary({
+      ...settings,
+      positionSizingMode: "notional",
+      paperOrderNotional: 100_000,
+    });
+    assert.match(text, /Fixed ₹1L/);
+  });
+});
+
+describe("formatPaperBuySizingNote", () => {
+  it("includes ATR and turnover for executed buy", () => {
+    const note = formatPaperBuySizingNote(
+      {
+        ...settings,
+        positionSizingMode: "atr_risk",
+        atrRiskPct: 1,
+        atrStopMultiplier: 2,
+      },
+      { qty: 100, price: 1000, balance: 1_000_000, atr: 15 }
+    );
+    assert.match(note, /ATR 1%/);
+    assert.match(note, /ATR ₹15\.0/);
+    assert.match(note, /turnover ₹1L/);
+  });
+
+  it("flags max cap when turnover nears ceiling", () => {
+    const note = formatPaperBuySizingNote(
+      {
+        ...settings,
+        positionSizingMode: "portfolio_pct",
+        positionPct: 50,
+      },
+      { qty: 5000, price: 100, balance: 4_000_000 }
+    );
+    assert.match(note, /@ max cap/);
   });
 });

@@ -105,6 +105,12 @@ export default function LastScanPanel({
               </span>{" "}
               trades placed
             </p>
+            {d?.sizingSummary && (
+              <p className="mt-2 text-xs text-text-secondary">
+                <span className="font-medium text-text-primary">Sizing: </span>
+                {d.sizingSummary}
+              </p>
+            )}
           </div>
         </div>
 

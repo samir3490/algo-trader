@@ -207,6 +207,7 @@ export interface StrategyRunnerMeta {
       openPositions?: number;
       paperBalance?: number;
       maxPositions?: number;
+      sizingSummary?: string;
       details?: Partial<
         Record<
           string,

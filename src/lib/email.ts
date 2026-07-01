@@ -123,7 +123,10 @@ export async function sendOrderEmail(params: OrderEmailParams) {
 }
 
 /** Single email summarizing one strategy scan (avoids dozens of separate emails). */
-export async function sendScanDigestEmail(lines: ScanDigestLine[]) {
+export async function sendScanDigestEmail(
+  lines: ScanDigestLine[],
+  options?: { sizingSummary?: string }
+) {
   const recipientEmail = process.env.EMAIL_RECIPIENT || process.env.EMAIL_USER;
   if (
     !process.env.EMAIL_USER ||
@@ -153,6 +156,10 @@ export async function sendScanDigestEmail(lines: ScanDigestLine[]) {
 
   const subject = `📊 Strategy scan: ${executed} trade${executed !== 1 ? "s" : ""}${risk ? `, ${risk} risk exit` : ""}${skipped ? `, ${skipped} skipped` : ""}`;
 
+  const sizingBanner = options?.sizingSummary
+    ? `<p style="margin:0 0 12px;padding:10px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:12px;color:#0c4a6e;"><strong>Position sizing:</strong> ${options.sizingSummary}</p>`
+    : "";
+
   const html = `
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:640px;margin:0 auto;background:#ffffff;color:#1a1a1a;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
       <div style="background:#3b82f6;padding:16px 24px;">
@@ -160,6 +167,7 @@ export async function sendScanDigestEmail(lines: ScanDigestLine[]) {
         <p style="margin:8px 0 0;font-size:13px;color:#dbeafe;">${now} IST · ${lines.length} event(s)</p>
       </div>
       <div style="padding:16px;overflow-x:auto;">
+        ${sizingBanner}
         <table style="width:100%;border-collapse:collapse;font-size:13px;">
           <thead><tr style="color:#595959;text-align:left;">
             <th style="padding:6px 8px;">Symbol</th><th>Side</th><th style="text-align:right;">Qty</th>

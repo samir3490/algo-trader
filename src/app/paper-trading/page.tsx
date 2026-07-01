@@ -83,7 +83,7 @@ import {
   formatOtherFeesTooltip,
 } from "@/lib/brokerage/trade-charges";
 import {
-  paperOrderNotional,
+  formatPaperSizingSummary,
   resolvePaperOrderQty,
 } from "@/lib/portfolio/paper-position-size";
 import { nowISTDateTimeString } from "@/lib/utils";
@@ -1095,6 +1095,17 @@ export default function PaperTradingPage() {
           </div>
         </div>
 
+        {appSettings && (
+          <div className="mb-4 rounded-lg border border-border bg-bg-secondary px-4 py-3 text-xs text-text-secondary">
+            <span className="font-medium text-text-primary">Position sizing: </span>
+            {formatPaperSizingSummary(appSettings)}
+            {" · "}
+            <span className="text-text-tertiary">product {appSettings.paperDefaultProduct}</span>
+            {" "}
+            <a href="/settings" className="text-accent hover:underline">Settings</a>
+          </div>
+        )}
+
         {appSettings &&
           (appSettings.autoStopLoss ||
             appSettings.autoTakeProfit ||
@@ -1118,13 +1129,6 @@ export default function PaperTradingPage() {
                 <span>fixed take profit at +{appSettings.takeProfitPercent}%</span>
               </>
             )}
-            <span className="text-text-tertiary">
-              {" "}
-              · product {appSettings.paperDefaultProduct}
-              · {formatCurrency(paperOrderNotional(appSettings))} per trade
-              {" "}
-              <a href="/settings" className="text-accent hover:underline">Settings</a>
-            </span>
           </div>
         )}
 
