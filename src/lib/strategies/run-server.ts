@@ -808,12 +808,6 @@ export async function runStrategiesForUser(
       boughtThisRun.add(symKey(decision.symbol, exchange));
       tradesExecuted += 1;
       placedThisScan += 1;
-      addScanDetail(
-        diagnostics,
-        "paperExec",
-        decision.symbol,
-        `BUY · ${decision.ownerStrategyName} · ${sizingNote}`
-      );
 
       const tradeQty = executedQty ?? qty;
       const strengthLabel =
@@ -826,6 +820,12 @@ export async function runStrategiesForUser(
         balance: paperState.balance ?? INITIAL_BALANCE,
         atr: signalAtr,
       });
+      addScanDetail(
+        diagnostics,
+        "paperExec",
+        decision.symbol,
+        `BUY · ${decision.ownerStrategyName} · ${sizingNote}`
+      );
       const execStatus = [
         strengthLabel ? `EXECUTED · ${strengthLabel}` : "EXECUTED",
         sizingNote,
