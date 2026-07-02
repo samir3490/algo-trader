@@ -87,3 +87,35 @@ export async function scanStrategiesForSignals(
 
   return { scanned: running.length, signals: results };
 }
+
+/** ATR for sizing — prefer owner strategy signal, else any BUY on symbol. */
+export function resolveSignalAtrForSymbol(
+  signals: ScanSignal[],
+  symbol: string,
+  ownerStrategyId?: string
+): number | undefined {
+  const sym = symbol.toUpperCase();
+  const hasAtr = (s: ScanSignal) =>
+    s.action === "BUY" &&
+    s.symbol.toUpperCase() === sym &&
+    s.atr != null &&
+    s.atr > 0;
+
+  if (ownerStrategyId) {
+    const owned = signals.find(
+      (s) => hasAtr(s) && s.strategyId === ownerStrategyId
+    )?.atr;
+    if (owned != null) return owned;
+  }
+
+  return signals.find(hasAtr)?.atr;
+}
+
+export async function fetchSymbolAtr(
+  symbol: string,
+  exchange: string,
+  period = 14
+): Promise<number | undefined> {
+  const bars = await fetchYahooHistory(symbol, exchange, "Day");
+  return computeATR(bars, period) ?? undefined;
+}

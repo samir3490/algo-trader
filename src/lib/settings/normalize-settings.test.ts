@@ -1,7 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { DEFAULT_SETTINGS } from "@/lib/firebase";
-import { normalizeAppSettings } from "./normalize-settings";
+import {
+  effectivePositionSizingMode,
+  normalizeAppSettings,
+} from "./normalize-settings";
 
 describe("normalizeAppSettings", () => {
   it("normalizes paper max per trade with minimum 1000", () => {
@@ -37,5 +40,40 @@ describe("normalizeAppSettings", () => {
       paperMinOrderValue: undefined as unknown as number,
     });
     assert.equal(out.paperMinOrderValue, 25_000);
+  });
+
+  it("upgrades legacy portfolio_pct 10% to atr_risk", () => {
+    const out = normalizeAppSettings({
+      ...DEFAULT_SETTINGS,
+      positionSizingMode: "portfolio_pct",
+      positionPct: 10,
+    });
+    assert.equal(out.positionSizingMode, "atr_risk");
+  });
+
+  it("keeps portfolio_pct above 10%", () => {
+    const out = normalizeAppSettings({
+      ...DEFAULT_SETTINGS,
+      positionSizingMode: "portfolio_pct",
+      positionPct: 15,
+    });
+    assert.equal(out.positionSizingMode, "portfolio_pct");
+  });
+
+  it("exports effectivePositionSizingMode helper", () => {
+    assert.equal(
+      effectivePositionSizingMode({
+        positionSizingMode: "portfolio_pct",
+        positionPct: 10,
+      }),
+      "atr_risk"
+    );
+    assert.equal(
+      effectivePositionSizingMode({
+        positionSizingMode: "notional",
+        positionPct: 10,
+      }),
+      "notional"
+    );
   });
 });

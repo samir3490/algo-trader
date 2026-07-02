@@ -186,6 +186,16 @@ describe("resolvePaperOrderQty", () => {
     );
   });
 
+  it("skips atr sizing when ATR is missing", () => {
+    assert.equal(
+      resolvePaperOrderQty(100, {
+        ...settings,
+        positionSizingMode: "atr_risk" as const,
+      }, { balance: 1_000_000 }),
+      0
+    );
+  });
+
   it("skips when min per trade exceeds ceiling", () => {
     assert.equal(
       resolvePaperOrderQty(1000, {

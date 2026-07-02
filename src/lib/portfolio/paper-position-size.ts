@@ -144,8 +144,6 @@ export function resolvePaperSizingBudget(
   if (mode === "portfolio_pct" && balance != null && balance > 0) {
     const pct = Math.max(0.1, settings.positionPct ?? 10);
     target = balance * (pct / 100);
-  } else if (mode === "atr_risk") {
-    target = Math.min(paperOrderNotional(settings), ceiling);
   } else {
     target = paperOrderNotional(settings);
   }
@@ -254,13 +252,9 @@ export function resolvePaperOrderQty(
   const mode = settings.positionSizingMode ?? "notional";
   const atr = options?.atr;
 
-  if (
-    mode === "atr_risk" &&
-    atr != null &&
-    atr > 0 &&
-    balance != null &&
-    balance > 0
-  ) {
+  if (mode === "atr_risk") {
+    if (balance == null || balance <= 0) return 0;
+    if (atr == null || atr <= 0) return 0;
     return resolveAtrRiskQty(price, settings, band, balance, atr);
   }
 

@@ -11,7 +11,7 @@ import {
   applyPaperRiskExits,
   ratchetPositionPeakPrices,
 } from "@/lib/risk/paper-risk-guard";
-import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
+import { scanStrategiesForSignals, resolveSignalAtrForSymbol, fetchSymbolAtr } from "@/lib/strategies/scan-signals";
 import {
   ensurePositions,
   getOpenPositions,
@@ -754,11 +754,21 @@ export async function runStrategiesForUser(
       });
     }
 
-    const signalAtr = rawSignals.find(
-      (s) =>
-        s.strategyId === baseDecision.ownerStrategyId &&
-        s.symbol.toUpperCase() === baseDecision.symbol.toUpperCase()
-    )?.atr;
+    let signalAtr = resolveSignalAtrForSymbol(
+      rawSignals,
+      baseDecision.symbol,
+      baseDecision.ownerStrategyId
+    );
+    if (
+      (userSettings.positionSizingMode ?? "atr_risk") === "atr_risk" &&
+      (signalAtr == null || signalAtr <= 0)
+    ) {
+      signalAtr = await fetchSymbolAtr(
+        baseDecision.symbol,
+        exchange,
+        userSettings.atrPeriod ?? 14
+      );
+    }
 
     const freshQty = resolvePaperScanOrderQty(price, userSettings, {
       strategyParams: strat.params,

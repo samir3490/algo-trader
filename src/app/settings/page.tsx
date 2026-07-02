@@ -42,6 +42,7 @@ import {
   loadSettingsFromCache as loadFlatSettingsCache,
   saveSettingsToCache,
 } from "@/lib/settings/cache";
+import { effectivePositionSizingMode } from "@/lib/settings/normalize-settings";
 
 interface ServerAccount {
   kiteUserId: string;
@@ -214,9 +215,9 @@ const defaultSettings: AppSettings = {
     maxPerTrade: 500_000,
     minPerTrade: 25_000,
     defaultProductType: "CNC",
-    positionSizingMode: "portfolio_pct",
+    positionSizingMode: "atr_risk",
     positionPct: 10,
-    atrRiskPct: 1,
+    atrRiskPct: 0.5,
     atrPeriod: 14,
     atrStopMultiplier: 2,
   },
@@ -289,11 +290,16 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       maxPerTrade: fs.paperMaxOrderValue ?? 500_000,
       minPerTrade: fs.paperMinOrderValue ?? 25_000,
       defaultProductType: (fs.paperDefaultProduct as "CNC" | "MIS") ?? "CNC",
-      positionSizingMode:
-        (fs.positionSizingMode as "notional" | "portfolio_pct" | "atr_risk") ??
-        "portfolio_pct",
+      positionSizingMode: effectivePositionSizingMode({
+        positionSizingMode: fs.positionSizingMode as
+          | "notional"
+          | "portfolio_pct"
+          | "atr_risk"
+          | undefined,
+        positionPct: fs.positionPct,
+      }),
       positionPct: fs.positionPct ?? 10,
-      atrRiskPct: fs.atrRiskPct ?? 1,
+      atrRiskPct: fs.atrRiskPct ?? 0.5,
       atrPeriod: fs.atrPeriod ?? 14,
       atrStopMultiplier: fs.atrStopMultiplier ?? 2,
     },

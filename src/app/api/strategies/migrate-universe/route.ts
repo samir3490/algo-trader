@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
   const phase2Settings = normalizeAppSettings({
     ...DEFAULT_SETTINGS,
-    positionSizingMode: "portfolio_pct",
+    positionSizingMode: "atr_risk",
     positionPct: 10,
     autoTrailingStop: true,
     trailingStopPercent: 2,
