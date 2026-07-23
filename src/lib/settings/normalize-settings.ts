@@ -5,8 +5,8 @@ import {
 } from "@/lib/portfolio/paper-position-size";
 
 /**
- * Legacy migrate-universe used portfolio_pct @ 10%, which hits the ₹5L cap once
- * balance × 10% ≥ max per trade. Prefer ATR sizing unless user chose a higher %.
+ * Prefer fixed ₹ notional so cron always fills.
+ * ATR / low % balance modes often skip (below min) or hit the ₹5L cap.
  */
 export function effectivePositionSizingMode(
   settings: {
@@ -14,14 +14,16 @@ export function effectivePositionSizingMode(
     positionPct?: number;
   }
 ): AppSettings["positionSizingMode"] {
-  const mode = settings.positionSizingMode ?? "atr_risk";
-  if (mode === "notional" || mode === "atr_risk") return mode;
-  const pct = settings.positionPct ?? 10;
-  if (pct <= 10) return "atr_risk";
-  return "portfolio_pct";
+  const mode = settings.positionSizingMode ?? "notional";
+  if (mode === "notional") return "notional";
+  // Keep explicit high % sizing; otherwise use fixed ₹ for reliable fills.
+  if (mode === "portfolio_pct" && (settings.positionPct ?? 10) > 10) {
+    return "portfolio_pct";
+  }
+  return "notional";
 }
 
-/** Align paper order size, per-trade cap, min purchase, and position limits from Firestore. */
+/** Align paper order size, per-trade cap, min purchase, and basic SL/TP exits. */
 export function normalizeAppSettings(settings: AppSettings): AppSettings {
   const notional = Math.max(
     1000,
@@ -41,6 +43,15 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     paperOrderNotional: notional,
     paperMaxOrderValue,
     paperMinOrderValue,
+    // Basic exits so paper can run end-to-end without complex sell consensus.
+    autoStopLoss: true,
+    autoTakeProfit: true,
+    stopLossPercent:
+      settings.stopLossPercent > 0 ? settings.stopLossPercent : 2,
+    takeProfitPercent:
+      settings.takeProfitPercent > 0 ? settings.takeProfitPercent : 5,
+    autoTrailingStop: false,
+    enableStrategySellSignals: false,
     maxPositions:
       settings.maxPositions && settings.maxPositions > 0
         ? settings.maxPositions

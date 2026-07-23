@@ -59,22 +59,30 @@ export async function POST(request: NextRequest) {
 
   const phase2Settings = normalizeAppSettings({
     ...DEFAULT_SETTINGS,
-    positionSizingMode: "atr_risk",
-    positionPct: 10,
-    autoTrailingStop: true,
-    trailingStopPercent: 2,
-    maxHoldDays: 10,
-    noProgressDays: 5,
-    enableStrategySellSignals: true,
+    positionSizingMode: "notional",
+    paperOrderNotional: 100_000,
+    autoStopLoss: true,
+    autoTakeProfit: true,
+    stopLossPercent: 2,
+    takeProfitPercent: 5,
+    autoTrailingStop: false,
+    maxHoldDays: 0,
+    noProgressDays: 0,
+    enableStrategySellSignals: false,
   });
 
   await db.doc(`users/${uid}/data/settings`).set(
     {
       positionSizingMode: phase2Settings.positionSizingMode,
+      paperOrderNotional: phase2Settings.paperOrderNotional,
       positionPct: phase2Settings.positionPct,
       atrRiskPct: phase2Settings.atrRiskPct,
       atrPeriod: phase2Settings.atrPeriod,
       atrStopMultiplier: phase2Settings.atrStopMultiplier,
+      autoStopLoss: phase2Settings.autoStopLoss,
+      autoTakeProfit: phase2Settings.autoTakeProfit,
+      stopLossPercent: phase2Settings.stopLossPercent,
+      takeProfitPercent: phase2Settings.takeProfitPercent,
       autoTrailingStop: phase2Settings.autoTrailingStop,
       trailingStopPercent: phase2Settings.trailingStopPercent,
       maxHoldDays: phase2Settings.maxHoldDays,

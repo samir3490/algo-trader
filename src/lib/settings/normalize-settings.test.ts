@@ -42,13 +42,19 @@ describe("normalizeAppSettings", () => {
     assert.equal(out.paperMinOrderValue, 25_000);
   });
 
-  it("upgrades legacy portfolio_pct 10% to atr_risk", () => {
-    const out = normalizeAppSettings({
+  it("coerces atr_risk and portfolio_pct 10% to notional for reliable fills", () => {
+    const atr = normalizeAppSettings({
+      ...DEFAULT_SETTINGS,
+      positionSizingMode: "atr_risk",
+    });
+    assert.equal(atr.positionSizingMode, "notional");
+
+    const pct = normalizeAppSettings({
       ...DEFAULT_SETTINGS,
       positionSizingMode: "portfolio_pct",
       positionPct: 10,
     });
-    assert.equal(out.positionSizingMode, "atr_risk");
+    assert.equal(pct.positionSizingMode, "notional");
   });
 
   it("keeps portfolio_pct above 10%", () => {
@@ -60,13 +66,28 @@ describe("normalizeAppSettings", () => {
     assert.equal(out.positionSizingMode, "portfolio_pct");
   });
 
+  it("enables basic 2% stop / 5% take-profit exits", () => {
+    const out = normalizeAppSettings({
+      ...DEFAULT_SETTINGS,
+      autoTakeProfit: false,
+      autoTrailingStop: true,
+      enableStrategySellSignals: true,
+    });
+    assert.equal(out.autoStopLoss, true);
+    assert.equal(out.autoTakeProfit, true);
+    assert.equal(out.stopLossPercent, 2);
+    assert.equal(out.takeProfitPercent, 5);
+    assert.equal(out.autoTrailingStop, false);
+    assert.equal(out.enableStrategySellSignals, false);
+  });
+
   it("exports effectivePositionSizingMode helper", () => {
     assert.equal(
       effectivePositionSizingMode({
         positionSizingMode: "portfolio_pct",
         positionPct: 10,
       }),
-      "atr_risk"
+      "notional"
     );
     assert.equal(
       effectivePositionSizingMode({
