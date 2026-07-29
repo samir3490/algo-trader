@@ -4,17 +4,20 @@ import { DEFAULT_SETTINGS } from "@/lib/firebase";
 import {
   effectivePositionSizingMode,
   normalizeAppSettings,
+  SIMPLE_PAPER_MAX_POSITIONS,
+  SIMPLE_PAPER_ORDER_NOTIONAL,
 } from "./normalize-settings";
 
 describe("normalizeAppSettings", () => {
-  it("normalizes paper max per trade with minimum 1000", () => {
+  it("forces fixed 1L notional sizing", () => {
     const out = normalizeAppSettings({
       ...DEFAULT_SETTINGS,
-      paperOrderNotional: 100_000,
-      paperMaxOrderValue: 10_000,
+      positionSizingMode: "atr_risk",
+      paperOrderNotional: 500_000,
+      paperMaxOrderValue: 500_000,
     });
-    assert.equal(out.paperMaxOrderValue, 10_000);
-    assert.equal(out.paperOrderNotional, 100_000);
+    assert.equal(out.positionSizingMode, "notional");
+    assert.equal(out.paperOrderNotional, SIMPLE_PAPER_ORDER_NOTIONAL);
   });
 
   it("defaults paper max per trade to 5 lakh when missing", () => {
@@ -25,53 +28,16 @@ describe("normalizeAppSettings", () => {
     assert.equal(out.paperMaxOrderValue, 500_000);
   });
 
-  it("normalizes paper min per trade and caps at max", () => {
-    const out = normalizeAppSettings({
-      ...DEFAULT_SETTINGS,
-      paperMaxOrderValue: 100_000,
-      paperMinOrderValue: 200_000,
-    });
-    assert.equal(out.paperMinOrderValue, 100_000);
-  });
-
-  it("defaults paper min per trade to 25k", () => {
-    const out = normalizeAppSettings({
-      ...DEFAULT_SETTINGS,
-      paperMinOrderValue: undefined as unknown as number,
-    });
-    assert.equal(out.paperMinOrderValue, 25_000);
-  });
-
-  it("coerces atr_risk and portfolio_pct 10% to notional for reliable fills", () => {
-    const atr = normalizeAppSettings({
-      ...DEFAULT_SETTINGS,
-      positionSizingMode: "atr_risk",
-    });
-    assert.equal(atr.positionSizingMode, "notional");
-
-    const pct = normalizeAppSettings({
-      ...DEFAULT_SETTINGS,
-      positionSizingMode: "portfolio_pct",
-      positionPct: 10,
-    });
-    assert.equal(pct.positionSizingMode, "notional");
-  });
-
-  it("keeps portfolio_pct above 10%", () => {
-    const out = normalizeAppSettings({
-      ...DEFAULT_SETTINGS,
-      positionSizingMode: "portfolio_pct",
-      positionPct: 15,
-    });
-    assert.equal(out.positionSizingMode, "portfolio_pct");
-  });
-
-  it("enables basic 2% stop / 5% take-profit exits", () => {
+  it("enables basic 2% stop / 5% take-profit and clears blockages", () => {
     const out = normalizeAppSettings({
       ...DEFAULT_SETTINGS,
       autoTakeProfit: false,
       autoTrailingStop: true,
       enableStrategySellSignals: true,
+      rebuyCooldownMinutes: 240,
+      noSameDayRebuyAfterSell: true,
+      maxRoundTripsPerSymbolPerDay: 1,
+      maxPositions: 5,
     });
     assert.equal(out.autoStopLoss, true);
     assert.equal(out.autoTakeProfit, true);
@@ -79,21 +45,16 @@ describe("normalizeAppSettings", () => {
     assert.equal(out.takeProfitPercent, 5);
     assert.equal(out.autoTrailingStop, false);
     assert.equal(out.enableStrategySellSignals, false);
+    assert.equal(out.rebuyCooldownMinutes, 0);
+    assert.equal(out.noSameDayRebuyAfterSell, false);
+    assert.equal(out.maxRoundTripsPerSymbolPerDay, 0);
+    assert.equal(out.maxPositions, SIMPLE_PAPER_MAX_POSITIONS);
   });
 
   it("exports effectivePositionSizingMode helper", () => {
+    assert.equal(effectivePositionSizingMode({}), "notional");
     assert.equal(
-      effectivePositionSizingMode({
-        positionSizingMode: "portfolio_pct",
-        positionPct: 10,
-      }),
-      "notional"
-    );
-    assert.equal(
-      effectivePositionSizingMode({
-        positionSizingMode: "notional",
-        positionPct: 10,
-      }),
+      effectivePositionSizingMode({ positionSizingMode: "atr_risk" }),
       "notional"
     );
   });

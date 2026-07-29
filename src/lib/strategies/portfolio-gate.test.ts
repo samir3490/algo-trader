@@ -5,7 +5,17 @@ import { DEFAULT_SETTINGS } from "@/lib/firebase";
 import type { PaperTrade } from "@/lib/firebase";
 import { OWNER_MANUAL } from "@/lib/portfolio/types";
 
-const settings = { ...DEFAULT_SETTINGS, rebuyCooldownMinutes: 240 };
+/** Restrictive settings — used only to assert optional gate behaviour. */
+const strictSettings = {
+  ...DEFAULT_SETTINGS,
+  rebuyCooldownMinutes: 240,
+  noSameDayRebuyAfterSell: true,
+  maxRoundTripsPerSymbolPerDay: 1,
+  minHoldMinutesBeforeSell: 60,
+};
+
+/** Simple paper defaults — no day locks / cooldowns. */
+const simpleSettings = { ...DEFAULT_SETTINGS };
 const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
 
 describe("canExecuteStrategyTrade", () => {
@@ -14,14 +24,14 @@ describe("canExecuteStrategyTrade", () => {
     const r = canExecuteStrategyTrade("BUY", "SAIL", "NSE", {
       holdings: [],
       trades: [],
-      settings,
+      settings: simpleSettings,
       soldThisRun: sold,
     });
     assert.equal(r.allowed, false);
     assert.match(r.reason ?? "", /Sold this scan/);
   });
 
-  it("blocks BUY after losing same-day sell", () => {
+  it("blocks BUY after losing same-day sell when same-day rebuy is on", () => {
     const trades: PaperTrade[] = [
       {
         id: "1",
@@ -39,18 +49,42 @@ describe("canExecuteStrategyTrade", () => {
     const r = canExecuteStrategyTrade("BUY", "SAIL", "NSE", {
       holdings: [],
       trades,
-      settings,
+      settings: strictSettings,
       soldThisRun: new Set(),
     });
     assert.equal(r.allowed, false);
     assert.match(r.reason ?? "", /Sold today|loss/);
   });
 
-  it("blocks BUY when symbol locked for today", () => {
+  it("allows BUY after same-day sell in simple mode", () => {
+    const trades: PaperTrade[] = [
+      {
+        id: "1",
+        time: "x",
+        symbol: "SAIL",
+        exchange: "NSE",
+        side: "SELL",
+        qty: 1,
+        price: 90,
+        netPnl: -50,
+        date: today,
+        executedAt: new Date().toISOString(),
+      },
+    ];
+    const r = canExecuteStrategyTrade("BUY", "SAIL", "NSE", {
+      holdings: [],
+      trades,
+      settings: simpleSettings,
+      soldThisRun: new Set(),
+    });
+    assert.equal(r.allowed, true);
+  });
+
+  it("blocks BUY when symbol locked for today and same-day rebuy is on", () => {
     const r = canExecuteStrategyTrade("BUY", "POLICYBAZAAR", "NSE", {
       holdings: [],
       trades: [],
-      settings,
+      settings: strictSettings,
       soldThisRun: new Set(),
       symbolsLockedToday: { "POLICYBAZAAR:NSE": today },
     });
@@ -58,31 +92,26 @@ describe("canExecuteStrategyTrade", () => {
     assert.match(r.reason ?? "", /locked/);
   });
 
-  it("blocks duplicate BUY on same symbol same day", () => {
-    const trades: PaperTrade[] = [
-      {
-        id: "1",
-        time: "x",
-        symbol: "HINDALCO",
-        exchange: "NSE",
-        side: "BUY",
-        qty: 10,
-        price: 700,
-        date: today,
-        executedAt: new Date().toISOString(),
-      },
-    ];
+  it("blocks BUY when already holding", () => {
     const r = canExecuteStrategyTrade("BUY", "HINDALCO", "NSE", {
-      holdings: [],
-      trades,
-      settings,
+      holdings: [
+        {
+          symbol: "HINDALCO",
+          exchange: "NSE",
+          qty: 10,
+          avgPrice: 700,
+          ltp: 710,
+        },
+      ],
+      trades: [],
+      settings: simpleSettings,
       soldThisRun: new Set(),
     });
     assert.equal(r.allowed, false);
-    assert.match(r.reason ?? "", /Already bought this symbol today/);
+    assert.match(r.reason ?? "", /Already holding/);
   });
 
-  it("blocks same-day rebuy after sell", () => {
+  it("blocks same-day rebuy after sell when same-day rebuy is on", () => {
     const trades: PaperTrade[] = [
       {
         id: "1",
@@ -110,7 +139,7 @@ describe("canExecuteStrategyTrade", () => {
     const r = canExecuteStrategyTrade("BUY", "HINDALCO", "NSE", {
       holdings: [],
       trades,
-      settings,
+      settings: strictSettings,
       soldThisRun: new Set(),
     });
     assert.equal(r.allowed, false);
@@ -137,7 +166,7 @@ describe("canExecuteStrategyTrade", () => {
         },
       ],
       trades: [],
-      settings,
+      settings: simpleSettings,
       ownerStrategyId: OWNER_MANUAL,
       soldThisRun: new Set(),
     });
@@ -150,7 +179,7 @@ describe("canExecuteStrategyTrade", () => {
         { symbol: "TCS", exchange: "NSE", qty: 1, avgPrice: 100, ltp: 105 },
       ],
       trades: [],
-      settings,
+      settings: simpleSettings,
       soldThisRun: new Set(),
     });
     assert.equal(r.allowed, true);
@@ -177,7 +206,7 @@ describe("canExecuteStrategyTrade", () => {
         },
       ],
       trades: [],
-      settings,
+      settings: simpleSettings,
       soldThisRun: new Set(),
       boughtThisRun: new Set(["TCS:NSE"]),
       ownerStrategyId: "macd-1",
@@ -207,7 +236,7 @@ describe("canExecuteStrategyTrade", () => {
         },
       ],
       trades: [],
-      settings: { ...settings, minHoldMinutesBeforeSell: 60 },
+      settings: { ...simpleSettings, minHoldMinutesBeforeSell: 60 },
       soldThisRun: new Set(),
       ownerStrategyId: "macd-1",
     });

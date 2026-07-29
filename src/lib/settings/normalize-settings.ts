@@ -4,59 +4,55 @@ import {
   DEFAULT_PAPER_MIN_ORDER_VALUE,
 } from "@/lib/portfolio/paper-position-size";
 
+/** Simple paper loop: fixed ₹1L buys, −2% / +5% exits, minimal gates. */
+export const SIMPLE_PAPER_MAX_POSITIONS = 25;
+export const SIMPLE_PAPER_ORDER_NOTIONAL = 100_000;
+
 /**
  * Prefer fixed ₹ notional so cron always fills.
- * ATR / low % balance modes often skip (below min) or hit the ₹5L cap.
+ * ATR / % balance modes often skip or hit the ₹5L cap.
  */
 export function effectivePositionSizingMode(
-  settings: {
+  _settings?: {
     positionSizingMode?: AppSettings["positionSizingMode"];
     positionPct?: number;
   }
 ): AppSettings["positionSizingMode"] {
-  const mode = settings.positionSizingMode ?? "notional";
-  if (mode === "notional") return "notional";
-  // Keep explicit high % sizing; otherwise use fixed ₹ for reliable fills.
-  if (mode === "portfolio_pct" && (settings.positionPct ?? 10) > 10) {
-    return "portfolio_pct";
-  }
   return "notional";
 }
 
-/** Align paper order size, per-trade cap, min purchase, and basic SL/TP exits. */
+/** Align paper sizing, exits, and remove rebuy/cooldown blockages. */
 export function normalizeAppSettings(settings: AppSettings): AppSettings {
-  const notional = Math.max(
-    1000,
-    settings.paperOrderNotional ?? DEFAULT_SETTINGS.paperOrderNotional ?? 100_000
-  );
   const paperMaxOrderValue = Math.max(
     1000,
     settings.paperMaxOrderValue || DEFAULT_PAPER_MAX_ORDER_VALUE
   );
-  const rawMin =
-    settings.paperMinOrderValue ?? DEFAULT_PAPER_MIN_ORDER_VALUE;
-  const paperMinOrderValue =
-    rawMin <= 0 ? 0 : Math.min(paperMaxOrderValue, Math.max(1000, rawMin));
+  const paperMinOrderValue = Math.min(
+    paperMaxOrderValue,
+    Math.max(1000, DEFAULT_PAPER_MIN_ORDER_VALUE)
+  );
   return {
     ...settings,
-    positionSizingMode: effectivePositionSizingMode(settings),
-    paperOrderNotional: notional,
+    positionSizingMode: "notional",
+    paperOrderNotional: SIMPLE_PAPER_ORDER_NOTIONAL,
     paperMaxOrderValue,
     paperMinOrderValue,
-    // Basic exits so paper can run end-to-end without complex sell consensus.
+    // Basic exits only.
     autoStopLoss: true,
     autoTakeProfit: true,
-    stopLossPercent:
-      settings.stopLossPercent > 0 ? settings.stopLossPercent : 2,
-    takeProfitPercent:
-      settings.takeProfitPercent > 0 ? settings.takeProfitPercent : 5,
+    stopLossPercent: 2,
+    takeProfitPercent: 5,
     autoTrailingStop: false,
     enableStrategySellSignals: false,
-    maxPositions:
-      settings.maxPositions && settings.maxPositions > 0
-        ? settings.maxPositions
-        : DEFAULT_SETTINGS.maxPositions > 0
-          ? DEFAULT_SETTINGS.maxPositions
-          : 5,
+    maxHoldDays: 0,
+    noProgressDays: 0,
+    autoPauseEnabled: false,
+    // Remove rebuy / day-lock blockages that stopped fills for days.
+    rebuyCooldownMinutes: 0,
+    noSameDayRebuyAfterSell: false,
+    maxRoundTripsPerSymbolPerDay: 0,
+    minHoldMinutesBeforeSell: 0,
+    // Room for new ₹1L buys while older names sit between −2% and +5%.
+    maxPositions: SIMPLE_PAPER_MAX_POSITIONS,
   };
 }

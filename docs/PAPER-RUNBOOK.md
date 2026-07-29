@@ -194,8 +194,8 @@ Reconcile will:
 - Symbol locked for the day after automated sell
 - Rebuy cooldown after sell (default 240 min)
 - Max concurrent positions (default 5)
-- Position sizing ~₹1L per buy (fixed ₹ notional by default), capped at max per trade (₹5L) and skipped if below min (₹25k)
-- Exits: **stop loss −2%** and **take profit +5%** (strategy sells / trailing stop off by default for a simple paper loop)
+- Position sizing **₹1L fixed** per buy (max 25 open positions)
+- Exits only: **stop loss −2%** and **take profit +5%** (no strategy sells, trailing, cooldowns, or same-day rebuy locks)
 
 ## Backtest vs paper alignment
 

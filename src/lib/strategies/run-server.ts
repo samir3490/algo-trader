@@ -383,14 +383,17 @@ export async function runStrategiesForUser(
   const {
     emailDedupeKeys: existingEmailKeys,
     dedupeKeys: existingDedupeKeys,
-    symbolCooldownUntil: persistedCooldown,
-    symbolsLockedToday: persistedLocks,
     lastCronAt: previousLastCronAt,
   } = await loadRunnerMeta(db, userId);
-  const dedupe = new Set(existingDedupeKeys);
   const emailDedupe = new Set(existingEmailKeys);
-  let symbolCooldownUntil: Record<string, number> = { ...persistedCooldown };
-  let symbolsLockedToday: Record<string, string> = { ...persistedLocks };
+  // Clear day-locks / NO-BUY / BUY-TODAY so prior sells don't block new ₹1L entries.
+  let symbolCooldownUntil: Record<string, number> = {};
+  let symbolsLockedToday: Record<string, string> = {};
+  const dedupe = new Set(
+    [...existingDedupeKeys].filter(
+      (k) => !k.startsWith("NO-BUY:") && !k.startsWith("BUY-TODAY:")
+    )
+  );
   const soldThisRun = new Set<string>();
   const digestLines: ScanDigestLine[] = [];
   const digestMode = useScanDigestEmail(userSettings);
@@ -510,17 +513,19 @@ export async function runStrategiesForUser(
     for (const t of newRiskTrades) {
       await logTradeExecutionAudit(db, userId, t, "RiskExit");
     }
-    const cooldownMs = (userSettings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
+    const cooldownMs = (userSettings.rebuyCooldownMinutes ?? 0) * 60 * 1000;
     for (const exit of riskResult.exits) {
       const key = symKey(exit.symbol, exit.exchange);
       soldThisRun.add(key);
-      symbolCooldownUntil[key] = Date.now() + cooldownMs;
-      symbolsLockedToday = lockSymbolForToday(
-        symbolsLockedToday,
-        exit.symbol,
-        exit.exchange
-      );
-      dedupe.add(executionNoBuyTodayKey(exit.symbol));
+      if (cooldownMs > 0) {
+        symbolCooldownUntil[key] = Date.now() + cooldownMs;
+        symbolsLockedToday = lockSymbolForToday(
+          symbolsLockedToday,
+          exit.symbol,
+          exit.exchange
+        );
+        dedupe.add(executionNoBuyTodayKey(exit.symbol));
+      }
       queueEmail(
         "risk_exit",
         {
@@ -656,49 +661,6 @@ export async function runStrategiesForUser(
       continue;
     }
 
-    const noBuyKey = executionNoBuyTodayKey(baseDecision.symbol);
-    const buyTodayKey = `BUY-TODAY:${baseDecision.symbol.toUpperCase()}:${todayKeyIST()}`;
-    const slotKey = executionDedupeKey(baseDecision.symbol);
-    if (dedupe.has(noBuyKey)) {
-      bumpReason(diagnostics.skipReasons, "Sold today — no rebuy until tomorrow");
-      diagnostics.dedupeBlocked += 1;
-      addScanDetail(
-        diagnostics,
-        "dedupeBlocked",
-        baseDecision.symbol,
-        "Sold today — no rebuy until tomorrow"
-      );
-      continue;
-    }
-    if (dedupe.has(buyTodayKey)) {
-      bumpReason(
-        diagnostics.skipReasons,
-        "Already bought this symbol today — no duplicate entry"
-      );
-      diagnostics.dedupeBlocked += 1;
-      addScanDetail(
-        diagnostics,
-        "dedupeBlocked",
-        baseDecision.symbol,
-        "Already bought today"
-      );
-      continue;
-    }
-    if (dedupe.has(slotKey)) {
-      bumpReason(
-        diagnostics.skipReasons,
-        "Already traded this symbol in this 15-minute window"
-      );
-      diagnostics.dedupeBlocked += 1;
-      addScanDetail(
-        diagnostics,
-        "dedupeBlocked",
-        baseDecision.symbol,
-        "Already traded this window"
-      );
-      continue;
-    }
-
     const gate = canExecuteStrategyTrade("BUY", baseDecision.symbol, exchange, {
       holdings: paperState.holdings ?? [],
       positions: paperState.positions,
@@ -722,12 +684,20 @@ export async function runStrategiesForUser(
     }
 
     let price = baseDecision.price;
-    const resolvedPrice = await resolvePaperExecutionPrice(
+    let resolvedPrice = await resolvePaperExecutionPrice(
       baseDecision.symbol,
       exchange,
       price,
       { requireLive: true }
     );
+    if (!resolvedPrice) {
+      resolvedPrice = await resolvePaperExecutionPrice(
+        baseDecision.symbol,
+        exchange,
+        price,
+        { requireLive: false }
+      );
+    }
     if (!resolvedPrice) {
       bumpReason(diagnostics.skipReasons, "Could not resolve live market price");
       continue;
@@ -814,7 +784,6 @@ export async function runStrategiesForUser(
 
       paperState = ensurePositions(state);
       dedupe.add(executionDedupeKey(decision.symbol));
-      dedupe.add(`BUY-TODAY:${decision.symbol.toUpperCase()}:${todayKeyIST()}`);
       boughtThisRun.add(symKey(decision.symbol, exchange));
       tradesExecuted += 1;
       placedThisScan += 1;
@@ -1054,14 +1023,16 @@ export async function runStrategiesForUser(
         paperState = ensurePositions(state);
         dedupe.add(executionDedupeKey(decision.symbol));
         soldThisRun.add(key);
-        const cooldownMs = (userSettings.rebuyCooldownMinutes ?? 240) * 60 * 1000;
-        symbolCooldownUntil[key] = Date.now() + cooldownMs;
-        symbolsLockedToday = lockSymbolForToday(
-          symbolsLockedToday,
-          decision.symbol,
-          exchange
-        );
-        dedupe.add(executionNoBuyTodayKey(decision.symbol));
+        const cooldownMs = (userSettings.rebuyCooldownMinutes ?? 0) * 60 * 1000;
+        if (cooldownMs > 0) {
+          symbolCooldownUntil[key] = Date.now() + cooldownMs;
+          symbolsLockedToday = lockSymbolForToday(
+            symbolsLockedToday,
+            decision.symbol,
+            exchange
+          );
+          dedupe.add(executionNoBuyTodayKey(decision.symbol));
+        }
         tradesExecuted += 1;
         addScanDetail(
           diagnostics,
