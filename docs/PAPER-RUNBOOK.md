@@ -195,6 +195,8 @@ Reconcile will:
 - Rebuy cooldown after sell (default 240 min)
 - Max concurrent positions (default 5)
 - Position sizing **₹1L fixed** per buy (max 25 open positions)
+- Shortlisted BUY signals are filled **in rank order** (signal count → confidence)
+- Cron auto-seeds the full Nifty 50 universe scanners if too few strategies are running
 - Exits only: **stop loss −2%** and **take profit +5%** (no strategy sells, trailing, cooldowns, or same-day rebuy locks)
 
 ## Backtest vs paper alignment

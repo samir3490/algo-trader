@@ -11,7 +11,7 @@ import {
   applyPaperRiskExits,
   ratchetPositionPeakPrices,
 } from "@/lib/risk/paper-risk-guard";
-import { scanStrategiesForSignals, resolveSignalAtrForSymbol, fetchSymbolAtr } from "@/lib/strategies/scan-signals";
+import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
 import {
   ensurePositions,
   getOpenPositions,
@@ -33,9 +33,14 @@ import {
 import {
   formatPaperBuySizingNote,
   formatPaperSizingSummary,
-  resolvePaperScanOrderQty,
+  integerShareQtyForBudget,
 } from "@/lib/portfolio/paper-position-size";
-import { normalizeAppSettings } from "@/lib/settings/normalize-settings";
+import {
+  normalizeAppSettings,
+  SIMPLE_PAPER_ORDER_NOTIONAL,
+} from "@/lib/settings/normalize-settings";
+import { buildNifty50UniverseStrategies } from "@/lib/universe/default-strategies";
+import { STRATEGY_DEFINITIONS } from "@/lib/strategies/definitions";
 import {
   ensurePaperTradingBalance,
   prunePaperStateForScan,
@@ -319,6 +324,49 @@ async function loadRunnerMeta(db: Firestore, userId: string) {
   };
 }
 
+async function ensureRunningUniverseStrategies(
+  db: Firestore,
+  userId: string,
+  items: ActiveStrategy[]
+): Promise<ActiveStrategy[]> {
+  const paperRunning = items.filter(
+    (s) => s.status === "running" && resolveStrategyMode(s) === "paper"
+  );
+  const universeCount = paperRunning.filter(
+    (s) => Boolean(s.universe) || (s.symbols?.length ?? 0) >= 20
+  ).length;
+
+  // Cron was scanning only 1–2 strategies → zero BUY signals. Keep a full
+  // Nifty 50 universe set so ranked shortlists actually form.
+  if (
+    paperRunning.length >= STRATEGY_DEFINITIONS.length &&
+    universeCount >= Math.min(8, STRATEGY_DEFINITIONS.length)
+  ) {
+    return items;
+  }
+
+  const seeded = buildNifty50UniverseStrategies({
+    mode: "paper",
+    timeframe: "Day",
+    universe: "nifty50",
+  });
+  const live = items.filter((s) => resolveStrategyMode(s) === "live");
+  const next = [...seeded, ...live];
+  await db.doc(`users/${userId}/data/strategies`).set(
+    {
+      items: next,
+      updatedAt: FieldValue.serverTimestamp(),
+      autoSeededUniverseAt: new Date().toISOString(),
+    },
+    { merge: true }
+  );
+  writeSystemLog("INFO", "StrategyScan", "auto_seeded_universe", {
+    previousPaperRunning: paperRunning.length,
+    seeded: seeded.length,
+  });
+  return next;
+}
+
 export async function runStrategiesForUser(
   userId: string,
   options?: { invokedBy?: "cron" | "manual" }
@@ -330,9 +378,10 @@ export async function runStrategiesForUser(
     return { userId, scanned: 0, signalsFound: 0, tradesExecuted: 0, skipped: "no strategies" };
   }
 
-  const items = ((strategiesSnap.data()?.items ?? []) as ActiveStrategy[]).map(
+  let items = ((strategiesSnap.data()?.items ?? []) as ActiveStrategy[]).map(
     (s) => ({ ...s, mode: resolveStrategyMode(s) })
   );
+  items = await ensureRunningUniverseStrategies(db, userId, items);
   const running = items.filter((s) => s.status === "running");
   if (running.length === 0) {
     return { userId, scanned: 0, signalsFound: 0, tradesExecuted: 0, skipped: "none running" };
@@ -592,14 +641,16 @@ export async function runStrategiesForUser(
     todayRealizedLoss: todayRealizedLoss(paperState.trades),
   };
 
-  const rankedForDisplay = rankBuyOpinions(opinions, regimeSnapshot).map((op) => ({
+  const rankedOpinions = rankBuyOpinions(opinions, regimeSnapshot);
+  const rankedForDisplay = rankedOpinions.map((op) => ({
     symbol: op.symbol,
     signalCount: op.buySignalCount ?? 1,
   }));
 
+  // Ranked shortlist → buy in that order (skip only symbols already held).
   const buyQueue = buildRankedPaperBuyQueue(opinions, portfolioCtx, regimeSnapshot);
   const openPositionCount = getOpenPositions(paperState).length;
-  const maxPositions = cronSettings.maxPositions ?? 5;
+  const maxPositions = cronSettings.maxPositions ?? 25;
   diagnostics.openPositions = openPositionCount;
   diagnostics.paperBalance = paperState.balance ?? 0;
   diagnostics.maxPositions = maxPositions;
@@ -636,6 +687,7 @@ export async function runStrategiesForUser(
   const deferReason = `Lower buy rank — max ${maxPositions} positions`;
   const boughtThisRun = new Set<string>();
 
+  // Walk the ranked shortlist in order and fill every available slot.
   while (placedThisScan < slotsToFill && queueIndex < rankedQueue.length) {
     const baseDecision = rankedQueue[queueIndex];
     queueIndex += 1;
@@ -661,45 +713,15 @@ export async function runStrategiesForUser(
       continue;
     }
 
-    const gate = canExecuteStrategyTrade("BUY", baseDecision.symbol, exchange, {
-      holdings: paperState.holdings ?? [],
-      positions: paperState.positions,
-      trades: paperState.trades ?? [],
-      settings: cronSettings,
-      soldThisRun,
-      symbolCooldownUntil,
-      symbolsLockedToday,
-      ownerStrategyId: baseDecision.ownerStrategyId,
-    });
-    if (!gate.allowed) {
-      bumpReason(diagnostics.skipReasons, gate.reason ?? "Blocked by trade gate");
-      diagnostics.gateBlocked += 1;
-      addScanDetail(
-        diagnostics,
-        "gateBlocked",
-        baseDecision.symbol,
-        gate.reason ?? "Blocked by trade gate"
-      );
-      continue;
-    }
-
     let price = baseDecision.price;
     let resolvedPrice = await resolvePaperExecutionPrice(
       baseDecision.symbol,
       exchange,
       price,
-      { requireLive: true }
+      { requireLive: false }
     );
-    if (!resolvedPrice) {
-      resolvedPrice = await resolvePaperExecutionPrice(
-        baseDecision.symbol,
-        exchange,
-        price,
-        { requireLive: false }
-      );
-    }
-    if (!resolvedPrice) {
-      bumpReason(diagnostics.skipReasons, "Could not resolve live market price");
+    if (!resolvedPrice || resolvedPrice.price <= 0) {
+      bumpReason(diagnostics.skipReasons, "Could not resolve market price");
       continue;
     }
     price = resolvedPrice.price;
@@ -724,33 +746,15 @@ export async function runStrategiesForUser(
       });
     }
 
-    let signalAtr = resolveSignalAtrForSymbol(
-      rawSignals,
-      baseDecision.symbol,
-      baseDecision.ownerStrategyId
-    );
-    if (
-      (userSettings.positionSizingMode ?? "atr_risk") === "atr_risk" &&
-      (signalAtr == null || signalAtr <= 0)
-    ) {
-      signalAtr = await fetchSymbolAtr(
-        baseDecision.symbol,
-        exchange,
-        userSettings.atrPeriod ?? 14
-      );
-    }
-
-    const freshQty = resolvePaperScanOrderQty(price, userSettings, {
-      strategyParams: strat.params,
-      balance: paperState.balance ?? INITIAL_BALANCE,
-      atr: signalAtr,
-    });
+    const balance = paperState.balance ?? INITIAL_BALANCE;
+    const budget = Math.min(SIMPLE_PAPER_ORDER_NOTIONAL, balance);
+    const freshQty = integerShareQtyForBudget(price, budget, balance);
     if (freshQty <= 0 || price <= 0) {
       bumpReason(
         diagnostics.skipReasons,
-        price <= 0
-          ? "Could not resolve live price"
-          : "Below min purchase or insufficient for 1 share"
+        balance < price
+          ? "Insufficient balance for 1 share"
+          : "Could not size ₹1L order"
       );
       continue;
     }
@@ -797,7 +801,6 @@ export async function runStrategiesForUser(
         qty: tradeQty,
         price: decision.price,
         balance: paperState.balance ?? INITIAL_BALANCE,
-        atr: signalAtr,
       });
       addScanDetail(
         diagnostics,

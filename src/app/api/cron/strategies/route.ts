@@ -4,7 +4,7 @@ import { runStrategiesForAllUsers } from "@/lib/strategies/run-server";
 import { sendCronFailureAlert } from "@/lib/health/health-alerts";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 type CronAuthResult =
   | { ok: true }

@@ -60,13 +60,17 @@ export async function scanStrategiesForSignals(
       const signal = evaluateStrategyByType(type, bars, strat.params ?? {}, sym);
       if (!signal || signal.action === "HOLD") continue;
 
+      // Prefer live quote, but never drop a signal if Yahoo quote fails —
+      // execution path re-resolves price before fill.
       const resolved = await resolvePaperExecutionPrice(
         sym,
         strat.exchange || "NSE",
         signal.price,
-        { requireLive: true }
+        { requireLive: false }
       );
-      if (!resolved) continue;
+      const price =
+        resolved?.price && resolved.price > 0 ? resolved.price : signal.price;
+      if (!Number.isFinite(price) || price <= 0) continue;
 
       const atr = computeATR(bars, atrPeriod) ?? undefined;
 
@@ -75,7 +79,7 @@ export async function scanStrategiesForSignals(
         strategyType: type as StrategyType,
         symbol: sym,
         action: signal.action,
-        price: resolved.price,
+        price,
         reason: signal.reason,
         confidence: signal.confidence,
         atr,
