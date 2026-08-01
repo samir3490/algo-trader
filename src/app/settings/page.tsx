@@ -22,8 +22,10 @@ import {
   Edit2,
   Check,
   X,
+  ListChecks,
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
+import { PAPER_RULE_CATALOG, type PaperRuleKey } from "@/lib/settings/paper-rules";
 import { useAuth } from "@/lib/auth-context";
 import {
   getSettings as getFirestoreSettings,
@@ -86,6 +88,21 @@ interface AppSettings {
     pnlAlerts: boolean;
     weeklyShortlist: boolean;
   };
+  /** Checklist of paper rules — Settings → Rules. */
+  paperRules: {
+    fixedNotional1L: boolean;
+    basicExits2and5: boolean;
+    maxPositions25: boolean;
+    strategySellsOff: boolean;
+    clearRebuyLocks: boolean;
+    preferStrongSectors: boolean;
+    autoSeedUniverse: boolean;
+    regimeWeighting: boolean;
+    entryConnectedExits: boolean;
+    weeklyShortlistEmail: boolean;
+    emailDigest: boolean;
+    riskExitEmails: boolean;
+  };
   riskManagement: {
     stopLossPercent: number;
     takeProfitPercent: number;
@@ -132,7 +149,7 @@ interface AppSettings {
   };
 }
 
-type SettingsTab = "paper" | "live" | "general";
+type SettingsTab = "paper" | "live" | "general" | "rules";
 
 function SettingsTabBar({
   active,
@@ -142,6 +159,7 @@ function SettingsTabBar({
   onChange: (tab: SettingsTab) => void;
 }) {
   const tabs: { id: SettingsTab; label: string; hint: string }[] = [
+    { id: "rules", label: "Rules", hint: "On / off" },
     { id: "paper", label: "Paper Trading", hint: "Simulated" },
     { id: "live", label: "Live Trading", hint: "Real money" },
     { id: "general", label: "General", hint: "Alerts & accounts" },
@@ -166,7 +184,9 @@ function SettingsTabBar({
                 ? "bg-amber-100 text-amber-950 ring-1 ring-amber-400/50"
                 : tab.id === "paper"
                   ? "bg-sky-100 text-sky-950 ring-1 ring-sky-400/50"
-                  : "bg-bg-elevated text-text-primary ring-1 ring-border"
+                  : tab.id === "rules"
+                    ? "bg-emerald-100 text-emerald-950 ring-1 ring-emerald-400/50"
+                    : "bg-bg-elevated text-text-primary ring-1 ring-border"
               : "text-text-secondary hover:bg-bg-tertiary hover:text-text-primary"
           )}
         >
@@ -238,6 +258,20 @@ const defaultSettings: AppSettings = {
     pnlAlerts: false,
     weeklyShortlist: true,
   },
+  paperRules: {
+    fixedNotional1L: true,
+    basicExits2and5: true,
+    maxPositions25: true,
+    strategySellsOff: true,
+    clearRebuyLocks: true,
+    preferStrongSectors: true,
+    autoSeedUniverse: true,
+    regimeWeighting: true,
+    entryConnectedExits: true,
+    weeklyShortlistEmail: true,
+    emailDigest: true,
+    riskExitEmails: true,
+  },
   riskManagement: {
     stopLossPercent: 2,
     takeProfitPercent: 5,
@@ -299,6 +333,7 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
           | "atr_risk"
           | undefined,
         positionPct: fs.positionPct,
+        ruleFixedNotional1L: fs.ruleFixedNotional1L,
       }),
       positionPct: fs.positionPct ?? 10,
       atrRiskPct: fs.atrRiskPct ?? 0.5,
@@ -321,23 +356,37 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       pnlAlerts: fs.notifyPnl,
       weeklyShortlist: fs.notifyWeeklyShortlist !== false,
     },
+    paperRules: {
+      fixedNotional1L: fs.ruleFixedNotional1L !== false,
+      basicExits2and5: fs.ruleBasicExits2and5 !== false,
+      maxPositions25: fs.ruleMaxPositions25 !== false,
+      strategySellsOff: fs.ruleStrategySellsOff !== false,
+      clearRebuyLocks: fs.ruleClearRebuyLocks !== false,
+      preferStrongSectors: fs.rulePreferStrongSectors !== false,
+      autoSeedUniverse: fs.ruleAutoSeedUniverse !== false,
+      regimeWeighting: fs.enableRegimeWeighting !== false,
+      entryConnectedExits: fs.enableEntryConnectedExits !== false,
+      weeklyShortlistEmail: fs.notifyWeeklyShortlist !== false,
+      emailDigest: fs.notifyEmailDigest !== false,
+      riskExitEmails: fs.notifyRiskExits !== false,
+    },
     riskManagement: {
       stopLossPercent: fs.stopLossPercent,
       takeProfitPercent: fs.takeProfitPercent,
       autoStopLoss: fs.autoStopLoss ?? true,
-      autoTakeProfit: true,
+      autoTakeProfit: fs.autoTakeProfit !== false,
       maxPositions: fs.maxPositions,
       squareOffTime: fs.squareOffTime,
-      rebuyCooldownMinutes: fs.rebuyCooldownMinutes ?? 240,
-      maxRoundTripsPerSymbolPerDay: fs.maxRoundTripsPerSymbolPerDay ?? 1,
-      noSameDayRebuyAfterSell: fs.noSameDayRebuyAfterSell !== false,
-      minHoldMinutesBeforeSell: fs.minHoldMinutesBeforeSell ?? 60,
-      enableStrategySellSignals: false,
+      rebuyCooldownMinutes: fs.rebuyCooldownMinutes ?? 0,
+      maxRoundTripsPerSymbolPerDay: fs.maxRoundTripsPerSymbolPerDay ?? 0,
+      noSameDayRebuyAfterSell: fs.noSameDayRebuyAfterSell === true,
+      minHoldMinutesBeforeSell: fs.minHoldMinutesBeforeSell ?? 0,
+      enableStrategySellSignals: fs.enableStrategySellSignals === true,
       strategySellMinSignals: fs.strategySellMinSignals ?? 2,
-      autoTrailingStop: false,
+      autoTrailingStop: fs.autoTrailingStop === true,
       trailingStopPercent: fs.trailingStopPercent ?? 2,
-      maxHoldDays: 0,
-      noProgressDays: 0,
+      maxHoldDays: fs.maxHoldDays ?? 0,
+      noProgressDays: fs.noProgressDays ?? 0,
       noProgressMinPct: fs.noProgressMinPct ?? 0.5,
       autoPauseEnabled: fs.autoPauseEnabled === true,
       autoPauseLookbackDays: fs.autoPauseLookbackDays ?? 14,
@@ -414,8 +463,8 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     autoPauseEnabled: s.riskManagement.autoPauseEnabled,
     autoPauseLookbackDays: s.riskManagement.autoPauseLookbackDays,
     autoPauseMaxLoss: s.riskManagement.autoPauseMaxLoss,
-    enableRegimeWeighting: s.marketRegime.enableRegimeWeighting,
-    enableEntryConnectedExits: s.marketRegime.enableEntryConnectedExits,
+    enableRegimeWeighting: s.paperRules.regimeWeighting,
+    enableEntryConnectedExits: s.paperRules.entryConnectedExits,
     regimeIndexSymbol: "^NSEI",
     regimeAdxPeriod: 14,
     regimeAdxThreshold: s.marketRegime.regimeAdxThreshold,
@@ -435,12 +484,19 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     liveTrailingStopPercent: s.liveTrading.trailingStopPercent,
     liveMinHoldMinutesBeforeSell: s.liveTrading.minHoldMinutesBeforeSell,
     notifyOrders: s.notifications.orderExecution,
-    notifyEmailDigest: s.notifications.emailDigest,
+    notifyEmailDigest: s.paperRules.emailDigest,
     notifySkipped: s.notifications.skippedOrders,
-    notifyRiskExits: s.notifications.riskExits,
+    notifyRiskExits: s.paperRules.riskExitEmails,
     notifySignals: s.notifications.strategySignals,
     notifyPnl: s.notifications.pnlAlerts,
-    notifyWeeklyShortlist: s.notifications.weeklyShortlist,
+    notifyWeeklyShortlist: s.paperRules.weeklyShortlistEmail,
+    ruleFixedNotional1L: s.paperRules.fixedNotional1L,
+    ruleBasicExits2and5: s.paperRules.basicExits2and5,
+    ruleMaxPositions25: s.paperRules.maxPositions25,
+    ruleStrategySellsOff: s.paperRules.strategySellsOff,
+    ruleClearRebuyLocks: s.paperRules.clearRebuyLocks,
+    rulePreferStrongSectors: s.paperRules.preferStrongSectors,
+    ruleAutoSeedUniverse: s.paperRules.autoSeedUniverse,
   };
 }
 
@@ -448,7 +504,15 @@ function SettingsContent() {
   const searchParams = useSearchParams();
   const tabParam = searchParams.get("tab");
   const initialTab: SettingsTab =
-    tabParam === "live" ? "live" : tabParam === "general" ? "general" : "paper";
+    tabParam === "live"
+      ? "live"
+      : tabParam === "general"
+        ? "general"
+        : tabParam === "rules"
+          ? "rules"
+          : tabParam === "paper"
+            ? "paper"
+            : "rules";
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const { user } = useAuth();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
@@ -747,11 +811,71 @@ function SettingsContent() {
     section: K,
     updates: Partial<AppSettings[K]>
   ) {
-    setSettings((prev) => ({
-      ...prev,
-      [section]: { ...prev[section], ...updates },
-    }));
+    setSettings((prev) => {
+      const nextSection = { ...prev[section], ...updates } as AppSettings[K];
+      const next: AppSettings = { ...prev, [section]: nextSection };
+      if (section === "notifications") {
+        const n = next.notifications;
+        next.paperRules = {
+          ...next.paperRules,
+          emailDigest: n.emailDigest,
+          riskExitEmails: n.riskExits,
+          weeklyShortlistEmail: n.weeklyShortlist,
+        };
+      }
+      if (section === "marketRegime") {
+        const m = next.marketRegime;
+        next.paperRules = {
+          ...next.paperRules,
+          regimeWeighting: m.enableRegimeWeighting,
+          entryConnectedExits: m.enableEntryConnectedExits,
+        };
+      }
+      return next;
+    });
   }
+
+  /** Toggle a Rules checklist item and keep related sections in sync. */
+  function togglePaperRule(
+    localKey: keyof AppSettings["paperRules"],
+    enabled: boolean
+  ) {
+    setSettings((prev) => {
+      const paperRules = { ...prev.paperRules, [localKey]: enabled };
+      const notifications = { ...prev.notifications };
+      const marketRegime = { ...prev.marketRegime };
+      if (localKey === "emailDigest") notifications.emailDigest = enabled;
+      if (localKey === "riskExitEmails") notifications.riskExits = enabled;
+      if (localKey === "weeklyShortlistEmail") {
+        notifications.weeklyShortlist = enabled;
+      }
+      if (localKey === "regimeWeighting") {
+        marketRegime.enableRegimeWeighting = enabled;
+      }
+      if (localKey === "entryConnectedExits") {
+        marketRegime.enableEntryConnectedExits = enabled;
+      }
+      return { ...prev, paperRules, notifications, marketRegime };
+    });
+  }
+
+  const RULE_UI_KEYS: {
+    catalogKey: PaperRuleKey;
+    localKey: keyof AppSettings["paperRules"];
+  }[] = [
+    { catalogKey: "ruleFixedNotional1L", localKey: "fixedNotional1L" },
+    { catalogKey: "ruleBasicExits2and5", localKey: "basicExits2and5" },
+    { catalogKey: "ruleMaxPositions25", localKey: "maxPositions25" },
+    { catalogKey: "ruleStrategySellsOff", localKey: "strategySellsOff" },
+    { catalogKey: "ruleClearRebuyLocks", localKey: "clearRebuyLocks" },
+    { catalogKey: "rulePreferStrongSectors", localKey: "preferStrongSectors" },
+    { catalogKey: "ruleAutoSeedUniverse", localKey: "autoSeedUniverse" },
+    { catalogKey: "enableRegimeWeighting", localKey: "regimeWeighting" },
+    { catalogKey: "enableEntryConnectedExits", localKey: "entryConnectedExits" },
+    { catalogKey: "notifyEmailDigest", localKey: "emailDigest" },
+    { catalogKey: "notifyRiskExits", localKey: "riskExitEmails" },
+    { catalogKey: "notifyWeeklyShortlist", localKey: "weeklyShortlistEmail" },
+  ];
 
   const connectedCount = accounts.filter((a) => a.connected).length;
 
@@ -777,6 +901,105 @@ function SettingsContent() {
       </div>
 
       <SettingsTabBar active={activeTab} onChange={setActiveTab} />
+
+      {activeTab === "rules" && (
+        <section className="card">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="rounded-lg bg-emerald-100 p-2">
+              <ListChecks className="h-5 w-5 text-emerald-700" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-text-primary">
+                Paper trading rules
+              </h2>
+              <p className="text-xs text-text-secondary">
+                Everything we applied over time — turn a rule off to test what
+                still works. Save after changing, then wait for the next scan.
+              </p>
+            </div>
+          </div>
+
+          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <p className="text-xs text-emerald-950 leading-relaxed">
+              Checked = rule is active on cron. Unchecked = use the matching
+              fields on the Paper / General tabs (or skip that behavior). Active
+              now:{" "}
+              <strong>
+                {
+                  RULE_UI_KEYS.filter(
+                    ({ localKey }) => settings.paperRules[localKey]
+                  ).length
+                }
+                /{RULE_UI_KEYS.length}
+              </strong>
+            </p>
+          </div>
+
+          {(
+            [
+              "Sizing",
+              "Exits",
+              "Portfolio",
+              "Gates",
+              "Ranking",
+              "Universe",
+              "Email",
+            ] as const
+          ).map((category) => {
+            const items = RULE_UI_KEYS.filter(({ catalogKey }) => {
+              const def = PAPER_RULE_CATALOG.find((r) => r.key === catalogKey);
+              return def?.category === category;
+            });
+            if (items.length === 0) return null;
+            return (
+              <div key={category} className="mb-5">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                  {category}
+                </h3>
+                <div className="space-y-2">
+                  {items.map(({ catalogKey, localKey }) => {
+                    const def = PAPER_RULE_CATALOG.find(
+                      (r) => r.key === catalogKey
+                    )!;
+                    const on = settings.paperRules[localKey];
+                    return (
+                      <div
+                        key={catalogKey}
+                        className="flex items-start justify-between gap-3 rounded-lg bg-bg-tertiary p-4"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-text-primary">
+                            {def.label}
+                          </p>
+                          <p className="mt-1 text-xs text-text-tertiary leading-relaxed">
+                            {def.description}
+                          </p>
+                        </div>
+                        <label className="relative mt-0.5 inline-flex shrink-0 cursor-pointer items-center">
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={(e) =>
+                              togglePaperRule(localKey, e.target.checked)
+                            }
+                            className="peer sr-only"
+                          />
+                          <span className="h-6 w-11 rounded-full bg-border peer-checked:bg-emerald-600 transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+
+          <p className="text-xs text-text-tertiary">
+            Tip: turn off one rule at a time, Save, then compare the next scan
+            email / fills.
+          </p>
+        </section>
+      )}
 
       {activeTab === "live" && (
         <>

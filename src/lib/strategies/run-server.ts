@@ -37,8 +37,9 @@ import {
 } from "@/lib/portfolio/paper-position-size";
 import {
   normalizeAppSettings,
-  SIMPLE_PAPER_ORDER_NOTIONAL,
+  resolvePaperBuyNotional,
 } from "@/lib/settings/normalize-settings";
+import { isPaperRuleOn } from "@/lib/settings/paper-rules";
 import { todayDateKeyIST } from "@/lib/portfolio/compute-portfolio";
 import {
   mergeScanIntoDayRollup,
@@ -397,7 +398,10 @@ export async function runStrategiesForUser(
   let items = ((strategiesSnap.data()?.items ?? []) as ActiveStrategy[]).map(
     (s) => ({ ...s, mode: resolveStrategyMode(s) })
   );
-  items = await ensureRunningUniverseStrategies(db, userId, items);
+  const userSettingsEarly = await loadUserSettings(db, userId);
+  if (isPaperRuleOn(userSettingsEarly, "ruleAutoSeedUniverse")) {
+    items = await ensureRunningUniverseStrategies(db, userId, items);
+  }
   const running = items.filter((s) => s.status === "running");
   if (running.length === 0) {
     return { userId, scanned: 0, signalsFound: 0, tradesExecuted: 0, skipped: "none running" };
@@ -408,7 +412,7 @@ export async function runStrategiesForUser(
     type: inferStrategyType(s.name),
   }));
 
-  const userSettings = await loadUserSettings(db, userId);
+  const userSettings = userSettingsEarly;
   const paperAutomation = resolveAutomationSettings(userSettings, "paper");
   const cronSettings = automationAsAppSettings(userSettings, paperAutomation);
 
@@ -435,26 +439,28 @@ export async function runStrategiesForUser(
   }
 
   let sectorBias: SectorBiasContext | null = null;
-  try {
-    const sectorPayload = await fetchSectorPerformance("1d", {
-      includeDrivers: false,
-    });
-    sectorBias = buildSectorBiasContext(
-      sectorPayload.sectors,
-      sectorPayload.fetchedAt
-    );
-    writeSystemLog("INFO", "SectorBias", "sector_performance", {
-      summary: sectorBias.summaryLine,
-      top: sectorBias.topSectors.slice(0, 3).map((s) => ({
-        name: s.sectorName,
-        changePercent: s.changePercent,
-        rank: s.rank,
-      })),
-    });
-  } catch (e) {
-    writeSystemLog("WARN", "SectorBias", "sector_fetch_failed", {
-      message: e instanceof Error ? e.message : String(e),
-    });
+  if (isPaperRuleOn(userSettings, "rulePreferStrongSectors")) {
+    try {
+      const sectorPayload = await fetchSectorPerformance("1d", {
+        includeDrivers: false,
+      });
+      sectorBias = buildSectorBiasContext(
+        sectorPayload.sectors,
+        sectorPayload.fetchedAt
+      );
+      writeSystemLog("INFO", "SectorBias", "sector_performance", {
+        summary: sectorBias.summaryLine,
+        top: sectorBias.topSectors.slice(0, 3).map((s) => ({
+          name: s.sectorName,
+          changePercent: s.changePercent,
+          rank: s.rank,
+        })),
+      });
+    } catch (e) {
+      writeSystemLog("WARN", "SectorBias", "sector_fetch_failed", {
+        message: e instanceof Error ? e.message : String(e),
+      });
+    }
   }
 
   const typeByStrategyId = new Map<string, StrategyType>();
@@ -473,15 +479,24 @@ export async function runStrategiesForUser(
     dedupeKeys: existingDedupeKeys,
     lastCronAt: previousLastCronAt,
     shortlistDayRollups: existingShortlistRollups,
+    symbolCooldownUntil: loadedCooldown,
+    symbolsLockedToday: loadedLocks,
   } = await loadRunnerMeta(db, userId);
   const emailDedupe = new Set(existingEmailKeys);
-  // Clear day-locks / NO-BUY / BUY-TODAY so prior sells don't block new ₹1L entries.
-  let symbolCooldownUntil: Record<string, number> = {};
-  let symbolsLockedToday: Record<string, string> = {};
+  const clearLocks = isPaperRuleOn(userSettings, "ruleClearRebuyLocks");
+  // When the clear-locks rule is on, wipe day-locks so fills are not blocked.
+  let symbolCooldownUntil: Record<string, number> = clearLocks
+    ? {}
+    : { ...loadedCooldown };
+  let symbolsLockedToday: Record<string, string> = clearLocks
+    ? {}
+    : { ...loadedLocks };
   const dedupe = new Set(
-    [...existingDedupeKeys].filter(
-      (k) => !k.startsWith("NO-BUY:") && !k.startsWith("BUY-TODAY:")
-    )
+    clearLocks
+      ? [...existingDedupeKeys].filter(
+          (k) => !k.startsWith("NO-BUY:") && !k.startsWith("BUY-TODAY:")
+        )
+      : existingDedupeKeys
   );
   const soldThisRun = new Set<string>();
   const digestLines: ScanDigestLine[] = [];
@@ -806,14 +821,15 @@ export async function runStrategiesForUser(
     }
 
     const balance = paperState.balance ?? INITIAL_BALANCE;
-    const budget = Math.min(SIMPLE_PAPER_ORDER_NOTIONAL, balance);
+    const orderNotional = resolvePaperBuyNotional(userSettings);
+    const budget = Math.min(orderNotional, balance);
     const freshQty = integerShareQtyForBudget(price, budget, balance);
     if (freshQty <= 0 || price <= 0) {
       bumpReason(
         diagnostics.skipReasons,
         balance < price
           ? "Insufficient balance for 1 share"
-          : "Could not size ₹1L order"
+          : `Could not size ₹${Math.round(orderNotional / 1000)}k order`
       );
       continue;
     }

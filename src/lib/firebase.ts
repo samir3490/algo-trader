@@ -383,6 +383,17 @@ export interface AppSettings {
   notifyPnl: boolean;
   /** Weekly shortlist digest (bought vs not bought). Default on. */
   notifyWeeklyShortlist: boolean;
+  /**
+   * Settings → Rules checkboxes. When true (default), normalize/cron apply the
+   * corresponding simple paper-trading rule.
+   */
+  ruleFixedNotional1L: boolean;
+  ruleBasicExits2and5: boolean;
+  ruleMaxPositions25: boolean;
+  ruleStrategySellsOff: boolean;
+  ruleClearRebuyLocks: boolean;
+  rulePreferStrongSectors: boolean;
+  ruleAutoSeedUniverse: boolean;
   /** Minutes before same symbol can be bought after a sell (default 4h). */
   rebuyCooldownMinutes: number;
   /** Max complete buy→sell cycles per symbol per day. */
@@ -476,6 +487,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifySignals: false,
   notifyPnl: false,
   notifyWeeklyShortlist: true,
+  ruleFixedNotional1L: true,
+  ruleBasicExits2and5: true,
+  ruleMaxPositions25: true,
+  ruleStrategySellsOff: true,
+  ruleClearRebuyLocks: true,
+  rulePreferStrongSectors: true,
+  ruleAutoSeedUniverse: true,
   rebuyCooldownMinutes: 0,
   maxRoundTripsPerSymbolPerDay: 0,
   noSameDayRebuyAfterSell: false,

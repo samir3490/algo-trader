@@ -39,6 +39,20 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
     notifySignals: n?.strategySignals as boolean | undefined,
     notifyPnl: n?.pnlAlerts as boolean | undefined,
     notifyWeeklyShortlist: n?.weeklyShortlist as boolean | undefined,
+    ruleFixedNotional1L: (parsed.paperRules as Record<string, unknown> | undefined)
+      ?.fixedNotional1L as boolean | undefined,
+    ruleBasicExits2and5: (parsed.paperRules as Record<string, unknown> | undefined)
+      ?.basicExits2and5 as boolean | undefined,
+    ruleMaxPositions25: (parsed.paperRules as Record<string, unknown> | undefined)
+      ?.maxPositions25 as boolean | undefined,
+    ruleStrategySellsOff: (parsed.paperRules as Record<string, unknown> | undefined)
+      ?.strategySellsOff as boolean | undefined,
+    ruleClearRebuyLocks: (parsed.paperRules as Record<string, unknown> | undefined)
+      ?.clearRebuyLocks as boolean | undefined,
+    rulePreferStrongSectors: (parsed.paperRules as Record<string, unknown> | undefined)
+      ?.preferStrongSectors as boolean | undefined,
+    ruleAutoSeedUniverse: (parsed.paperRules as Record<string, unknown> | undefined)
+      ?.autoSeedUniverse as boolean | undefined,
     stopLossPercent: rm?.stopLossPercent as number | undefined,
     takeProfitPercent: rm?.takeProfitPercent as number | undefined,
     autoStopLoss: rm?.autoStopLoss as boolean | undefined,
