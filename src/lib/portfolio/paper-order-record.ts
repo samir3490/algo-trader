@@ -29,7 +29,14 @@ export function paperTradeToOrderRecord(
         : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" })),
     strategyId: trade.strategyId ?? trade.ownerStrategyId,
     strategyName: trade.strategyName,
-    reason: trade.reason,
+    reason:
+      trade.reason?.trim() ||
+      (trade.exitReason
+        ? `Exit — ${String(trade.exitReason).replace(/_/g, " ")}`
+        : undefined) ||
+      (trade.strategyName
+        ? `${trade.side} · ${trade.strategyName}`
+        : undefined),
   };
 }
 

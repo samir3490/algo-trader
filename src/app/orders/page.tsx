@@ -58,6 +58,8 @@ interface Order {
   status: OrderStatus;
   mode: OrderMode;
   accountId?: string;
+  strategyName?: string;
+  reason?: string;
 }
 
 const statusConfig: Record<string, { label: string; color: string; bg: string; icon: React.ElementType }> = {
@@ -93,6 +95,26 @@ interface PaperTrade {
   price?: number;
   average_price?: number;
   status?: string;
+  reason?: string;
+  strategyName?: string;
+  exitReason?: string;
+}
+
+function formatOrderReason(order: {
+  reason?: string;
+  strategyName?: string;
+  side?: string;
+  exitReason?: string;
+}): string {
+  const reason = order.reason?.trim();
+  if (reason) return reason;
+  if (order.exitReason) {
+    return `Exit — ${String(order.exitReason).replace(/_/g, " ")}`;
+  }
+  if (order.strategyName) {
+    return `${order.side ?? "TRADE"} · ${order.strategyName}`;
+  }
+  return "";
 }
 
 function mapPaperTrade(t: PaperTrade, idx: number): Order {
@@ -108,6 +130,8 @@ function mapPaperTrade(t: PaperTrade, idx: number): Order {
     price: t.price || t.average_price || 0,
     status: ((t.status || "EXECUTED") as OrderStatus),
     mode: "PAPER",
+    strategyName: t.strategyName,
+    reason: formatOrderReason(t),
   };
 }
 
@@ -132,6 +156,8 @@ export default function OrdersPage() {
       price: o.price,
       status: (o.status === "COMPLETE" ? "EXECUTED" : o.status || "EXECUTED") as OrderStatus,
       mode: (o.mode || "PAPER") as OrderMode,
+      strategyName: o.strategyName,
+      reason: formatOrderReason(o),
     };
   }
 
@@ -162,6 +188,7 @@ export default function OrdersPage() {
               status: (o.status === "COMPLETE" ? "EXECUTED" : o.status || "PENDING") as OrderStatus,
               mode: "LIVE" as OrderMode,
               accountId: account.kiteUserId,
+              reason: o.tag || o.status_message || undefined,
             }));
             allOrders.push(...liveOrders);
           }
@@ -234,6 +261,7 @@ export default function OrdersPage() {
         type: (o) => o.type,
         qty: (o) => o.quantity,
         price: (o) => o.price,
+        reason: (o) => o.reason ?? "",
         status: (o) => o.status,
         mode: (o) => o.mode,
         account: (o) => o.accountId ?? "",
@@ -390,6 +418,12 @@ export default function OrdersPage() {
                     {formatCurrency(order.price * order.quantity)}
                   </span>
                 </div>
+                {order.reason ? (
+                  <p className="text-[11px] leading-snug text-text-tertiary break-words">
+                    <span className="font-medium text-text-secondary">Reason: </span>
+                    {order.reason}
+                  </p>
+                ) : null}
               </div>
             );
           })
@@ -407,6 +441,7 @@ export default function OrdersPage() {
               <SortableTh sortKey="type" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Type</SortableTh>
               <SortableTh sortKey="qty" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Qty</SortableTh>
               <SortableTh sortKey="price" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Price</SortableTh>
+              <SortableTh sortKey="reason" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary min-w-[12rem] max-w-[20rem]">Reason</SortableTh>
               <SortableTh sortKey="status" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Status</SortableTh>
               <SortableTh sortKey="mode" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Mode</SortableTh>
               <SortableTh sortKey="account" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Account</SortableTh>
@@ -415,7 +450,7 @@ export default function OrdersPage() {
           <tbody className="divide-y divide-border">
             {isLoading ? (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-text-tertiary">
+                <td colSpan={10} className="px-4 py-12 text-center text-text-tertiary">
                   <div className="flex items-center justify-center gap-2">
                     <Loader2 className="h-5 w-5 animate-spin" />
                     Loading orders...
@@ -424,7 +459,7 @@ export default function OrdersPage() {
               </tr>
             ) : sortedFiltered.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-text-tertiary">
+                <td colSpan={10} className="px-4 py-12 text-center text-text-tertiary">
                   No orders found matching your filters.
                 </td>
               </tr>
@@ -462,6 +497,18 @@ export default function OrdersPage() {
                     <td className="px-4 py-3 text-right text-sm font-medium text-text-primary">{order.quantity}</td>
                     <td className="px-4 py-3 text-right text-sm font-medium text-text-primary font-mono">
                       {formatCurrency(order.price)}
+                    </td>
+                    <td className="px-4 py-3 max-w-[20rem]">
+                      {order.reason ? (
+                        <p
+                          className="text-xs leading-snug text-text-secondary break-words"
+                          title={order.reason}
+                        >
+                          {order.reason}
+                        </p>
+                      ) : (
+                        <span className="text-xs text-text-tertiary">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center">
                       <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold ${sc.color} ${sc.bg}`}>
