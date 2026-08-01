@@ -38,6 +38,7 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
     notifyRiskExits: n?.riskExits as boolean | undefined,
     notifySignals: n?.strategySignals as boolean | undefined,
     notifyPnl: n?.pnlAlerts as boolean | undefined,
+    notifyWeeklyShortlist: n?.weeklyShortlist as boolean | undefined,
     stopLossPercent: rm?.stopLossPercent as number | undefined,
     takeProfitPercent: rm?.takeProfitPercent as number | undefined,
     autoStopLoss: rm?.autoStopLoss as boolean | undefined,

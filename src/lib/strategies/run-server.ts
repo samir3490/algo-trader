@@ -39,6 +39,12 @@ import {
   normalizeAppSettings,
   SIMPLE_PAPER_ORDER_NOTIONAL,
 } from "@/lib/settings/normalize-settings";
+import { todayDateKeyIST } from "@/lib/portfolio/compute-portfolio";
+import {
+  mergeScanIntoDayRollup,
+  pruneShortlistDayRollups,
+  type ShortlistDayRollup,
+} from "@/lib/export/weekly-shortlist";
 import { buildNifty50UniverseStrategies } from "@/lib/universe/default-strategies";
 import { STRATEGY_DEFINITIONS } from "@/lib/strategies/definitions";
 import {
@@ -321,6 +327,9 @@ async function loadRunnerMeta(db: Firestore, userId: string) {
     symbolsLockedToday,
     lastRunAt: (data?.lastRunAt as string) ?? null,
     lastCronAt: (data?.lastCronAt as string) ?? undefined,
+    shortlistDayRollups:
+      (data?.shortlistDayRollups as Record<string, ShortlistDayRollup> | undefined) ??
+      {},
   };
 }
 
@@ -433,6 +442,7 @@ export async function runStrategiesForUser(
     emailDedupeKeys: existingEmailKeys,
     dedupeKeys: existingDedupeKeys,
     lastCronAt: previousLastCronAt,
+    shortlistDayRollups: existingShortlistRollups,
   } = await loadRunnerMeta(db, userId);
   const emailDedupe = new Set(existingEmailKeys);
   // Clear day-locks / NO-BUY / BUY-TODAY so prior sells don't block new ₹1L entries.
@@ -1222,6 +1232,17 @@ export async function runStrategiesForUser(
     digestLines,
   });
 
+  const dateIST = todayDateKeyIST(new Date(now));
+  const dayRollup = mergeScanIntoDayRollup(
+    existingShortlistRollups[dateIST],
+    diagnostics,
+    { dateIST, ranAt: now, tradesExecuted }
+  );
+  const shortlistDayRollups = pruneShortlistDayRollups({
+    ...existingShortlistRollups,
+    [dateIST]: dayRollup,
+  });
+
   await db.doc(`users/${userId}/data/strategyRunner`).set(
     {
       dedupeKeys: [...dedupe],
@@ -1237,6 +1258,7 @@ export async function runStrategiesForUser(
         tradesExecuted,
         diagnostics,
       },
+      shortlistDayRollups,
       updatedAt: FieldValue.serverTimestamp(),
     },
     { merge: true }

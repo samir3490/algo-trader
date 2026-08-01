@@ -2,7 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getAdminFirestore, isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
 import { formatTradeAuditMessage } from "@/lib/audit/trade-execution-audit";
-import { sendDailyPnlEmail } from "@/lib/email";
+import { sendDailyPnlEmail, sendWeeklyShortlistEmail } from "@/lib/email";
 import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import {
   listStrategyUserIds,
@@ -14,6 +14,10 @@ import {
   buildDailyPnlReport,
   shouldSendDailyPnlToday,
 } from "./daily-pnl";
+import {
+  buildWeeklyShortlistReport,
+  shouldSendWeeklyShortlist,
+} from "@/lib/export/weekly-shortlist";
 import { applyMisSquareOffOnly } from "./mis-square-off";
 import { persistPaperStateAdmin } from "./paper-persist";
 import { persistNewPaperTradesAsOrdersAdmin } from "@/lib/portfolio/paper-order-record-server";
@@ -90,6 +94,95 @@ export async function runDailyPnlForAllUsers(): Promise<ComplianceRunResult> {
         userId,
         action: "emailed",
         detail: `today ${report.todayRealizedPnl}`,
+      });
+    } catch (e) {
+      results.push({
+        userId,
+        action: "error",
+        detail: e instanceof Error ? e.message : "error",
+      });
+    }
+  }
+
+  return { ok: true, ranAt, usersProcessed: userIds.length, results };
+}
+
+export async function runWeeklyShortlistForAllUsers(): Promise<ComplianceRunResult> {
+  const ranAt = new Date().toISOString();
+  const now = new Date();
+  if (!isFirebaseAdminConfigured()) {
+    return {
+      ok: false,
+      ranAt,
+      usersProcessed: 0,
+      results: [],
+      error: "FIREBASE_SERVICE_ACCOUNT_JSON not configured",
+    };
+  }
+
+  const db = getAdminFirestore();
+  const userIds = await listStrategyUserIds(db);
+  const results: ComplianceRunResult["results"] = [];
+
+  for (const userId of userIds) {
+    try {
+      const [settings, meta] = await Promise.all([
+        loadUserSettingsAdmin(db, userId),
+        loadRunnerMetaAdmin(db, userId),
+      ]);
+
+      // Default on — only skip when explicitly disabled.
+      if (settings.notifyWeeklyShortlist === false) {
+        results.push({
+          userId,
+          action: "skipped",
+          detail: "notifyWeeklyShortlist off",
+        });
+        continue;
+      }
+
+      if (!shouldSendWeeklyShortlist(meta.lastWeeklyShortlistEmailWeekKey, now)) {
+        results.push({
+          userId,
+          action: "skipped",
+          detail: "already sent this week",
+        });
+        continue;
+      }
+
+      const report = buildWeeklyShortlistReport(
+        meta.shortlistDayRollups ?? {},
+        now
+      );
+
+      await sendWeeklyShortlistEmail(report);
+
+      await db.doc(`users/${userId}/data/strategyRunner`).set(
+        {
+          lastWeeklyShortlistEmailWeekKey: report.weekKey,
+          lastWeeklyShortlistEmailAt: ranAt,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      await appendUserAuditLogAdmin(db, userId, {
+        severity: "INFO",
+        source: "WeeklyShortlist",
+        message: `Weekly shortlist email — ${report.shortlisted.length} shortlisted, ${report.bought.length} bought, ${report.notBought.length} not bought`,
+        meta: {
+          weekKey: report.weekKey,
+          shortlisted: report.shortlisted.length,
+          bought: report.bought.length,
+          notBought: report.notBought.length,
+          scanCount: report.scanCount,
+        },
+      });
+
+      results.push({
+        userId,
+        action: "emailed",
+        detail: `${report.shortlisted.length} shortlisted / ${report.bought.length} bought`,
       });
     } catch (e) {
       results.push({

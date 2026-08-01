@@ -321,3 +321,145 @@ export async function sendDailyPnlEmail(report: DailyPnlEmailReport) {
     console.error("Failed to send daily P&L email:", error);
   }
 }
+
+export async function sendWeeklyShortlistEmail(report: {
+  weekLabel: string;
+  fromDateIST: string;
+  toDateIST: string;
+  scanCount: number;
+  buySignals: number;
+  tradesExecuted: number;
+  shortlisted: {
+    symbol: string;
+    signalCount: number;
+    boughtReason?: string;
+    skipReason?: string;
+  }[];
+  bought: { symbol: string; reason: string; days: number }[];
+  notBought: { symbol: string; signalCount: number; reason: string; days: number }[];
+  topSkipReasons: { reason: string; count: number }[];
+}) {
+  const recipientEmail = process.env.EMAIL_RECIPIENT || process.env.EMAIL_USER;
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD || !recipientEmail) {
+    return;
+  }
+
+  const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  const subject = `📊 Weekly shortlist: ${report.shortlisted.length} candidates, ${report.bought.length} bought`;
+
+  const escape = (s: string) =>
+    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+  const shortlistRows = report.shortlisted
+    .slice(0, 25)
+    .map((s) => {
+      const outcome = s.boughtReason
+        ? `<span style="color:#16a34a;font-weight:600;">Bought</span> — ${escape(s.boughtReason)}`
+        : `<span style="color:#b45309;font-weight:600;">Not bought</span> — ${escape(s.skipReason ?? "No fill")}`;
+      return `<tr>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${escape(s.symbol)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${s.signalCount}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:12px;">${outcome}</td>
+      </tr>`;
+    })
+    .join("");
+
+  const boughtRows = report.bought
+    .slice(0, 20)
+    .map(
+      (b) => `<tr>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${escape(b.symbol)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:12px;">${escape(b.reason)}</td>
+      </tr>`
+    )
+    .join("");
+
+  const notBoughtRows = report.notBought
+    .slice(0, 20)
+    .map(
+      (n) => `<tr>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${escape(n.symbol)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${n.signalCount}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:12px;">${escape(n.reason)}</td>
+      </tr>`
+    )
+    .join("");
+
+  const skipRows = report.topSkipReasons
+    .map(
+      (r) => `<tr>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">${escape(r.reason)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${r.count}</td>
+      </tr>`
+    )
+    .join("");
+
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:680px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
+      <div style="background:#1d4ed8;padding:16px 24px;">
+        <h2 style="margin:0;color:#fff;font-size:18px;">Weekly paper shortlist</h2>
+        <p style="margin:8px 0 0;font-size:13px;color:#dbeafe;">${escape(report.weekLabel)} · ${escape(now)} IST</p>
+      </div>
+      <div style="padding:20px;">
+        <p style="margin:0 0 12px;font-size:14px;color:#374151;">
+          <strong>${report.scanCount}</strong> scans ·
+          <strong>${report.buySignals}</strong> BUY signals ·
+          <strong>${report.tradesExecuted}</strong> trades executed ·
+          <strong>${report.shortlisted.length}</strong> unique shortlisted symbols
+        </p>
+
+        <h3 style="margin:16px 0 8px;font-size:15px;color:#111827;">Shortlisted symbols</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="color:#6b7280;text-align:left;">
+            <th style="padding:6px 8px;">Symbol</th>
+            <th style="padding:6px 8px;text-align:right;">Signals</th>
+            <th style="padding:6px 8px;">Outcome</th>
+          </tr></thead>
+          <tbody>${shortlistRows || `<tr><td colspan="3" style="padding:8px;color:#6b7280;">No shortlisted BUY candidates this week.</td></tr>`}</tbody>
+        </table>
+
+        <h3 style="margin:20px 0 8px;font-size:15px;color:#111827;">Why bought</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="color:#6b7280;text-align:left;">
+            <th style="padding:6px 8px;">Symbol</th><th style="padding:6px 8px;">Reason</th>
+          </tr></thead>
+          <tbody>${boughtRows || `<tr><td colspan="2" style="padding:8px;color:#6b7280;">No paper buys this week.</td></tr>`}</tbody>
+        </table>
+
+        <h3 style="margin:20px 0 8px;font-size:15px;color:#111827;">Why not bought</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="color:#6b7280;text-align:left;">
+            <th style="padding:6px 8px;">Symbol</th>
+            <th style="padding:6px 8px;text-align:right;">Signals</th>
+            <th style="padding:6px 8px;">Reason</th>
+          </tr></thead>
+          <tbody>${notBoughtRows || `<tr><td colspan="3" style="padding:8px;color:#6b7280;">Every shortlisted symbol was filled (or none were shortlisted).</td></tr>`}</tbody>
+        </table>
+
+        <h3 style="margin:20px 0 8px;font-size:15px;color:#111827;">Top skip reasons</h3>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead><tr style="color:#6b7280;text-align:left;">
+            <th style="padding:6px 8px;">Reason</th>
+            <th style="padding:6px 8px;text-align:right;">Count</th>
+          </tr></thead>
+          <tbody>${skipRows || `<tr><td colspan="2" style="padding:8px;color:#6b7280;">No skip reasons recorded.</td></tr>`}</tbody>
+        </table>
+
+        <p style="margin:16px 0 0;font-size:12px;color:#6b7280;">
+          AlgoTrader · Settings → Notifications → Weekly shortlist email
+        </p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"AlgoTrader" <${process.env.EMAIL_USER}>`,
+      to: recipientEmail,
+      subject,
+      html,
+    });
+  } catch (error) {
+    console.error("Failed to send weekly shortlist email:", error);
+  }
+}

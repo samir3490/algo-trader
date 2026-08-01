@@ -84,6 +84,7 @@ interface AppSettings {
     riskExits: boolean;
     strategySignals: boolean;
     pnlAlerts: boolean;
+    weeklyShortlist: boolean;
   };
   riskManagement: {
     stopLossPercent: number;
@@ -235,6 +236,7 @@ const defaultSettings: AppSettings = {
     riskExits: true,
     strategySignals: false,
     pnlAlerts: false,
+    weeklyShortlist: true,
   },
   riskManagement: {
     stopLossPercent: 2,
@@ -317,6 +319,7 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       riskExits: fs.notifyRiskExits !== false,
       strategySignals: fs.notifySignals === true,
       pnlAlerts: fs.notifyPnl,
+      weeklyShortlist: fs.notifyWeeklyShortlist !== false,
     },
     riskManagement: {
       stopLossPercent: fs.stopLossPercent,
@@ -437,6 +440,7 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     notifyRiskExits: s.notifications.riskExits,
     notifySignals: s.notifications.strategySignals,
     notifyPnl: s.notifications.pnlAlerts,
+    notifyWeeklyShortlist: s.notifications.weeklyShortlist,
   };
 }
 
@@ -2194,6 +2198,11 @@ function SettingsContent() {
               key: "pnlAlerts" as const,
               label: "Daily P&L email",
               desc: "End-of-day paper portfolio summary after market close (15:35 IST)",
+            },
+            {
+              key: "weeklyShortlist" as const,
+              label: "Weekly shortlist email",
+              desc: "Sunday summary of shortlisted shares — why bought and why not (18:00 IST)",
             },
           ].map((item) => (
             <div

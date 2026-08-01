@@ -1,0 +1,56 @@
+# Weekly shortlist email — Sunday ~18:00 IST (12:30 UTC).
+# Backup for Vercel Hobby (once/day cron limit). Same CRON_SECRET as strategy cron.
+#
+# Required: GitHub secret CRON_SECRET (match Vercel)
+# Optional: variable APP_URL
+
+name: Weekly shortlist email
+
+on:
+  schedule:
+    - cron: "30 12 * * 0"
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check required secrets
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET is not set in GitHub Actions secrets."
+            exit 1
+          fi
+
+      - name: Call Vercel weekly shortlist cron API
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          BASE="${APP_URL:-https://algo-trader-umber.vercel.app}"
+          URL="${BASE}/api/cron/weekly-shortlist"
+          SECRET="$(printf '%s' "$CRON_SECRET" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          echo "GET ${URL}"
+
+          HTTP=$(curl -sS -w "%{http_code}" -o /tmp/cron-body.json \
+            -H "Authorization: Bearer ${SECRET}" \
+            "${URL}")
+          echo "HTTP ${HTTP}"
+          cat /tmp/cron-body.json | head -c 2000 || true
+          echo ""
+
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::Cron API returned HTTP ${HTTP}"
+            exit 1
+          fi
+
+          {
+            echo "## Weekly shortlist cron OK"
+            echo ""
+            echo '```json'
+            head -c 1500 /tmp/cron-body.json
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

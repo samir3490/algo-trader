@@ -182,6 +182,24 @@ export interface StrategyRunnerMeta {
   /** IST date (YYYY-MM-DD) when daily P&L email was last sent. */
   lastDailyPnlEmailDate?: string;
   lastDailyPnlEmailAt?: string;
+  /** Monday week key (YYYY-MM-DD) when weekly shortlist email was last sent. */
+  lastWeeklyShortlistEmailWeekKey?: string;
+  lastWeeklyShortlistEmailAt?: string;
+  /** Per-IST-day shortlist rollups (kept ~14 days) for weekly digest. */
+  shortlistDayRollups?: Record<
+    string,
+    {
+      dateIST: string;
+      lastRanAt: string;
+      scanCount: number;
+      buySignals: number;
+      tradesExecuted: number;
+      ranked: { symbol: string; signalCount: number }[];
+      bought: { symbol: string; reason: string }[];
+      notBought: { symbol: string; signalCount: number; reason: string }[];
+      skipReasonTotals: Record<string, number>;
+    }
+  >;
   lastScanSummary?: {
     ranAt: string;
     scanned: number;
@@ -363,6 +381,8 @@ export interface AppSettings {
   notifyRiskExits: boolean;
   notifySignals: boolean;
   notifyPnl: boolean;
+  /** Weekly shortlist digest (bought vs not bought). Default on. */
+  notifyWeeklyShortlist: boolean;
   /** Minutes before same symbol can be bought after a sell (default 4h). */
   rebuyCooldownMinutes: number;
   /** Max complete buy→sell cycles per symbol per day. */
@@ -455,6 +475,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifyRiskExits: true,
   notifySignals: false,
   notifyPnl: false,
+  notifyWeeklyShortlist: true,
   rebuyCooldownMinutes: 0,
   maxRoundTripsPerSymbolPerDay: 0,
   noSameDayRebuyAfterSell: false,
