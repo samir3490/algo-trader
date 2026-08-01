@@ -81,9 +81,11 @@ function rankDrivers(quotes: MarketQuoteResult[]): {
 }
 
 export async function fetchSectorPerformance(
-  timeframe: SectorTimeframe = "1d"
+  timeframe: SectorTimeframe = "1d",
+  options?: { includeDrivers?: boolean }
 ): Promise<SectorPerformancePayload> {
-  const cacheKey = timeframe;
+  const includeDrivers = options?.includeDrivers !== false;
+  const cacheKey = `${timeframe}:${includeDrivers ? "full" : "index"}`;
   const now = Date.now();
   const ttl = isMarketOpen() ? CACHE_TTL_OPEN_MS : CACHE_TTL_CLOSED_MS;
 
@@ -91,20 +93,20 @@ export async function fetchSectorPerformance(
     return cache.data;
   }
 
-  const [sectorQuotes, stockQuotes] = await Promise.all([
-    mapConcurrent(NIFTY_SECTORS, async (sector) => {
-      const quote = await fetchYahooQuote(sector.yahooSymbol, "NSE");
-      return { sector, quote };
-    }),
-    mapConcurrent(TOP100_SYMBOLS, async (symbol) => {
+  const sectorQuotes = await mapConcurrent(NIFTY_SECTORS, async (sector) => {
+    const quote = await fetchYahooQuote(sector.yahooSymbol, "NSE");
+    return { sector, quote };
+  });
+
+  let quotesBySymbol = new Map<string, MarketQuoteResult>();
+  if (includeDrivers) {
+    const stockQuotes = await mapConcurrent(TOP100_SYMBOLS, async (symbol) => {
       const quote = await fetchYahooQuote(symbol, "NSE");
       return { symbol, quote };
-    }),
-  ]);
-
-  const quotesBySymbol = new Map<string, MarketQuoteResult>();
-  for (const { symbol, quote } of stockQuotes) {
-    if (quote) quotesBySymbol.set(symbol, quote);
+    });
+    for (const { symbol, quote } of stockQuotes) {
+      if (quote) quotesBySymbol.set(symbol, quote);
+    }
   }
 
   const rows: SectorPerformanceRow[] = [];
@@ -112,12 +114,15 @@ export async function fetchSectorPerformance(
   for (const { sector, quote } of sectorQuotes) {
     if (!quote) continue;
 
-    const sectorSymbols = getSymbolsForSector(sector.id);
-    const sectorStockQuotes = sectorSymbols
-      .map((sym) => quotesBySymbol.get(sym))
-      .filter((q): q is MarketQuoteResult => q != null);
-
-    const { drivers, draggers } = rankDrivers(sectorStockQuotes);
+    let drivers: SectorStockDriver[] = [];
+    let draggers: SectorStockDriver[] = [];
+    if (includeDrivers) {
+      const sectorSymbols = getSymbolsForSector(sector.id);
+      const sectorStockQuotes = sectorSymbols
+        .map((sym) => quotesBySymbol.get(sym))
+        .filter((q): q is MarketQuoteResult => q != null);
+      ({ drivers, draggers } = rankDrivers(sectorStockQuotes));
+    }
 
     rows.push({
       id: sector.id,

@@ -68,6 +68,12 @@ export interface StrategyOpinion {
   signalStrategyNames?: string[];
   /** Sum of confidence from all strategies signaling BUY/SELL on this symbol. */
   confidenceSum?: number;
+  /** Sector index change % (same-day) when sector bias is applied. */
+  sectorChangePercent?: number;
+  /** True when the symbol's sector is among today's leaders. */
+  sectorIsStrong?: boolean;
+  sectorName?: string;
+  sectorRank?: number;
 }
 
 export type PortfolioAction = "BUY" | "SELL" | "HOLD" | "SKIP";
@@ -92,6 +98,10 @@ export interface PortfolioDecision {
   signalStrategyNames?: string[];
   scanConfidence?: number;
   confidenceSum?: number;
+  sectorChangePercent?: number;
+  sectorIsStrong?: boolean;
+  sectorName?: string;
+  sectorRank?: number;
 }
 
 export interface StrategyConflict {

@@ -9,6 +9,68 @@ const transporter = nodemailer.createTransport({
   },
 });
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/** Stacked key/value block — readable on mobile without horizontal scroll. */
+function detailBlock(rows: { label: string; value: string; color?: string }[]): string {
+  return rows
+    .map(
+      (r) => `<div style="padding:10px 0;border-bottom:1px solid #e5e7eb;">
+      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.03em;margin-bottom:4px;">${escapeHtml(r.label)}</div>
+      <div style="font-size:14px;color:${r.color ?? "#111827"};font-weight:600;line-height:1.45;word-break:break-word;">${escapeHtml(r.value)}</div>
+    </div>`
+    )
+    .join("");
+}
+
+function tradeCard(options: {
+  symbol: string;
+  exchange: string;
+  side: string;
+  sideColor: string;
+  quantity: number;
+  price: number;
+  status: string;
+  strategyName?: string;
+  reason?: string;
+}): string {
+  const rows: { label: string; value: string; color?: string }[] = [
+    {
+      label: "Symbol",
+      value: `${options.exchange}:${options.symbol}`,
+    },
+    { label: "Side", value: options.side, color: options.sideColor },
+    { label: "Quantity", value: String(options.quantity) },
+    { label: "Price", value: `₹${options.price.toFixed(2)}` },
+    {
+      label: "Value",
+      value: `₹${(options.quantity * options.price).toLocaleString("en-IN", {
+        minimumFractionDigits: 2,
+      })}`,
+    },
+  ];
+  if (options.strategyName) {
+    rows.push({ label: "Strategy", value: options.strategyName });
+  }
+  rows.push({
+    label: "Reason",
+    value: options.reason?.trim() || options.status,
+  });
+  if (options.reason && options.status && options.reason !== options.status) {
+    rows.push({ label: "Status", value: options.status });
+  }
+
+  return `<div style="margin:0 0 12px;padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;">
+    ${detailBlock(rows)}
+  </div>`;
+}
+
 export interface OrderEmailParams {
   mode: "LIVE" | "PAPER";
   symbol: string;
@@ -22,6 +84,8 @@ export interface OrderEmailParams {
   status?: string;
   accountId?: string;
   strategyName?: string;
+  /** Detailed why (strategy + sector performance). */
+  reason?: string;
 }
 
 export interface ScanDigestLine {
@@ -32,6 +96,7 @@ export interface ScanDigestLine {
   price: number;
   status: string;
   strategyName?: string;
+  reason?: string;
 }
 
 export async function sendOrderEmail(params: OrderEmailParams) {
@@ -54,57 +119,49 @@ export async function sendOrderEmail(params: OrderEmailParams) {
     orderId,
     status,
     accountId,
+    strategyName,
+    reason,
   } = params;
 
   const total = quantity * price;
-  const modeLabel = mode === "LIVE" ? "🔴 LIVE" : "📝 Paper";
-  const sideColor = side === "BUY" ? "#22c55e" : "#ef4444";
+  const modeLabel = mode === "LIVE" ? "LIVE" : "Paper";
+  const sideColor = side === "BUY" ? "#16a34a" : "#dc2626";
   const sideEmoji = side === "BUY" ? "🟢" : "🔴";
   const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
 
-  const subject = `${sideEmoji} ${mode} ${side} Order: ${symbol} x${quantity} @ ₹${price.toFixed(2)}`;
+  const subject = `${sideEmoji} ${mode} ${side}: ${symbol} x${quantity} @ ₹${price.toFixed(2)}`;
+
+  const rows: { label: string; value: string; color?: string }[] = [
+    { label: "Symbol", value: `${exchange}:${symbol}` },
+    { label: "Side", value: side, color: sideColor },
+    { label: "Quantity", value: String(quantity) },
+    { label: "Price", value: `₹${price.toFixed(2)}` },
+    {
+      label: "Total value",
+      value: `₹${total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+    },
+    { label: "Order type", value: orderType },
+    { label: "Product", value: product },
+  ];
+  if (strategyName) rows.push({ label: "Strategy", value: strategyName });
+  if (orderId) rows.push({ label: "Order ID", value: orderId });
+  if (accountId) rows.push({ label: "Account", value: accountId });
+  if (reason || status) {
+    rows.push({
+      label: "Reason",
+      value: (reason || status)!,
+    });
+  }
 
   const html = `
-    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 500px; margin: 0 auto; background: #ffffff; color: #1a1a1a; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb;">
-      <div style="background: ${sideColor}; padding: 16px 24px;">
-        <h2 style="margin: 0; color: white; font-size: 18px;">${modeLabel} — ${side} Order Placed</h2>
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:100%;width:100%;margin:0 auto;background:#ffffff;color:#1a1a1a;border-radius:12px;overflow:hidden;border:1px solid #e5e7eb;box-sizing:border-box;">
+      <div style="background:${sideColor};padding:14px 16px;">
+        <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">${modeLabel} — ${side} order</h2>
       </div>
-      <div style="padding: 24px;">
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 8px 0; color: #595959; font-size: 14px;">Symbol</td>
-            <td style="padding: 8px 0; color: #1a1a1a; font-size: 14px; text-align: right; font-weight: 600;">${exchange}:${symbol}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #595959; font-size: 14px;">Side</td>
-            <td style="padding: 8px 0; color: ${sideColor}; font-size: 14px; text-align: right; font-weight: 600;">${side}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #595959; font-size: 14px;">Quantity</td>
-            <td style="padding: 8px 0; color: #1a1a1a; font-size: 14px; text-align: right;">${quantity}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #595959; font-size: 14px;">Price</td>
-            <td style="padding: 8px 0; color: #1a1a1a; font-size: 14px; text-align: right;">₹${price.toFixed(2)}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #595959; font-size: 14px;">Total Value</td>
-            <td style="padding: 8px 0; color: #1a1a1a; font-size: 16px; text-align: right; font-weight: 700;">₹${total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #595959; font-size: 14px;">Order Type</td>
-            <td style="padding: 8px 0; color: #1a1a1a; font-size: 14px; text-align: right;">${orderType}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px 0; color: #595959; font-size: 14px;">Product</td>
-            <td style="padding: 8px 0; color: #1a1a1a; font-size: 14px; text-align: right;">${product}</td>
-          </tr>
-          ${orderId ? `<tr><td style="padding: 8px 0; color: #595959; font-size: 14px;">Order ID</td><td style="padding: 8px 0; color: #1a1a1a; font-size: 14px; text-align: right;">${orderId}</td></tr>` : ""}
-          ${status ? `<tr><td style="padding: 8px 0; color: #595959; font-size: 14px;">Status</td><td style="padding: 8px 0; color: #1a1a1a; font-size: 14px; text-align: right;">${status}</td></tr>` : ""}
-          ${accountId ? `<tr><td style="padding: 8px 0; color: #595959; font-size: 14px;">Account</td><td style="padding: 8px 0; color: #1a1a1a; font-size: 14px; text-align: right;">${accountId}</td></tr>` : ""}
-        </table>
-        <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e5e7eb; color: #595959; font-size: 12px;">
-          ${now} IST • AlgoTrader
+      <div style="padding:12px 16px;box-sizing:border-box;">
+        ${detailBlock(rows)}
+        <div style="margin-top:14px;color:#6b7280;font-size:12px;line-height:1.4;">
+          ${escapeHtml(now)} IST · AlgoTrader
         </div>
       </div>
     </div>
@@ -125,7 +182,7 @@ export async function sendOrderEmail(params: OrderEmailParams) {
 /** Single email summarizing one strategy scan (avoids dozens of separate emails). */
 export async function sendScanDigestEmail(
   lines: ScanDigestLine[],
-  options?: { sizingSummary?: string }
+  options?: { sizingSummary?: string; sectorSummary?: string }
 ) {
   const recipientEmail = process.env.EMAIL_RECIPIENT || process.env.EMAIL_USER;
   if (
@@ -140,41 +197,42 @@ export async function sendScanDigestEmail(
   const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
   const { executed, risk, skipped } = countScanDigestLines(lines);
 
-  const rows = lines
-    .map((l) => {
-      const sideColor = l.side === "BUY" ? "#22c55e" : "#ef4444";
-      return `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">${l.exchange}:${l.symbol}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;color:${sideColor};font-weight:600;">${l.side}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${l.quantity}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">₹${l.price.toFixed(2)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:12px;">${l.status}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:11px;color:#595959;">${l.strategyName ?? ""}</td>
-      </tr>`;
-    })
+  const cards = lines
+    .map((l) =>
+      tradeCard({
+        symbol: l.symbol,
+        exchange: l.exchange,
+        side: l.side,
+        sideColor: l.side === "BUY" ? "#16a34a" : "#dc2626",
+        quantity: l.quantity,
+        price: l.price,
+        status: l.status,
+        strategyName: l.strategyName,
+        reason: l.reason,
+      })
+    )
     .join("");
 
   const subject = `📊 Strategy scan: ${executed} trade${executed !== 1 ? "s" : ""}${risk ? `, ${risk} risk exit` : ""}${skipped ? `, ${skipped} skipped` : ""}`;
 
-  const sizingBanner = options?.sizingSummary
-    ? `<p style="margin:0 0 12px;padding:10px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:12px;color:#0c4a6e;"><strong>Position sizing:</strong> ${options.sizingSummary}</p>`
-    : "";
+  const banners = [
+    options?.sectorSummary
+      ? `<p style="margin:0 0 10px;padding:10px 12px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;font-size:13px;color:#065f46;line-height:1.45;word-break:break-word;"><strong>Sectors:</strong> ${escapeHtml(options.sectorSummary)}</p>`
+      : "",
+    options?.sizingSummary
+      ? `<p style="margin:0 0 12px;padding:10px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:12px;color:#0c4a6e;line-height:1.45;word-break:break-word;"><strong>Sizing:</strong> ${escapeHtml(options.sizingSummary)}</p>`
+      : "",
+  ].join("");
 
   const html = `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:640px;margin:0 auto;background:#ffffff;color:#1a1a1a;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-      <div style="background:#3b82f6;padding:16px 24px;">
-        <h2 style="margin:0;color:white;font-size:18px;">Strategy scan summary</h2>
-        <p style="margin:8px 0 0;font-size:13px;color:#dbeafe;">${now} IST · ${lines.length} event(s)</p>
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:100%;width:100%;margin:0 auto;background:#ffffff;color:#1a1a1a;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-sizing:border-box;">
+      <div style="background:#2563eb;padding:14px 16px;">
+        <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">Strategy scan summary</h2>
+        <p style="margin:8px 0 0;font-size:13px;color:#dbeafe;line-height:1.4;">${escapeHtml(now)} IST · ${lines.length} event(s)</p>
       </div>
-      <div style="padding:16px;overflow-x:auto;">
-        ${sizingBanner}
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead><tr style="color:#595959;text-align:left;">
-            <th style="padding:6px 8px;">Symbol</th><th>Side</th><th style="text-align:right;">Qty</th>
-            <th style="text-align:right;">Price</th><th>Status</th><th>Strategy</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
+      <div style="padding:14px 16px;box-sizing:border-box;">
+        ${banners}
+        ${cards}
       </div>
     </div>
   `;
@@ -218,27 +276,21 @@ export async function sendHealthAlertEmail(params: {
           ? "📉"
           : "⚠️";
 
-  const detailRows = Object.entries(params.details ?? {})
-    .map(
-      ([k, v]) =>
-        `<tr><td style="padding:6px 8px;color:#595959;font-size:13px;">${k}</td><td style="padding:6px 8px;text-align:right;font-size:13px;">${v}</td></tr>`
-    )
-    .join("");
+  const detailRows = Object.entries(params.details ?? {}).map(([k, v]) => ({
+    label: k,
+    value: String(v),
+  }));
 
   const subject = `${emoji} AlgoTrader health: ${params.title}`;
   const html = `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-      <div style="background:#dc2626;padding:16px 24px;">
-        <h2 style="margin:0;color:#fff;font-size:17px;">${params.title}</h2>
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:100%;width:100%;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-sizing:border-box;">
+      <div style="background:#dc2626;padding:14px 16px;">
+        <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">${escapeHtml(params.title)}</h2>
       </div>
-      <div style="padding:20px 24px;color:#1a1a1a;">
-        <p style="margin:0 0 16px;font-size:14px;line-height:1.5;">${params.message}</p>
-        ${
-          detailRows
-            ? `<table style="width:100%;border-collapse:collapse;">${detailRows}</table>`
-            : ""
-        }
-        <p style="margin:16px 0 0;font-size:12px;color:#595959;">${now} IST · Check Dashboard → Paper trading health</p>
+      <div style="padding:14px 16px;color:#1a1a1a;box-sizing:border-box;">
+        <p style="margin:0 0 12px;font-size:14px;line-height:1.5;word-break:break-word;">${escapeHtml(params.message)}</p>
+        ${detailRows.length ? detailBlock(detailRows) : ""}
+        <p style="margin:16px 0 0;font-size:12px;color:#6b7280;">${escapeHtml(now)} IST · Check Dashboard → Paper trading health</p>
       </div>
     </div>
   `;
@@ -278,34 +330,54 @@ export async function sendDailyPnlEmail(report: DailyPnlEmailReport) {
   }
 
   const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-  const todayColor = report.todayRealizedPnl >= 0 ? "#22c55e" : "#ef4444";
-  const allTimeColor = report.allTimePnl >= 0 ? "#22c55e" : "#ef4444";
+  const todayColor = report.todayRealizedPnl >= 0 ? "#16a34a" : "#dc2626";
+  const allTimeColor = report.allTimePnl >= 0 ? "#16a34a" : "#dc2626";
   const todaySign = report.todayRealizedPnl >= 0 ? "+" : "";
   const allTimeSign = report.allTimePnl >= 0 ? "+" : "";
 
   const subject = `📊 Daily P&L ${report.dateIST}: ${todaySign}₹${report.todayRealizedPnl.toLocaleString("en-IN")} today`;
 
-  const row = (label: string, value: string, color = "#1a1a1a") =>
-    `<tr><td style="padding:8px 0;color:#595959;font-size:14px;">${label}</td><td style="padding:8px 0;color:${color};font-size:14px;text-align:right;font-weight:600;">${value}</td></tr>`;
-
   const html = `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:520px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-      <div style="background:#1e3a5f;padding:16px 24px;">
-        <h2 style="margin:0;color:#fff;font-size:18px;">Paper trading — daily summary</h2>
-        <p style="margin:8px 0 0;font-size:13px;color:#bfdbfe;">${report.dateIST} · ${now} IST</p>
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:100%;width:100%;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-sizing:border-box;">
+      <div style="background:#1e3a5f;padding:14px 16px;">
+        <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">Paper trading — daily summary</h2>
+        <p style="margin:8px 0 0;font-size:13px;color:#bfdbfe;">${escapeHtml(report.dateIST)} · ${escapeHtml(now)} IST</p>
       </div>
-      <div style="padding:24px;">
-        <table style="width:100%;border-collapse:collapse;">
-          ${row("Today's realized P&L", `${todaySign}₹${report.todayRealizedPnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`, todayColor)}
-          ${row("All-time P&L", `${allTimeSign}₹${report.allTimePnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })} (${report.allTimePnlPercent.toFixed(2)}%)`, allTimeColor)}
-          ${row("Portfolio value", `₹${report.portfolioValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`)}
-          ${row("Cash balance", `₹${report.cashBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`)}
-          ${row("Invested (cost)", `₹${report.invested.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`)}
-          ${row("Unrealized P&L", `₹${report.unrealizedPnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`)}
-          ${row("Trades today", `${report.todayTradeCount} (${report.buysToday} buy, ${report.sellsToday} sell)`)}
-          ${row("Open positions", String(report.openPositions))}
-        </table>
-        <p style="margin:16px 0 0;font-size:12px;color:#595959;">AlgoTrader paper portfolio · Enable in Settings → Notifications → Daily P&L email</p>
+      <div style="padding:14px 16px;box-sizing:border-box;">
+        ${detailBlock([
+          {
+            label: "Today's realized P&L",
+            value: `${todaySign}₹${report.todayRealizedPnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+            color: todayColor,
+          },
+          {
+            label: "All-time P&L",
+            value: `${allTimeSign}₹${report.allTimePnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })} (${report.allTimePnlPercent.toFixed(2)}%)`,
+            color: allTimeColor,
+          },
+          {
+            label: "Portfolio value",
+            value: `₹${report.portfolioValue.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+          },
+          {
+            label: "Cash remaining",
+            value: `₹${report.cashBalance.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+          },
+          {
+            label: "Invested (cost)",
+            value: `₹${report.invested.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+          },
+          {
+            label: "Unrealized P&L",
+            value: `₹${report.unrealizedPnl.toLocaleString("en-IN", { minimumFractionDigits: 2 })}`,
+          },
+          {
+            label: "Trades today",
+            value: `${report.todayTradeCount} (${report.buysToday} buy, ${report.sellsToday} sell)`,
+          },
+          { label: "Open positions", value: String(report.openPositions) },
+        ])}
+        <p style="margin:16px 0 0;font-size:12px;color:#6b7280;line-height:1.4;">AlgoTrader paper portfolio · Settings → Notifications → Daily P&L email</p>
       </div>
     </div>
   `;
@@ -320,6 +392,13 @@ export async function sendDailyPnlEmail(report: DailyPnlEmailReport) {
   } catch (error) {
     console.error("Failed to send daily P&L email:", error);
   }
+}
+
+function stackedItemCard(title: string, body: string, accent?: string): string {
+  return `<div style="margin:0 0 10px;padding:12px 14px;background:#f9fafb;border:1px solid #e5e7eb;border-radius:10px;border-left:4px solid ${accent ?? "#2563eb"};">
+    <div style="font-size:15px;font-weight:700;color:#111827;margin-bottom:6px;word-break:break-word;">${escapeHtml(title)}</div>
+    <div style="font-size:13px;color:#374151;line-height:1.5;word-break:break-word;white-space:pre-wrap;">${escapeHtml(body)}</div>
+  </div>`;
 }
 
 export async function sendWeeklyShortlistEmail(report: {
@@ -347,105 +426,67 @@ export async function sendWeeklyShortlistEmail(report: {
   const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
   const subject = `📊 Weekly shortlist: ${report.shortlisted.length} candidates, ${report.bought.length} bought`;
 
-  const escape = (s: string) =>
-    s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  const shortlistRows = report.shortlisted
+  const shortlistCards = report.shortlisted
     .slice(0, 25)
     .map((s) => {
       const outcome = s.boughtReason
-        ? `<span style="color:#16a34a;font-weight:600;">Bought</span> — ${escape(s.boughtReason)}`
-        : `<span style="color:#b45309;font-weight:600;">Not bought</span> — ${escape(s.skipReason ?? "No fill")}`;
-      return `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${escape(s.symbol)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${s.signalCount}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:12px;">${outcome}</td>
-      </tr>`;
+        ? `Bought — ${s.boughtReason}`
+        : `Not bought — ${s.skipReason ?? "No fill"}`;
+      return stackedItemCard(
+        s.symbol,
+        `Signals: ${s.signalCount}\n${outcome}`,
+        s.boughtReason ? "#16a34a" : "#d97706"
+      );
     })
     .join("");
 
-  const boughtRows = report.bought
+  const boughtCards = report.bought
     .slice(0, 20)
-    .map(
-      (b) => `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${escape(b.symbol)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:12px;">${escape(b.reason)}</td>
-      </tr>`
+    .map((b) => stackedItemCard(b.symbol, b.reason, "#16a34a"))
+    .join("");
+
+  const notBoughtCards = report.notBought
+    .slice(0, 20)
+    .map((n) =>
+      stackedItemCard(
+        n.symbol,
+        `Signals: ${n.signalCount}\n${n.reason}`,
+        "#d97706"
+      )
     )
     .join("");
 
-  const notBoughtRows = report.notBought
-    .slice(0, 20)
-    .map(
-      (n) => `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-weight:600;">${escape(n.symbol)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;">${n.signalCount}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-size:12px;">${escape(n.reason)}</td>
-      </tr>`
-    )
-    .join("");
-
-  const skipRows = report.topSkipReasons
-    .map(
-      (r) => `<tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;">${escape(r.reason)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;font-weight:600;">${r.count}</td>
-      </tr>`
-    )
+  const skipCards = report.topSkipReasons
+    .map((r) => stackedItemCard(r.reason, `Count: ${r.count}`, "#6b7280"))
     .join("");
 
   const html = `
-    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:680px;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;">
-      <div style="background:#1d4ed8;padding:16px 24px;">
-        <h2 style="margin:0;color:#fff;font-size:18px;">Weekly paper shortlist</h2>
-        <p style="margin:8px 0 0;font-size:13px;color:#dbeafe;">${escape(report.weekLabel)} · ${escape(now)} IST</p>
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:100%;width:100%;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-sizing:border-box;">
+      <div style="background:#1d4ed8;padding:14px 16px;">
+        <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">Weekly paper shortlist</h2>
+        <p style="margin:8px 0 0;font-size:13px;color:#dbeafe;line-height:1.4;">${escapeHtml(report.weekLabel)} · ${escapeHtml(now)} IST</p>
       </div>
-      <div style="padding:20px;">
-        <p style="margin:0 0 12px;font-size:14px;color:#374151;">
+      <div style="padding:14px 16px;box-sizing:border-box;">
+        <p style="margin:0 0 14px;font-size:14px;color:#374151;line-height:1.5;">
           <strong>${report.scanCount}</strong> scans ·
           <strong>${report.buySignals}</strong> BUY signals ·
-          <strong>${report.tradesExecuted}</strong> trades executed ·
-          <strong>${report.shortlisted.length}</strong> unique shortlisted symbols
+          <strong>${report.tradesExecuted}</strong> trades ·
+          <strong>${report.shortlisted.length}</strong> shortlisted
         </p>
 
-        <h3 style="margin:16px 0 8px;font-size:15px;color:#111827;">Shortlisted symbols</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead><tr style="color:#6b7280;text-align:left;">
-            <th style="padding:6px 8px;">Symbol</th>
-            <th style="padding:6px 8px;text-align:right;">Signals</th>
-            <th style="padding:6px 8px;">Outcome</th>
-          </tr></thead>
-          <tbody>${shortlistRows || `<tr><td colspan="3" style="padding:8px;color:#6b7280;">No shortlisted BUY candidates this week.</td></tr>`}</tbody>
-        </table>
+        <h3 style="margin:8px 0 10px;font-size:15px;color:#111827;">Shortlisted</h3>
+        ${shortlistCards || `<p style="color:#6b7280;font-size:13px;">No shortlisted BUY candidates this week.</p>`}
 
-        <h3 style="margin:20px 0 8px;font-size:15px;color:#111827;">Why bought</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead><tr style="color:#6b7280;text-align:left;">
-            <th style="padding:6px 8px;">Symbol</th><th style="padding:6px 8px;">Reason</th>
-          </tr></thead>
-          <tbody>${boughtRows || `<tr><td colspan="2" style="padding:8px;color:#6b7280;">No paper buys this week.</td></tr>`}</tbody>
-        </table>
+        <h3 style="margin:18px 0 10px;font-size:15px;color:#111827;">Why bought</h3>
+        ${boughtCards || `<p style="color:#6b7280;font-size:13px;">No paper buys this week.</p>`}
 
-        <h3 style="margin:20px 0 8px;font-size:15px;color:#111827;">Why not bought</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead><tr style="color:#6b7280;text-align:left;">
-            <th style="padding:6px 8px;">Symbol</th>
-            <th style="padding:6px 8px;text-align:right;">Signals</th>
-            <th style="padding:6px 8px;">Reason</th>
-          </tr></thead>
-          <tbody>${notBoughtRows || `<tr><td colspan="3" style="padding:8px;color:#6b7280;">Every shortlisted symbol was filled (or none were shortlisted).</td></tr>`}</tbody>
-        </table>
+        <h3 style="margin:18px 0 10px;font-size:15px;color:#111827;">Why not bought</h3>
+        ${notBoughtCards || `<p style="color:#6b7280;font-size:13px;">Every shortlisted symbol was filled (or none were shortlisted).</p>`}
 
-        <h3 style="margin:20px 0 8px;font-size:15px;color:#111827;">Top skip reasons</h3>
-        <table style="width:100%;border-collapse:collapse;font-size:13px;">
-          <thead><tr style="color:#6b7280;text-align:left;">
-            <th style="padding:6px 8px;">Reason</th>
-            <th style="padding:6px 8px;text-align:right;">Count</th>
-          </tr></thead>
-          <tbody>${skipRows || `<tr><td colspan="2" style="padding:8px;color:#6b7280;">No skip reasons recorded.</td></tr>`}</tbody>
-        </table>
+        <h3 style="margin:18px 0 10px;font-size:15px;color:#111827;">Top skip reasons</h3>
+        ${skipCards || `<p style="color:#6b7280;font-size:13px;">No skip reasons recorded.</p>`}
 
-        <p style="margin:16px 0 0;font-size:12px;color:#6b7280;">
+        <p style="margin:16px 0 0;font-size:12px;color:#6b7280;line-height:1.4;">
           AlgoTrader · Settings → Notifications → Weekly shortlist email
         </p>
       </div>

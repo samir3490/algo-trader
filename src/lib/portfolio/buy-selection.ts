@@ -8,17 +8,36 @@ export function effectivePaperMaxOrderValue(
   return effectivePaperOrderCap(settings);
 }
 
-/** Rank BUY candidates: strategy count, then combined confidence, then symbol. */
+/**
+ * Rank BUY candidates: strong sectors first, then sector %, signal count, confidence.
+ */
 export function compareBuyRank(
   a: Pick<
     PortfolioDecision,
-    "symbol" | "buySignalCount" | "scanConfidence"
+    | "symbol"
+    | "buySignalCount"
+    | "scanConfidence"
+    | "sectorChangePercent"
+    | "sectorIsStrong"
   >,
   b: Pick<
     PortfolioDecision,
-    "symbol" | "buySignalCount" | "scanConfidence"
+    | "symbol"
+    | "buySignalCount"
+    | "scanConfidence"
+    | "sectorChangePercent"
+    | "sectorIsStrong"
   >
 ): number {
+  const strong =
+    (b.sectorIsStrong ? 1 : 0) - (a.sectorIsStrong ? 1 : 0);
+  if (strong !== 0) return strong;
+  if (a.sectorChangePercent != null || b.sectorChangePercent != null) {
+    const sectorPct =
+      (b.sectorChangePercent ?? Number.NEGATIVE_INFINITY) -
+      (a.sectorChangePercent ?? Number.NEGATIVE_INFINITY);
+    if (sectorPct !== 0) return sectorPct;
+  }
   const strength = (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0);
   if (strength !== 0) return strength;
   const conf = (b.scanConfidence ?? 0) - (a.scanConfidence ?? 0);

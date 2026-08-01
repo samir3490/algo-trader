@@ -75,6 +75,13 @@ import {
   formatRegimeSummary,
   type RegimeSnapshot,
 } from "@/lib/strategies/regime";
+import { fetchSectorPerformance } from "@/lib/market-data/sector-performance";
+import {
+  buildSectorBiasContext,
+  formatTradeReasonWithSector,
+  lookupSectorBias,
+  type SectorBiasContext,
+} from "@/lib/portfolio/sector-bias";
 import {
   automationAsAppSettings,
   resolveAutomationSettings,
@@ -427,6 +434,29 @@ export async function runStrategiesForUser(
     }
   }
 
+  let sectorBias: SectorBiasContext | null = null;
+  try {
+    const sectorPayload = await fetchSectorPerformance("1d", {
+      includeDrivers: false,
+    });
+    sectorBias = buildSectorBiasContext(
+      sectorPayload.sectors,
+      sectorPayload.fetchedAt
+    );
+    writeSystemLog("INFO", "SectorBias", "sector_performance", {
+      summary: sectorBias.summaryLine,
+      top: sectorBias.topSectors.slice(0, 3).map((s) => ({
+        name: s.sectorName,
+        changePercent: s.changePercent,
+        rank: s.rank,
+      })),
+    });
+  } catch (e) {
+    writeSystemLog("WARN", "SectorBias", "sector_fetch_failed", {
+      message: e instanceof Error ? e.message : String(e),
+    });
+  }
+
   const typeByStrategyId = new Map<string, StrategyType>();
   const strategyParamsById = new Map<string, Record<string, number>>();
   for (const s of running) {
@@ -585,6 +615,13 @@ export async function runStrategiesForUser(
         );
         dedupe.add(executionNoBuyTodayKey(exit.symbol));
       }
+      const riskSector = lookupSectorBias(exit.symbol, sectorBias);
+      const riskReason = formatTradeReasonWithSector({
+        baseReason: `RISK EXIT — ${exit.message}`,
+        side: "SELL",
+        entry: riskSector,
+        symbol: exit.symbol,
+      });
       queueEmail(
         "risk_exit",
         {
@@ -593,7 +630,8 @@ export async function runStrategiesForUser(
           side: "SELL",
           quantity: exit.qty ?? 1,
           price: exit.price ?? 0,
-          status: `RISK EXIT — ${exit.message}`,
+          status: riskReason,
+          reason: riskReason,
         },
         {
           mode: "PAPER",
@@ -604,7 +642,8 @@ export async function runStrategiesForUser(
           price: exit.price ?? 0,
           orderType: "MARKET",
           product: userSettings.paperDefaultProduct,
-          status: `RISK EXIT — ${exit.message}`,
+          status: riskReason,
+          reason: riskReason,
         }
       );
     }
@@ -651,14 +690,19 @@ export async function runStrategiesForUser(
     todayRealizedLoss: todayRealizedLoss(paperState.trades),
   };
 
-  const rankedOpinions = rankBuyOpinions(opinions, regimeSnapshot);
+  const rankedOpinions = rankBuyOpinions(opinions, regimeSnapshot, sectorBias);
   const rankedForDisplay = rankedOpinions.map((op) => ({
     symbol: op.symbol,
     signalCount: op.buySignalCount ?? 1,
   }));
 
-  // Ranked shortlist → buy in that order (skip only symbols already held).
-  const buyQueue = buildRankedPaperBuyQueue(opinions, portfolioCtx, regimeSnapshot);
+  // Ranked shortlist → prefer strong sectors, then buy in that order.
+  const buyQueue = buildRankedPaperBuyQueue(
+    opinions,
+    portfolioCtx,
+    regimeSnapshot,
+    sectorBias
+  );
   const openPositionCount = getOpenPositions(paperState).length;
   const maxPositions = cronSettings.maxPositions ?? 25;
   diagnostics.openPositions = openPositionCount;
@@ -684,11 +728,16 @@ export async function runStrategiesForUser(
   diagnostics.buyQueueSize = rankedQueue.length;
   for (const d of buyQueue) {
     const count = d.buySignalCount ?? 1;
+    const sectorNote = d.sectorName
+      ? `${d.sectorName} ${d.sectorChangePercent != null ? `${d.sectorChangePercent >= 0 ? "+" : ""}${d.sectorChangePercent.toFixed(2)}%` : ""}`
+      : undefined;
     addScanDetail(
       diagnostics,
       "buyApproved",
       d.symbol,
-      count > 1 ? `${count} strategies` : d.ownerStrategyName
+      [count > 1 ? `${count} strategies` : d.ownerStrategyName, sectorNote]
+        .filter(Boolean)
+        .join(" · ")
     );
   }
 
@@ -812,16 +861,27 @@ export async function runStrategiesForUser(
         price: decision.price,
         balance: paperState.balance ?? INITIAL_BALANCE,
       });
+      const sectorEntry = lookupSectorBias(decision.symbol, sectorBias);
+      const detailedReason = formatTradeReasonWithSector({
+        baseReason: decision.signalReason || decision.ownerStrategyName,
+        side: "BUY",
+        entry: sectorEntry,
+        symbol: decision.symbol,
+        extra: [
+          strengthLabel,
+          sizingNote,
+          decision.sectorIsStrong === false
+            ? "Bought after stronger-sector names filled / unavailable"
+            : undefined,
+        ].filter((x): x is string => Boolean(x)),
+      });
       addScanDetail(
         diagnostics,
         "paperExec",
         decision.symbol,
-        `BUY · ${decision.ownerStrategyName} · ${sizingNote}`
+        `BUY · ${detailedReason}`
       );
-      const execStatus = [
-        strengthLabel ? `EXECUTED · ${strengthLabel}` : "EXECUTED",
-        sizingNote,
-      ].join(" · ");
+      const execStatus = `EXECUTED · ${detailedReason}`;
 
       queueEmail(
         "executed",
@@ -833,6 +893,7 @@ export async function runStrategiesForUser(
           price: decision.price,
           status: execStatus,
           strategyName: decision.ownerStrategyName,
+          reason: detailedReason,
         },
         {
           mode: "PAPER",
@@ -845,6 +906,7 @@ export async function runStrategiesForUser(
           product: userSettings.paperDefaultProduct,
           status: execStatus,
           strategyName: decision.ownerStrategyName,
+          reason: detailedReason,
         }
       );
 
@@ -852,9 +914,7 @@ export async function runStrategiesForUser(
         await logTradeExecutionAudit(db, userId, {
           ...trade,
           qty: tradeQty,
-          reason: strengthLabel
-            ? `${decision.signalReason} · ${strengthLabel}`
-            : trade.reason,
+          reason: detailedReason,
         });
         await persistPaperOrderAdmin(
           db,
@@ -863,9 +923,7 @@ export async function runStrategiesForUser(
             {
               ...trade,
               qty: tradeQty,
-              reason: strengthLabel
-                ? `${decision.signalReason} · ${strengthLabel}`
-                : trade.reason,
+              reason: detailedReason,
             },
             { product: userSettings.paperDefaultProduct, mode: "PAPER" }
           )
@@ -1047,11 +1105,20 @@ export async function runStrategiesForUser(
           dedupe.add(executionNoBuyTodayKey(decision.symbol));
         }
         tradesExecuted += 1;
+        const sellSector = lookupSectorBias(decision.symbol, sectorBias);
+        const sellReason = formatTradeReasonWithSector({
+          baseReason:
+            decision.signalReason ||
+            `SELL · ${decision.ownerStrategyName}`,
+          side: "SELL",
+          entry: sellSector,
+          symbol: decision.symbol,
+        });
         addScanDetail(
           diagnostics,
           "paperExec",
           decision.symbol,
-          `SELL · ${decision.ownerStrategyName}`
+          `SELL · ${sellReason}`
         );
 
         const tradeQty = executedQty ?? decision.quantity;
@@ -1063,8 +1130,9 @@ export async function runStrategiesForUser(
             side: "SELL",
             quantity: tradeQty,
             price: decision.price,
-            status: "EXECUTED",
+            status: `EXECUTED · ${sellReason}`,
             strategyName: decision.ownerStrategyName,
+            reason: sellReason,
           },
           {
             mode: "PAPER",
@@ -1075,8 +1143,9 @@ export async function runStrategiesForUser(
             price: decision.price,
             orderType: "MARKET",
             product: userSettings.paperDefaultProduct,
-            status: "EXECUTED",
+            status: `EXECUTED · ${sellReason}`,
             strategyName: decision.ownerStrategyName,
+            reason: sellReason,
           }
         );
 
@@ -1129,19 +1198,36 @@ export async function runStrategiesForUser(
   diagnostics.strengthDeferred = rankedQueue.length - queueIndex;
   for (let i = queueIndex; i < rankedQueue.length; i++) {
     const deferred = rankedQueue[i];
-    addScanDetail(
-      diagnostics,
-      "deferred",
-      deferred.symbol,
+    const sectorDefer =
+      deferred.sectorName != null
+        ? `${deferred.sectorName} ${
+            deferred.sectorChangePercent != null
+              ? `${deferred.sectorChangePercent >= 0 ? "+" : ""}${deferred.sectorChangePercent.toFixed(2)}%`
+              : ""
+          }${deferred.sectorIsStrong ? " · strong" : " · lagging"}`
+        : undefined;
+    const detail = [
       deferred.buySignalCount
         ? `${deferred.buySignalCount} signal${deferred.buySignalCount !== 1 ? "s" : ""}`
-        : deferred.ownerStrategyName
+        : deferred.ownerStrategyName,
+      sectorDefer,
+      deferReason,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    addScanDetail(diagnostics, "deferred", deferred.symbol, detail);
+    bumpReason(
+      diagnostics.skipReasons,
+      deferred.sectorIsStrong === false
+        ? "Lower priority — sector lagging vs leaders"
+        : deferReason
     );
-    bumpReason(diagnostics.skipReasons, deferReason);
     writeSystemLog("INFO", "PortfolioManager", "Deferred buy (rank)", {
       symbol: rankedQueue[i].symbol,
       buySignalCount: rankedQueue[i].buySignalCount,
       strategy: rankedQueue[i].ownerStrategyName,
+      sector: deferred.sectorName,
+      sectorChangePercent: deferred.sectorChangePercent,
     });
   }
 
@@ -1172,6 +1258,7 @@ export async function runStrategiesForUser(
       emailDedupe.add(digestKey);
       await sendScanDigestEmail(digestLines, {
         sizingSummary: diagnostics.sizingSummary,
+        sectorSummary: sectorBias?.summaryLine,
       });
     }
   }

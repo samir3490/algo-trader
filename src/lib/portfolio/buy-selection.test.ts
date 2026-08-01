@@ -78,4 +78,25 @@ describe("buy-selection", () => {
     assert.equal(slotsToFill, 1);
     assert.equal(toExecute.length, 1);
   });
+
+  it("prefers strong / higher sector performance over signal count", () => {
+    const weakHighSignals: PortfolioDecision = {
+      ...buy("TATASTEEL", 5),
+      sectorIsStrong: false,
+      sectorChangePercent: -1.2,
+      sectorName: "Metal",
+    };
+    const strongLowSignals: PortfolioDecision = {
+      ...buy("TCS", 2),
+      sectorIsStrong: true,
+      sectorChangePercent: 1.5,
+      sectorName: "IT",
+    };
+    const ranked = rankBuyDecisionsByStrength([
+      weakHighSignals,
+      strongLowSignals,
+    ]);
+    assert.equal(ranked[0].symbol, "TCS");
+    assert.equal(ranked[1].symbol, "TATASTEEL");
+  });
 });

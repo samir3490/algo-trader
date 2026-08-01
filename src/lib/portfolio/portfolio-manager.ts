@@ -13,6 +13,10 @@ import {
 } from "@/lib/strategies/regime";
 import type { OHLC } from "@/types";
 import {
+  lookupSectorBias,
+  type SectorBiasContext,
+} from "./sector-bias";
+import {
   detectStrategyConflicts,
   opinionsBlockedByConflict,
 } from "./conflict-detector";
@@ -320,25 +324,48 @@ export function buildRankedPaperSellQueue(
 
 export function rankBuyOpinions(
   opinions: StrategyOpinion[],
-  regime?: RegimeSnapshot | null
+  regime?: RegimeSnapshot | null,
+  sectorBias?: SectorBiasContext | null
 ): StrategyOpinion[] {
-  return consolidateBuyOpinions(buyOnlyOpinions(opinions), regime).sort((a, b) => {
-    const strength = (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0);
-    if (strength !== 0) return strength;
-    const conf =
-      (b.confidenceSum ?? b.confidence ?? 0) - (a.confidenceSum ?? a.confidence ?? 0);
-    if (conf !== 0) return conf;
-    return a.symbol.localeCompare(b.symbol, "en", { sensitivity: "base" });
-  });
+  return consolidateBuyOpinions(buyOnlyOpinions(opinions), regime)
+    .map((op) => {
+      const entry = lookupSectorBias(op.symbol, sectorBias);
+      return {
+        ...op,
+        sectorChangePercent: entry?.changePercent,
+        sectorIsStrong: entry?.isStrong,
+        sectorName: entry?.sectorName,
+        sectorRank: entry?.rank,
+      };
+    })
+    .sort((a, b) => {
+      const strong =
+        (b.sectorIsStrong ? 1 : 0) - (a.sectorIsStrong ? 1 : 0);
+      if (strong !== 0) return strong;
+      if (a.sectorChangePercent != null || b.sectorChangePercent != null) {
+        const sectorPct =
+          (b.sectorChangePercent ?? Number.NEGATIVE_INFINITY) -
+          (a.sectorChangePercent ?? Number.NEGATIVE_INFINITY);
+        if (sectorPct !== 0) return sectorPct;
+      }
+      const strength = (b.buySignalCount ?? 0) - (a.buySignalCount ?? 0);
+      if (strength !== 0) return strength;
+      const conf =
+        (b.confidenceSum ?? b.confidence ?? 0) -
+        (a.confidenceSum ?? a.confidence ?? 0);
+      if (conf !== 0) return conf;
+      return a.symbol.localeCompare(b.symbol, "en", { sensitivity: "base" });
+    });
 }
 
 /** Ranked paper BUY queue — matches display list; skips symbols already held. */
 export function buildRankedPaperBuyQueue(
   opinions: StrategyOpinion[],
   ctx: PortfolioContext,
-  regime?: RegimeSnapshot | null
+  regime?: RegimeSnapshot | null,
+  sectorBias?: SectorBiasContext | null
 ): PortfolioDecision[] {
-  return rankBuyOpinions(opinions, regime)
+  return rankBuyOpinions(opinions, regime, sectorBias)
     .filter((op) => !hasOpenPositionForSymbol(ctx.state, op.symbol, op.exchange))
     .map((op) => {
       const type = op.strategyType ?? inferStrategyType(op.strategyName);
@@ -356,6 +383,10 @@ export function buildRankedPaperBuyQueue(
       buySignalCount: op.buySignalCount,
       signalStrategyNames: op.signalStrategyNames,
       scanConfidence: op.confidenceSum ?? op.confidence,
+      sectorChangePercent: op.sectorChangePercent,
+      sectorIsStrong: op.sectorIsStrong,
+      sectorName: op.sectorName,
+      sectorRank: op.sectorRank,
     };
     });
 }
