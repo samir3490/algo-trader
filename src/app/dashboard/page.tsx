@@ -6,6 +6,7 @@ import {
   TrendingUp,
   TrendingDown,
   IndianRupee,
+  Wallet,
   BarChart3,
   Clock,
   ArrowUpRight,
@@ -191,10 +192,9 @@ export default function DashboardPage() {
     paperState.balance,
     startingBalance
   );
-  const { portfolio, realizedPnl, allTimePnl, allTimePnlPercent } = pnl;
-  const portfolioValue = portfolio.portfolioValue;
+  const { portfolio, realizedPnl, allTimePnlPercent } = pnl;
   const invested = portfolio.invested;
-  const isProfit = allTimePnl >= 0;
+  const isProfit = pnl.allTimePnl >= 0;
 
   const chartData = useMemo(
     () =>
@@ -251,42 +251,45 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="card glow-accent">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-text-secondary">Portfolio Value</span>
+            <span className="text-sm text-text-secondary">Cash remaining</span>
             <div className="rounded-lg bg-accent-muted p-2">
               <IndianRupee className="h-4 w-4 text-accent" />
             </div>
           </div>
           <p className="text-2xl font-bold text-text-primary tabular-nums break-words">
-            {formatCurrency(portfolioValue)}
+            {formatCurrency(portfolio.balance)}
           </p>
-          <div className="flex items-center gap-1 mt-1">
-            {isProfit ? (
-              <ArrowUpRight className="h-3.5 w-3.5 text-profit" />
-            ) : (
-              <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
-            )}
-            <span className={cn("text-sm font-medium", isProfit ? "text-profit" : "text-loss")}>
-              {formatPercent(allTimePnlPercent)}
-            </span>
-            <span className="text-xs text-text-tertiary ml-1">realized</span>
-          </div>
-          {invested > 0 && (
-            <p className="text-xs text-text-tertiary mt-1 leading-relaxed">
-              Invested {formatCurrency(invested)}
-              <br className="sm:hidden" />
-              <span className="hidden sm:inline"> · </span>
-              Mkt {formatCurrency(portfolio.currentValue)}
-            </p>
-          )}
+          <p className="text-xs text-text-tertiary mt-1">Available to buy</p>
           <Link
             href="/paper-trading"
             className="text-xs text-accent hover:underline mt-2 inline-block"
           >
-            Unrealized P&amp;L &amp; trades →
+            Paper trading →
           </Link>
+        </div>
+
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm text-text-secondary">Invested</span>
+            <div className="rounded-lg bg-bg-tertiary p-2">
+              <Wallet className="h-4 w-4 text-text-secondary" />
+            </div>
+          </div>
+          <p className="text-2xl font-bold text-text-primary tabular-nums break-words">
+            {formatCurrency(invested)}
+          </p>
+          <p className="text-xs text-text-tertiary mt-1 leading-relaxed">
+            Cost of open holdings
+            {invested > 0 && (
+              <>
+                <br />
+                Mkt value {formatCurrency(portfolio.currentValue)}
+              </>
+            )}
+          </p>
         </div>
 
         <div className="card">
@@ -308,6 +311,17 @@ export default function DashboardPage() {
           >
             {formatCurrency(realizedPnl)}
           </p>
+          <div className="flex items-center gap-1 mt-1">
+            {isProfit ? (
+              <ArrowUpRight className="h-3.5 w-3.5 text-profit" />
+            ) : (
+              <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
+            )}
+            <span className={cn("text-sm font-medium", isProfit ? "text-profit" : "text-loss")}>
+              {formatPercent(allTimePnlPercent)}
+            </span>
+            <span className="text-xs text-text-tertiary ml-1">vs start</span>
+          </div>
           <p className="text-xs text-text-tertiary mt-1">From closed sell trades</p>
         </div>
       </div>

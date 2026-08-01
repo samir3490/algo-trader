@@ -1014,11 +1014,22 @@ export default function PaperTradingPage() {
 
   const summaryItems = [
     {
-      label: "Balance",
+      label: "Cash remaining",
       primary: formatCurrency(portfolio.balance),
       icon: Wallet,
       colorClass: "text-blue-600",
-      hint: "Available cash",
+      hint: "Available to buy",
+    },
+    {
+      label: "Invested",
+      primary: formatCurrency(portfolio.invested),
+      secondary:
+        portfolio.currentValue > 0
+          ? `Mkt ${formatCurrency(portfolio.currentValue)}`
+          : undefined,
+      icon: TrendingUp,
+      colorClass: "text-accent",
+      hint: "Cost of open holdings",
     },
     {
       label: "Unrealized P&L",
@@ -1034,14 +1045,6 @@ export default function PaperTradingPage() {
       icon: pnlBreakdown.realizedPnl >= 0 ? TrendingUp : TrendingDown,
       colorClass: pnlBreakdown.realizedPnl >= 0 ? "text-profit" : "text-loss",
       hint: "Closed sell trades",
-    },
-    {
-      label: "All-time P&L",
-      primary: `${pnlBreakdown.allTimePnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.allTimePnl)}`,
-      secondary: formatPercent(pnlBreakdown.allTimePnlPercent),
-      icon: pnlBreakdown.allTimePnl >= 0 ? ArrowUpRight : ArrowDownRight,
-      colorClass: pnlBreakdown.allTimePnl >= 0 ? "text-profit" : "text-loss",
-      hint: "Cash + cost basis (excludes unrealized)",
     },
   ];
 
