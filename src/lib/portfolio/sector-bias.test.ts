@@ -5,6 +5,7 @@ import {
   formatSectorPerformanceLine,
   formatTradeReasonWithSector,
   lookupSectorBias,
+  pickRicherReason,
 } from "./sector-bias";
 
 describe("sector-bias", () => {
@@ -43,5 +44,17 @@ describe("sector-bias", () => {
     assert.match(reason, /Preferred sector/);
     assert.match(reason, /IT/);
     assert.match(reason, /Strong · 3 strategies/);
+  });
+
+  it("pickRicherReason prefers sector detail", () => {
+    const short = "SMA crossover";
+    const detailed = formatTradeReasonWithSector({
+      baseReason: "SMA crossover",
+      side: "BUY",
+      entry: lookupSectorBias("TCS", ctx),
+      symbol: "TCS",
+    });
+    assert.equal(pickRicherReason(short, detailed), detailed);
+    assert.equal(pickRicherReason(detailed, short), detailed);
   });
 });

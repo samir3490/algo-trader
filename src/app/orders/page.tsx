@@ -23,6 +23,13 @@ import {
   normalizePaperTrades,
 } from "@/lib/paper-trades/normalize";
 import { paperTradeToOrderRecord } from "@/lib/portfolio/paper-order-record";
+import {
+  buildSectorBiasContext,
+  formatTradeReasonWithSector,
+  lookupSectorBias,
+  pickRicherReason,
+  type SectorBiasContext,
+} from "@/lib/portfolio/sector-bias";
 import PaperExportMenu from "@/components/paper-export-menu";
 import {
   ClipboardList,
@@ -105,6 +112,7 @@ function formatOrderReason(order: {
   strategyName?: string;
   side?: string;
   exitReason?: string;
+  symbol?: string;
 }): string {
   const reason = order.reason?.trim();
   if (reason) return reason;
@@ -115,6 +123,26 @@ function formatOrderReason(order: {
     return `${order.side ?? "TRADE"} · ${order.strategyName}`;
   }
   return "";
+}
+
+/** Match email detail: append sector performance when missing from stored reason. */
+function withSectorDetail(
+  order: Pick<Order, "reason" | "side" | "symbol" | "strategyName">,
+  sectorBias: SectorBiasContext | null
+): string {
+  const base =
+    order.reason?.trim() ||
+    (order.strategyName
+      ? `${order.side} · ${order.strategyName}`
+      : order.side);
+  if (!base) return "";
+  if (/Preferred sector|Sector context/i.test(base)) return base;
+  return formatTradeReasonWithSector({
+    baseReason: base,
+    side: order.side,
+    entry: lookupSectorBias(order.symbol, sectorBias),
+    symbol: order.symbol,
+  });
 }
 
 function mapPaperTrade(t: PaperTrade, idx: number): Order {
@@ -165,6 +193,19 @@ export default function OrdersPage() {
     setIsLoading(true);
     const allOrders: Order[] = [];
 
+    let sectorBias: SectorBiasContext | null = null;
+    try {
+      const sectorRes = await fetch("/api/market/sectors?timeframe=1d");
+      if (sectorRes.ok) {
+        const sectorData = await sectorRes.json();
+        if (Array.isArray(sectorData?.sectors)) {
+          sectorBias = buildSectorBiasContext(sectorData.sectors, sectorData.fetchedAt);
+        }
+      }
+    } catch {
+      /* sector enrichment optional */
+    }
+
     // Fetch live Zerodha orders from all connected accounts
     try {
       const accountsRes = await fetch("/api/zerodha/accounts");
@@ -204,19 +245,41 @@ export default function OrdersPage() {
       ]);
 
       const paperTrades = normalizePaperTrades(paperState?.trades ?? [], fsOrders);
-      const paperRecords: OrderRecord[] = [
+      const paperRecords = [
         ...fsOrders,
         ...paperTrades.map((trade) => paperTradeToOrderRecord(trade)),
       ];
       const deduped = dedupeOrderRecords(paperRecords);
-      allOrders.push(...deduped.map(mapFirestoreOrder));
+      allOrders.push(
+        ...deduped.map((o) => {
+          const mapped = mapFirestoreOrder(o);
+          // Prefer richer stored reason (email-quality), then append sector if still missing.
+          const fromTrade = paperTrades.find((t) => t.id === o.id);
+          mapped.reason = withSectorDetail(
+            {
+              ...mapped,
+              reason:
+                pickRicherReason(mapped.reason, fromTrade?.reason) ||
+                mapped.reason,
+            },
+            sectorBias
+          );
+          return mapped;
+        })
+      );
     } catch {
       try {
         const raw = localStorage.getItem("paperTrades");
         if (raw) {
           const parsed: PaperTrade[] = JSON.parse(raw);
           if (Array.isArray(parsed)) {
-            allOrders.push(...parsed.map(mapPaperTrade));
+            allOrders.push(
+              ...parsed.map((t, idx) => {
+                const mapped = mapPaperTrade(t, idx);
+                mapped.reason = withSectorDetail(mapped, sectorBias);
+                return mapped;
+              })
+            );
           }
         }
       } catch { /* invalid localStorage data */ }

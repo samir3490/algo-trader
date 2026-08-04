@@ -1,5 +1,6 @@
 import type { OrderRecord, PaperTrade } from "@/lib/firebase";
 import { formatDateTimeIST, formatDateTimeCompactIST } from "@/lib/utils";
+import { pickRicherReason } from "@/lib/portfolio/sector-bias";
 
 const IST = "Asia/Kolkata";
 
@@ -83,7 +84,16 @@ function pickBetterTrade(a: PaperTrade, b: PaperTrade): PaperTrade {
     (b.strategyId ? 2 : 0) +
     (b.reason ? 1 : 0);
   if (bScore !== aScore) return bScore > aScore ? b : a;
-  return tradeExecutedAtMs(b) >= tradeExecutedAtMs(a) ? b : a;
+  const richer = pickRicherReason(a.reason, b.reason);
+  if (richer && richer !== a.reason && richer === b.reason) return b;
+  if (richer && richer !== b.reason && richer === a.reason) return a;
+  const winner =
+    tradeExecutedAtMs(b) >= tradeExecutedAtMs(a) ? b : a;
+  const other = winner === b ? a : b;
+  return {
+    ...winner,
+    reason: pickRicherReason(winner.reason, other.reason) ?? winner.reason,
+  };
 }
 
 export function orderFingerprint(o: OrderRecord): string {
@@ -120,9 +130,17 @@ function pickBetterOrder(a: OrderRecord, b: OrderRecord): OrderRecord {
   const aScore = score(a);
   const bScore = score(b);
   if (bScore !== aScore) return bScore > aScore ? b : a;
+  const richer = pickRicherReason(a.reason, b.reason);
+  if (richer && richer !== a.reason && richer === b.reason) return b;
+  if (richer && richer !== b.reason && richer === a.reason) return a;
   const aMs = Date.parse(a.time ?? "") || 0;
   const bMs = Date.parse(b.time ?? "") || 0;
-  return bMs >= aMs ? b : a;
+  const winner = bMs >= aMs ? b : a;
+  const other = winner === b ? a : b;
+  return {
+    ...winner,
+    reason: pickRicherReason(winner.reason, other.reason) ?? winner.reason,
+  };
 }
 
 /** Collapse duplicate Firestore rows and order/trade pairs (different ids, same fill). */
@@ -180,7 +198,7 @@ export function backfillStrategyFromOrders(
       ...t,
       strategyId: t.strategyId ?? match.strategyId,
       strategyName: t.strategyName?.trim() || match.strategyName || "Auto strategy",
-      reason: t.reason ?? match.reason,
+      reason: pickRicherReason(t.reason, match.reason),
     };
   });
 }

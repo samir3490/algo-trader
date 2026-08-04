@@ -602,7 +602,28 @@ export async function runStrategiesForUser(
   const tradesBeforeRisk = paperState.trades ?? [];
   const riskResult = applyPaperRiskExits(paperState, cronSettings);
   if (riskResult.exits.length > 0) {
-    paperState = riskResult.state;
+    const beforeIds = new Set(tradesBeforeRisk.map((t) => t.id));
+    const enrichedTrades = (riskResult.state.trades ?? []).map((t) => {
+      if (beforeIds.has(t.id) || t.side !== "SELL") return t;
+      const exit = riskResult.exits.find(
+        (e) =>
+          e.symbol.toUpperCase() === t.symbol.toUpperCase() &&
+          (e.exchange || "NSE").toUpperCase() ===
+            (t.exchange || "NSE").toUpperCase()
+      );
+      const riskSector = lookupSectorBias(t.symbol, sectorBias);
+      const riskReason = formatTradeReasonWithSector({
+        baseReason: `RISK EXIT — ${exit?.message ?? t.reason ?? "risk exit"}`,
+        side: "SELL",
+        entry: riskSector,
+        symbol: t.symbol,
+      });
+      return { ...t, reason: riskReason };
+    });
+    paperState = ensurePositions({
+      ...riskResult.state,
+      trades: enrichedTrades,
+    });
     await persistPaperState(db, userId, paperState, recentOrders);
     await persistNewPaperTradesAsOrdersAdmin(
       db,
@@ -630,13 +651,20 @@ export async function runStrategiesForUser(
         );
         dedupe.add(executionNoBuyTodayKey(exit.symbol));
       }
-      const riskSector = lookupSectorBias(exit.symbol, sectorBias);
-      const riskReason = formatTradeReasonWithSector({
-        baseReason: `RISK EXIT — ${exit.message}`,
-        side: "SELL",
-        entry: riskSector,
-        symbol: exit.symbol,
-      });
+      const matched = newRiskTrades.find(
+        (t) =>
+          t.symbol.toUpperCase() === exit.symbol.toUpperCase() &&
+          (t.exchange || "NSE").toUpperCase() ===
+            (exit.exchange || "NSE").toUpperCase()
+      );
+      const riskReason =
+        matched?.reason ??
+        formatTradeReasonWithSector({
+          baseReason: `RISK EXIT — ${exit.message}`,
+          side: "SELL",
+          entry: lookupSectorBias(exit.symbol, sectorBias),
+          symbol: exit.symbol,
+        });
       queueEmail(
         "risk_exit",
         {
@@ -833,7 +861,37 @@ export async function runStrategiesForUser(
       );
       continue;
     }
-    const decision = { ...baseDecision, quantity: freshQty, price };
+
+    const strengthLabel =
+      baseDecision.buySignalCount != null && baseDecision.buySignalCount > 0
+        ? formatBuyStrength(baseDecision.buySignalCount)
+        : undefined;
+    const sizingNote = formatPaperBuySizingNote(userSettings, {
+      qty: freshQty,
+      price,
+      balance,
+    });
+    const sectorEntry = lookupSectorBias(baseDecision.symbol, sectorBias);
+    const detailedReason = formatTradeReasonWithSector({
+      baseReason: baseDecision.signalReason || baseDecision.ownerStrategyName,
+      side: "BUY",
+      entry: sectorEntry,
+      symbol: baseDecision.symbol,
+      extra: [
+        strengthLabel,
+        sizingNote,
+        baseDecision.sectorIsStrong === false
+          ? "Bought after stronger-sector names filled / unavailable"
+          : undefined,
+      ].filter((x): x is string => Boolean(x)),
+    });
+
+    const decision = {
+      ...baseDecision,
+      quantity: freshQty,
+      price,
+      signalReason: detailedReason,
+    };
 
     diagnostics.paperSignals += 1;
 
@@ -849,6 +907,14 @@ export async function runStrategiesForUser(
     const qty = decision.quantity;
 
     if (executed) {
+      // Ensure paper trade + order history store the same email reason.
+      if (trade) {
+        trade.reason = detailedReason;
+        state.trades = (state.trades ?? []).map((t) =>
+          t.id === trade.id ? { ...t, reason: detailedReason } : t
+        );
+      }
+
       const saved = await persistPaperState(db, userId, state, recentOrders);
       if (!saved.ok) {
         console.error(
@@ -868,29 +934,6 @@ export async function runStrategiesForUser(
       placedThisScan += 1;
 
       const tradeQty = executedQty ?? qty;
-      const strengthLabel =
-        decision.buySignalCount != null && decision.buySignalCount > 0
-          ? formatBuyStrength(decision.buySignalCount)
-          : undefined;
-      const sizingNote = formatPaperBuySizingNote(userSettings, {
-        qty: tradeQty,
-        price: decision.price,
-        balance: paperState.balance ?? INITIAL_BALANCE,
-      });
-      const sectorEntry = lookupSectorBias(decision.symbol, sectorBias);
-      const detailedReason = formatTradeReasonWithSector({
-        baseReason: decision.signalReason || decision.ownerStrategyName,
-        side: "BUY",
-        entry: sectorEntry,
-        symbol: decision.symbol,
-        extra: [
-          strengthLabel,
-          sizingNote,
-          decision.sectorIsStrong === false
-            ? "Bought after stronger-sector names filled / unavailable"
-            : undefined,
-        ].filter((x): x is string => Boolean(x)),
-      });
       addScanDetail(
         diagnostics,
         "paperExec",
@@ -1082,7 +1125,20 @@ export async function runStrategiesForUser(
         });
       }
 
-      const decision = { ...baseDecision, price };
+      const sellSector = lookupSectorBias(baseDecision.symbol, sectorBias);
+      const sellReason = formatTradeReasonWithSector({
+        baseReason:
+          baseDecision.signalReason ||
+          `SELL · ${baseDecision.ownerStrategyName}`,
+        side: "SELL",
+        entry: sellSector,
+        symbol: baseDecision.symbol,
+      });
+      const decision = {
+        ...baseDecision,
+        price,
+        signalReason: sellReason,
+      };
       diagnostics.paperSignals += 1;
 
       const { state, executed, message, executedQty, trade } = executePortfolioDecision(
@@ -1095,6 +1151,13 @@ export async function runStrategiesForUser(
       );
 
       if (executed) {
+        if (trade) {
+          trade.reason = sellReason;
+          state.trades = (state.trades ?? []).map((t) =>
+            t.id === trade.id ? { ...t, reason: sellReason } : t
+          );
+        }
+
         const saved = await persistPaperState(db, userId, state, recentOrders);
         if (!saved.ok) {
           console.error(
@@ -1121,15 +1184,6 @@ export async function runStrategiesForUser(
           dedupe.add(executionNoBuyTodayKey(decision.symbol));
         }
         tradesExecuted += 1;
-        const sellSector = lookupSectorBias(decision.symbol, sectorBias);
-        const sellReason = formatTradeReasonWithSector({
-          baseReason:
-            decision.signalReason ||
-            `SELL · ${decision.ownerStrategyName}`,
-          side: "SELL",
-          entry: sellSector,
-          symbol: decision.symbol,
-        });
         addScanDetail(
           diagnostics,
           "paperExec",
@@ -1166,12 +1220,16 @@ export async function runStrategiesForUser(
         );
 
         if (trade) {
-          await logTradeExecutionAudit(db, userId, { ...trade, qty: tradeQty });
+          await logTradeExecutionAudit(db, userId, {
+            ...trade,
+            qty: tradeQty,
+            reason: sellReason,
+          });
           await persistPaperOrderAdmin(
             db,
             userId,
             paperTradeToOrderRecord(
-              { ...trade, qty: tradeQty },
+              { ...trade, qty: tradeQty, reason: sellReason },
               { product: userSettings.paperDefaultProduct, mode: "PAPER" }
             )
           );

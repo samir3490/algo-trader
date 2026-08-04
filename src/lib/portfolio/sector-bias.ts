@@ -92,6 +92,23 @@ export function formatSectorPerformanceLine(
   return `${entry.sectorName} ${formatPct(entry.changePercent)} (#${entry.rank} of ${entry.totalSectors} · ${strength})`;
 }
 
+/** Prefer the more detailed trade reason (sector / length). */
+export function pickRicherReason(
+  a?: string | null,
+  b?: string | null
+): string | undefined {
+  const left = a?.trim() || "";
+  const right = b?.trim() || "";
+  if (!left) return right || undefined;
+  if (!right) return left || undefined;
+  const score = (s: string) =>
+    (/Preferred sector|Sector context/i.test(s) ? 200 : 0) +
+    (/sector/i.test(s) ? 50 : 0) +
+    (/RISK EXIT|Strong ·|turnover/i.test(s) ? 20 : 0) +
+    s.length;
+  return score(right) > score(left) ? right : left;
+}
+
 /** Detailed buy/sell reason appendix with sector context. */
 export function formatTradeReasonWithSector(options: {
   baseReason: string;
