@@ -7,10 +7,12 @@ describe("countScanDigestLines", () => {
     const counts = countScanDigestLines([
       { status: "EXECUTED · Strong" },
       { status: "EXECUTED" },
+      { status: "PROFIT EXIT — Take profit hit" },
       { status: "RISK EXIT — STOP LOSS" },
       { status: "SKIPPED — gate" },
     ]);
     assert.equal(counts.executed, 2);
+    assert.equal(counts.profit, 1);
     assert.equal(counts.risk, 1);
     assert.equal(counts.skipped, 1);
   });

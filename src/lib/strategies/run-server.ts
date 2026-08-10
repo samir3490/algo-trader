@@ -11,6 +11,7 @@ import {
   applyPaperRiskExits,
   ratchetPositionPeakPrices,
 } from "@/lib/risk/paper-risk-guard";
+import { exitCategoryLabel } from "@/lib/portfolio/exit-label";
 import { scanStrategiesForSignals } from "@/lib/strategies/scan-signals";
 import {
   ensurePositions,
@@ -612,8 +613,12 @@ export async function runStrategiesForUser(
             (t.exchange || "NSE").toUpperCase()
       );
       const riskSector = lookupSectorBias(t.symbol, sectorBias);
+      const exitLabel = exitCategoryLabel({
+        reason: exit?.reason,
+        pnlPercent: exit?.pnlPercent,
+      });
       const riskReason = formatTradeReasonWithSector({
-        baseReason: `RISK EXIT — ${exit?.message ?? t.reason ?? "risk exit"}`,
+        baseReason: `${exitLabel} — ${exit?.message ?? t.reason ?? "risk exit"}`,
         side: "SELL",
         entry: riskSector,
         symbol: t.symbol,
@@ -660,7 +665,7 @@ export async function runStrategiesForUser(
       const riskReason =
         matched?.reason ??
         formatTradeReasonWithSector({
-          baseReason: `RISK EXIT — ${exit.message}`,
+          baseReason: `${exitCategoryLabel(exit)} — ${exit.message}`,
           side: "SELL",
           entry: lookupSectorBias(exit.symbol, sectorBias),
           symbol: exit.symbol,

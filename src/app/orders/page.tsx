@@ -30,6 +30,7 @@ import {
   pickRicherReason,
   type SectorBiasContext,
 } from "@/lib/portfolio/sector-bias";
+import { normalizeExitReasonLabel } from "@/lib/portfolio/exit-label";
 import PaperExportMenu from "@/components/paper-export-menu";
 import {
   ClipboardList,
@@ -114,7 +115,7 @@ function formatOrderReason(order: {
   exitReason?: string;
   symbol?: string;
 }): string {
-  const reason = order.reason?.trim();
+  const reason = normalizeExitReasonLabel(order.reason);
   if (reason) return reason;
   if (order.exitReason) {
     return `Exit — ${String(order.exitReason).replace(/_/g, " ")}`;
@@ -131,7 +132,7 @@ function withSectorDetail(
   sectorBias: SectorBiasContext | null
 ): string {
   const base =
-    order.reason?.trim() ||
+    normalizeExitReasonLabel(order.reason) ||
     (order.strategyName
       ? `${order.side} · ${order.strategyName}`
       : order.side);

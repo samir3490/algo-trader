@@ -104,7 +104,7 @@ export function pickRicherReason(
   const score = (s: string) =>
     (/Preferred sector|Sector context/i.test(s) ? 200 : 0) +
     (/sector/i.test(s) ? 50 : 0) +
-    (/RISK EXIT|Strong ·|turnover/i.test(s) ? 20 : 0) +
+    (/RISK EXIT|PROFIT EXIT|Strong ·|turnover/i.test(s) ? 20 : 0) +
     s.length;
   return score(right) > score(left) ? right : left;
 }

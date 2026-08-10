@@ -195,7 +195,7 @@ export async function sendScanDigestEmail(
   }
 
   const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
-  const { executed, risk, skipped } = countScanDigestLines(lines);
+  const { executed, risk, profit, skipped } = countScanDigestLines(lines);
 
   const cards = lines
     .map((l) =>
@@ -213,7 +213,7 @@ export async function sendScanDigestEmail(
     )
     .join("");
 
-  const subject = `📊 Strategy scan: ${executed} trade${executed !== 1 ? "s" : ""}${risk ? `, ${risk} risk exit` : ""}${skipped ? `, ${skipped} skipped` : ""}`;
+  const subject = `📊 Strategy scan: ${executed} trade${executed !== 1 ? "s" : ""}${profit ? `, ${profit} profit exit` : ""}${risk ? `, ${risk} risk exit` : ""}${skipped ? `, ${skipped} skipped` : ""}`;
 
   const banners = [
     options?.sectorSummary

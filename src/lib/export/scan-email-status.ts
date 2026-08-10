@@ -7,6 +7,10 @@ export function isRiskScanStatus(status: string): boolean {
   return status.trim().startsWith("RISK");
 }
 
+export function isProfitExitScanStatus(status: string): boolean {
+  return status.trim().startsWith("PROFIT EXIT");
+}
+
 export function isSkippedScanStatus(status: string): boolean {
   return status.trim().startsWith("SKIPPED");
 }
@@ -14,15 +18,18 @@ export function isSkippedScanStatus(status: string): boolean {
 export function countScanDigestLines(lines: { status: string }[]): {
   executed: number;
   risk: number;
+  profit: number;
   skipped: number;
 } {
   let executed = 0;
   let risk = 0;
+  let profit = 0;
   let skipped = 0;
   for (const line of lines) {
     if (isExecutedScanStatus(line.status)) executed += 1;
+    else if (isProfitExitScanStatus(line.status)) profit += 1;
     else if (isRiskScanStatus(line.status)) risk += 1;
     else if (isSkippedScanStatus(line.status)) skipped += 1;
   }
-  return { executed, risk, skipped };
+  return { executed, risk, profit, skipped };
 }
