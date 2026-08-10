@@ -61,7 +61,7 @@ import StrategyBadges from "@/components/strategy-badges";
 import {
   formatTradeDateTime,
   formatTradeDateTimeCompact,
-  normalizePaperTrades,
+  mergePaperFills,
   tradesNormalizedChanged,
   tradeExecutedAtMs,
 } from "@/lib/paper-trades/normalize";
@@ -288,7 +288,7 @@ export default function PaperTradingPage() {
       ]);
       setOrderHistory(orders);
       const rawTrades = (state.trades ?? []) as PaperTrade[];
-      const normalized = normalizePaperTrades(rawTrades, orders);
+      const normalized = mergePaperFills(rawTrades, orders);
       if (tradesNormalizedChanged(rawTrades, normalized)) {
         await savePaperTradingState({
           balance: state.balance,
@@ -731,7 +731,7 @@ export default function PaperTradingPage() {
       return;
     }
 
-    const merged = normalizePaperTrades(
+    const merged = mergePaperFills(
       state.trades ?? [],
       orderHistory
     );
@@ -853,7 +853,7 @@ export default function PaperTradingPage() {
       return;
     }
 
-    const merged = normalizePaperTrades(state.trades ?? [], orderHistory);
+    const merged = mergePaperFills(state.trades ?? [], orderHistory);
     setBalance(state.balance ?? balance);
     setHoldings((state.holdings ?? []) as Holding[]);
     setTrades(merged as Trade[]);
@@ -881,7 +881,7 @@ export default function PaperTradingPage() {
   const startingBalance = resolvePaperStartingBalance(appSettings);
 
   const normalizedTrades = useMemo(
-    () => normalizePaperTrades(trades as PaperTrade[], orderHistory),
+    () => mergePaperFills(trades as PaperTrade[], orderHistory),
     [trades, orderHistory]
   );
 

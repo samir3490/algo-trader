@@ -19,10 +19,8 @@ import {
   type OrderRecord,
 } from "@/lib/firebase";
 import {
-  dedupeOrderRecords,
-  normalizePaperTrades,
+  mergePaperOrderRecords,
 } from "@/lib/paper-trades/normalize";
-import { paperTradeToOrderRecord } from "@/lib/portfolio/paper-order-record";
 import {
   buildSectorBiasContext,
   formatTradeReasonWithSector,
@@ -245,22 +243,21 @@ export default function OrdersPage() {
         getPaperTradingState(),
       ]);
 
-      const paperTrades = normalizePaperTrades(paperState?.trades ?? [], fsOrders);
-      const paperRecords = [
-        ...fsOrders,
-        ...paperTrades.map((trade) => paperTradeToOrderRecord(trade)),
-      ];
-      const deduped = dedupeOrderRecords(paperRecords);
+      const deduped = mergePaperOrderRecords(
+        paperState?.trades ?? [],
+        fsOrders
+      );
+      const reasonById = new Map(
+        (paperState?.trades ?? []).map((t) => [t.id, t.reason])
+      );
       allOrders.push(
         ...deduped.map((o) => {
           const mapped = mapFirestoreOrder(o);
-          // Prefer richer stored reason (email-quality), then append sector if still missing.
-          const fromTrade = paperTrades.find((t) => t.id === o.id);
           mapped.reason = withSectorDetail(
             {
               ...mapped,
               reason:
-                pickRicherReason(mapped.reason, fromTrade?.reason) ||
+                pickRicherReason(mapped.reason, reasonById.get(o.id)) ||
                 mapped.reason,
             },
             sectorBias

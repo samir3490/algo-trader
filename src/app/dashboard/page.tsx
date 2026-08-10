@@ -29,7 +29,7 @@ import {
   getSettings,
   type PaperTrade,
 } from "@/lib/firebase";
-import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
+import { mergePaperFills } from "@/lib/paper-trades/normalize";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { loadSettingsFromCache } from "@/lib/settings/cache";
 import {
@@ -125,7 +125,7 @@ export default function DashboardPage() {
 
         setStartingBalance(fsSettings.paperStartingBalance ?? INITIAL_BALANCE);
 
-        const normalizedTrades = normalizePaperTrades(
+        const normalizedTrades = mergePaperFills(
           fsState.trades as PaperTrade[],
           orders
         );
@@ -186,7 +186,7 @@ export default function DashboardPage() {
     return () => window.removeEventListener("paper-trading-updated", resync);
   }, [mounted, user]);
 
-  const normalizedTradesForPnl = normalizePaperTrades(
+  const normalizedTradesForPnl = mergePaperFills(
     paperState.trades as PaperTrade[]
   );
   const pnl = computePnlBreakdown(

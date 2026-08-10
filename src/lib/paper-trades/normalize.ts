@@ -255,6 +255,70 @@ export function normalizePaperTrades(
   return sortTradesNewestFirst(deduped);
 }
 
+/**
+ * Canonical paper fill list for Paper Trading + Orders tabs.
+ * Includes Firestore order docs that never landed in paperTrading.trades.
+ */
+export function mergePaperFills(
+  trades: PaperTrade[],
+  orders: OrderRecord[] = []
+): PaperTrade[] {
+  const paperOrders = orders.filter((o) => !o.mode || o.mode === "PAPER");
+  const fromOrders: PaperTrade[] = paperOrders.map((o) => {
+    const ms = Date.parse(o.time ?? "");
+    return {
+      id: o.id,
+      time: o.time,
+      executedAt:
+        Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : undefined,
+      symbol: o.symbol.trim().toUpperCase(),
+      exchange: (o.exchange || "NSE").trim().toUpperCase(),
+      side: o.side,
+      qty: o.qty,
+      price: o.price,
+      date:
+        o.date ||
+        (Number.isFinite(ms) && ms > 0
+          ? new Date(ms).toLocaleDateString("en-CA", { timeZone: IST })
+          : undefined),
+      strategyId: o.strategyId,
+      ownerStrategyId: o.strategyId,
+      strategyName: o.strategyName,
+      reason: o.reason,
+      product: o.product,
+    };
+  });
+  return normalizePaperTrades([...fromOrders, ...trades], paperOrders);
+}
+
+/** Same fills as mergePaperFills, shaped for the Orders tab. */
+export function mergePaperOrderRecords(
+  trades: PaperTrade[],
+  orders: OrderRecord[] = []
+): OrderRecord[] {
+  return mergePaperFills(trades, orders).map((t) => ({
+    id: t.id,
+    time: t.time,
+    symbol: t.symbol.trim().toUpperCase(),
+    exchange: (t.exchange || "NSE").trim().toUpperCase(),
+    side: t.side,
+    qty: t.qty,
+    price: t.price,
+    orderType: "MARKET",
+    product: t.product ?? "CNC",
+    mode: "PAPER" as const,
+    status: "EXECUTED",
+    date:
+      t.date ??
+      (t.executedAt
+        ? new Date(t.executedAt).toLocaleDateString("en-CA", { timeZone: IST })
+        : new Date().toLocaleDateString("en-CA", { timeZone: IST })),
+    strategyId: t.strategyId ?? t.ownerStrategyId,
+    strategyName: t.strategyName,
+    reason: t.reason,
+  }));
+}
+
 export function tradesNormalizedChanged(
   before: PaperTrade[],
   after: PaperTrade[]
