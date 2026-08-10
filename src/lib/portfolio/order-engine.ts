@@ -7,9 +7,11 @@ import {
 import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
 import {
   addPositionToState,
+  addToOpenPosition,
   closePositionInState,
   createOpenPosition,
   ensurePositions,
+  getOpenPositions,
 } from "./position-manager";
 import type { ExitReason, PortfolioDecision } from "./types";
 import { formatBuyStrength } from "@/lib/paper-trading/balance";
@@ -122,32 +124,53 @@ export function executePortfolioDecision(
       return { state: current, executed: false, message: "Insufficient balance" };
     }
 
-    const costPerShare = cashOut / qty;
-    const position = createOpenPosition({
-      symbol: sym,
-      exchange: ex,
-      quantity: qty,
-      entryPrice: round2(costPerShare),
-      ltp: price,
-      ownerStrategyId: decision.ownerStrategyId,
-      ownerStrategyName: decision.ownerStrategyName,
-      ownerStrategyType: decision.ownerStrategyType,
-      ownerEntryArchetype: decision.ownerEntryArchetype,
-      signalReason: decision.signalReason,
-      product,
-      buySignalCount: decision.buySignalCount,
-      signalStrategyNames: decision.signalStrategyNames,
-    });
+    const costPerShare = round2(cashOut / qty);
+    const existingOpen = getOpenPositions(current, { symbol: sym, exchange: ex })[0];
 
     const strength =
       decision.buySignalCount != null && decision.buySignalCount > 0
         ? formatBuyStrength(decision.buySignalCount)
         : undefined;
 
+    let entryTime: string | undefined;
+    let entryPrice: number;
+
+    if (existingOpen) {
+      current = addToOpenPosition(
+        current,
+        existingOpen.id,
+        qty,
+        costPerShare,
+        price
+      );
+      const updated = getOpenPositions(current, { symbol: sym, exchange: ex })[0];
+      entryTime = existingOpen.entryTime;
+      entryPrice = updated?.entryPrice ?? existingOpen.entryPrice;
+    } else {
+      const position = createOpenPosition({
+        symbol: sym,
+        exchange: ex,
+        quantity: qty,
+        entryPrice: costPerShare,
+        ltp: price,
+        ownerStrategyId: decision.ownerStrategyId,
+        ownerStrategyName: decision.ownerStrategyName,
+        ownerStrategyType: decision.ownerStrategyType,
+        ownerEntryArchetype: decision.ownerEntryArchetype,
+        signalReason: decision.signalReason,
+        product,
+        buySignalCount: decision.buySignalCount,
+        signalStrategyNames: decision.signalStrategyNames,
+      });
+      entryTime = position.entryTime;
+      entryPrice = position.entryPrice;
+      current = addPositionToState(current, position);
+    }
+
     const newTrade = buildTrade("BUY", sym, ex, qty, price, decision, product, {
       grossAmount: turnover,
-      entryTime: position.entryTime,
-      entryPrice: position.entryPrice,
+      entryTime,
+      entryPrice,
       buySignalCount: decision.buySignalCount,
       signalStrategyNames: decision.signalStrategyNames,
       reason: strength
@@ -155,8 +178,6 @@ export function executePortfolioDecision(
         : decision.signalReason,
       ...chargeFields(charges),
     });
-
-    current = addPositionToState(current, position);
     return {
       state: {
         ...current,

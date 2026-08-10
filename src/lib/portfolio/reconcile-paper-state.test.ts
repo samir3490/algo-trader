@@ -78,6 +78,81 @@ describe("reconcilePaperState", () => {
     assert.ok(result.changes.some((c) => c.includes("Deduped")));
   });
 
+  it("rebuilds HDFCLIFE qty from 3 buys and 1 sell", () => {
+    const state: PaperTradingState = {
+      balance: 900_000,
+      positions: [
+        {
+          ...basePosition,
+          id: "p-hdfc",
+          symbol: "HDFCLIFE",
+          quantity: 10,
+          entryPrice: 700,
+          ltp: 760,
+        },
+      ],
+      holdings: [
+        {
+          symbol: "HDFCLIFE",
+          exchange: "NSE",
+          qty: 10,
+          avgPrice: 700,
+          ltp: 760,
+        },
+      ],
+      trades: [
+        {
+          id: "b1",
+          time: "07 Aug 2026, 10:00:00",
+          symbol: "HDFCLIFE",
+          exchange: "NSE",
+          side: "BUY",
+          qty: 10,
+          price: 700,
+          date: "2026-08-07",
+          executedAt: "2026-08-07T04:30:00.000Z",
+        },
+        {
+          id: "b2",
+          time: "08 Aug 2026, 10:00:00",
+          symbol: "HDFCLIFE",
+          exchange: "NSE",
+          side: "BUY",
+          qty: 12,
+          price: 720,
+          date: "2026-08-08",
+          executedAt: "2026-08-08T04:30:00.000Z",
+        },
+        {
+          id: "s1",
+          time: "09 Aug 2026, 10:00:00",
+          symbol: "HDFCLIFE",
+          exchange: "NSE",
+          side: "SELL",
+          qty: 10,
+          price: 740,
+          date: "2026-08-09",
+          executedAt: "2026-08-09T04:30:00.000Z",
+        },
+        {
+          id: "b3",
+          time: "10 Aug 2026, 10:00:00",
+          symbol: "HDFCLIFE",
+          exchange: "NSE",
+          side: "BUY",
+          qty: 11,
+          price: 760,
+          date: "2026-08-10",
+          executedAt: "2026-08-10T04:30:00.000Z",
+        },
+      ],
+    };
+
+    const result = reconcilePaperState(state);
+    assert.equal(result.state.holdings?.[0]?.qty, 23);
+    assert.ok(result.changes.length > 0);
+  });
+
   it("prunes zero-qty open positions", () => {
     const state: PaperTradingState = {
       balance: 1_000_000,

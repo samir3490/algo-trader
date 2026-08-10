@@ -111,6 +111,32 @@ describe("canExecuteStrategyTrade", () => {
     assert.match(r.reason ?? "", /Already holding/);
   });
 
+  it("blocks BUY when an open position exists even without a holdings row", () => {
+    const r = canExecuteStrategyTrade("BUY", "HDFCLIFE", "NSE", {
+      holdings: [],
+      positions: [
+        {
+          id: "p1",
+          symbol: "HDFCLIFE",
+          exchange: "NSE",
+          quantity: 14,
+          entryPrice: 780,
+          ltp: 790,
+          state: "OPEN",
+          ownerStrategyId: "macd-1",
+          ownerStrategyName: "MACD",
+          entryTime: "2026-08-07T04:00:00.000Z",
+        },
+      ],
+      trades: [],
+      settings: simpleSettings,
+      ownerStrategyId: "rsi-1",
+      soldThisRun: new Set(),
+    });
+    assert.equal(r.allowed, false);
+    assert.match(r.reason ?? "", /Already holding/);
+  });
+
   it("blocks same-day rebuy after sell when same-day rebuy is on", () => {
     const trades: PaperTrade[] = [
       {

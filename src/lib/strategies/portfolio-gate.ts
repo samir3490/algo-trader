@@ -2,7 +2,6 @@ import type { AppSettings, PaperHolding, PaperTrade } from "@/lib/firebase";
 import { tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
 import {
   canStrategyExitPosition,
-  canStrategyOpenPosition,
   getOpenPositions,
 } from "@/lib/portfolio/position-manager";
 import { OWNER_MANUAL } from "@/lib/portfolio/types";
@@ -259,19 +258,9 @@ export function canExecuteStrategyTrade(
     return { allowed: false, reason: "Sold this scan — no immediate rebuy" };
   }
 
-  // Only hard buy block: already holding the symbol (no add-on).
-  if (ownerId && openPositions.length > 0) {
-    const openCheck = canStrategyOpenPosition(
-      stateLike,
-      symbol,
-      exchange,
-      ownerId,
-      ctx.multiStrategyMode
-    );
-    if (!openCheck.allowed) {
-      return { allowed: false, reason: openCheck.reason };
-    }
-  } else if (hasPosition) {
+  // Hard buy block: already holding the symbol (no add-on), including
+  // holdings-only rows when positions failed to migrate.
+  if (hasPosition) {
     return { allowed: false, reason: "Already holding — no add-on buy" };
   }
 

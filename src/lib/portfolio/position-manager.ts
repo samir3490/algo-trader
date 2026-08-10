@@ -13,15 +13,87 @@ function symKey(symbol: string, exchange: string): string {
   return `${symbol.trim().toUpperCase()}:${(exchange || "NSE").trim().toUpperCase()}`;
 }
 
+/** One open row per symbol — sum qty / weighted avg when duplicates exist. */
+export function collapseOpenPositionsBySymbol(
+  positions: PaperPosition[]
+): PaperPosition[] {
+  const closed: PaperPosition[] = [];
+  const openByKey = new Map<string, PaperPosition>();
+
+  for (const p of positions) {
+    if (p.state !== "OPEN" && p.state !== "PARTIAL_EXIT") {
+      closed.push(p);
+      continue;
+    }
+    const key = symKey(p.symbol, p.exchange);
+    const existing = openByKey.get(key);
+    if (!existing) {
+      openByKey.set(key, { ...p });
+      continue;
+    }
+    const newQty = existing.quantity + p.quantity;
+    const avg =
+      newQty > 0
+        ? Math.round(
+            ((existing.entryPrice * existing.quantity +
+              p.entryPrice * p.quantity) /
+              newQty) *
+              100
+          ) / 100
+        : existing.entryPrice;
+    const existingMs = Date.parse(existing.entryTime) || 0;
+    const nextMs = Date.parse(p.entryTime) || 0;
+    const earlier = nextMs > 0 && (existingMs === 0 || nextMs < existingMs);
+    openByKey.set(key, {
+      ...existing,
+      quantity: newQty,
+      entryPrice: avg,
+      ltp: p.ltp > 0 ? p.ltp : existing.ltp,
+      entryTime: earlier ? p.entryTime : existing.entryTime,
+      peakPrice: Math.max(
+        existing.peakPrice ?? 0,
+        p.peakPrice ?? 0,
+        p.ltp ?? 0,
+        existing.ltp ?? 0
+      ),
+      buySignalCount:
+        Math.max(existing.buySignalCount ?? 0, p.buySignalCount ?? 0) ||
+        existing.buySignalCount,
+      signalReason: existing.signalReason ?? p.signalReason,
+    });
+  }
+
+  return [...closed, ...openByKey.values()];
+}
+
 export function ensurePositions(state: PaperTradingState): PaperTradingState {
-  if (state.positions && state.positions.length > 0) {
-    return withSyncedHoldings(state);
-  }
   const holdings = state.holdings ?? [];
-  if (holdings.length === 0) {
-    return { ...state, positions: [], holdings: [] };
+  let positions = [...(state.positions ?? [])];
+
+  if (positions.length === 0) {
+    if (holdings.length === 0) {
+      return { ...state, positions: [], holdings: [] };
+    }
+    positions = migrateHoldingsToPositions(holdings, state.trades ?? []);
+    return withSyncedHoldings({ ...state, positions });
   }
-  const positions = migrateHoldingsToPositions(holdings, state.trades ?? []);
+
+  const openKeys = new Set(
+    positions
+      .filter((p) => p.state === "OPEN" || p.state === "PARTIAL_EXIT")
+      .map((p) => symKey(p.symbol, p.exchange))
+  );
+  const orphanHoldings = holdings.filter(
+    (h) => (h.qty ?? 0) > 0 && !openKeys.has(symKey(h.symbol, h.exchange))
+  );
+  if (orphanHoldings.length > 0) {
+    positions = [
+      ...positions,
+      ...migrateHoldingsToPositions(orphanHoldings, state.trades ?? []),
+    ];
+  }
+
+  positions = collapseOpenPositionsBySymbol(positions);
   return withSyncedHoldings({ ...state, positions });
 }
 
@@ -71,7 +143,11 @@ export function hasOpenPositionForSymbol(
   symbol: string,
   exchange: string
 ): boolean {
-  return getOpenPositions(state, { symbol, exchange }).length > 0;
+  if (getOpenPositions(state, { symbol, exchange }).length > 0) return true;
+  const key = symKey(symbol, exchange);
+  return (state.holdings ?? []).some(
+    (h) => symKey(h.symbol, h.exchange) === key && (h.qty ?? 0) > 0
+  );
 }
 
 export function getPositionOwnerForSymbol(
@@ -250,7 +326,39 @@ export function addPositionToState(
   state: PaperTradingState,
   position: PaperPosition
 ): PaperTradingState {
-  const positions = [...(state.positions ?? []), position];
+  const positions = collapseOpenPositionsBySymbol([
+    ...(state.positions ?? []),
+    position,
+  ]);
+  return withSyncedHoldings({ ...state, positions });
+}
+
+/** Increase qty / recompute avg on an existing open lot (add-on fill). */
+export function addToOpenPosition(
+  state: PaperTradingState,
+  positionId: string,
+  addQty: number,
+  costPerShare: number,
+  ltp?: number
+): PaperTradingState {
+  if (addQty <= 0) return state;
+  const positions = [...(state.positions ?? [])];
+  const idx = positions.findIndex((p) => p.id === positionId);
+  if (idx < 0) return state;
+  const pos = positions[idx];
+  if (pos.state !== "OPEN" && pos.state !== "PARTIAL_EXIT") return state;
+  const newQty = pos.quantity + addQty;
+  const avg =
+    Math.round(
+      ((pos.entryPrice * pos.quantity + costPerShare * addQty) / newQty) * 100
+    ) / 100;
+  positions[idx] = {
+    ...pos,
+    quantity: newQty,
+    entryPrice: avg,
+    ltp: ltp && ltp > 0 ? ltp : pos.ltp,
+    peakPrice: Math.max(pos.peakPrice ?? 0, ltp ?? 0, pos.ltp ?? 0),
+  };
   return withSyncedHoldings({ ...state, positions });
 }
 

@@ -162,7 +162,7 @@ export function reconcilePaperState(
   const rawHoldingsBefore = raw.holdings ?? [];
 
   const beforePositions = state.positions?.length ?? 0;
-  state = prunePaperStateForScan(state);
+  state = prunePaperStateForScan(state, orders);
   const afterPositions = state.positions?.length ?? 0;
   if (afterPositions < beforePositions) {
     changes.push(`Removed ${beforePositions - afterPositions} stale position row(s)`);

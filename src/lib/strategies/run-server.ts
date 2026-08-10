@@ -53,6 +53,7 @@ import {
   ensurePaperTradingBalance,
   prunePaperStateForScan,
 } from "@/lib/portfolio/paper-state-cleanup";
+import { paperHoldingsSignature } from "@/lib/portfolio/rebuild-open-qty";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
 import {
   persistNewPaperTradesAsOrdersAdmin,
@@ -569,12 +570,16 @@ export async function runStrategiesForUser(
       void sendOrderEmail(individual).catch(() => {});
     }
   }
+  const [loadedPaper, recentOrders] = await Promise.all([
+    loadPaperState(db, userId),
+    loadRecentOrders(db, userId),
+  ]);
+  const booksBefore = paperHoldingsSignature(ensurePositions(loadedPaper));
   let paperState = prunePaperStateForScan(
-    ensurePaperTradingBalance(
-      ensurePositions(await loadPaperState(db, userId)),
-      userSettings
-    )
+    ensurePaperTradingBalance(ensurePositions(loadedPaper), userSettings),
+    recentOrders
   );
+  const booksRepaired = booksBefore !== paperHoldingsSignature(paperState);
   if (paperState.holdings?.length) {
     paperState = {
       ...paperState,
@@ -593,10 +598,15 @@ export async function runStrategiesForUser(
       holdings: paperState.holdings,
     };
   }
-  const recentOrders = await loadRecentOrders(db, userId);
   const cleaned = normalizePaperTrades(paperState.trades ?? [], recentOrders);
-  if (tradesNormalizedChanged(paperState.trades ?? [], cleaned)) {
+  const tradesChanged = tradesNormalizedChanged(
+    paperState.trades ?? [],
+    cleaned
+  );
+  if (tradesChanged) {
     paperState = { ...paperState, trades: cleaned };
+  }
+  if (tradesChanged || booksRepaired) {
     await persistPaperState(db, userId, paperState, recentOrders);
   }
 
@@ -816,6 +826,37 @@ export async function runStrategiesForUser(
         "gateBlocked",
         baseDecision.symbol,
         "Already holding — no add-on buy"
+      );
+      continue;
+    }
+
+    const buyGate = canExecuteStrategyTrade(
+      "BUY",
+      baseDecision.symbol,
+      exchange,
+      {
+        holdings: paperState.holdings ?? [],
+        positions: paperState.positions,
+        trades: paperState.trades ?? [],
+        settings: cronSettings,
+        soldThisRun,
+        boughtThisRun,
+        symbolCooldownUntil,
+        symbolsLockedToday,
+        ownerStrategyId: baseDecision.ownerStrategyId,
+      }
+    );
+    if (!buyGate.allowed) {
+      bumpReason(
+        diagnostics.skipReasons,
+        buyGate.reason ?? "Blocked by trade gate"
+      );
+      diagnostics.gateBlocked += 1;
+      addScanDetail(
+        diagnostics,
+        "gateBlocked",
+        baseDecision.symbol,
+        buyGate.reason ?? "Blocked by trade gate"
       );
       continue;
     }

@@ -6,7 +6,9 @@ import {
   closePositionInState,
   createOpenPosition,
   addPositionToState,
+  addToOpenPosition,
   ensurePositions,
+  hasOpenPositionForSymbol,
 } from "./position-manager";
 import type { PaperTradingState } from "@/lib/firebase";
 import { OWNER_MANUAL } from "./types";
@@ -119,5 +121,91 @@ describe("position-manager", () => {
       trades: [],
     });
     assert.ok((state.positions?.length ?? 0) >= 1);
+  });
+
+  it("ensurePositions adopts orphan holding when other positions exist", () => {
+    const state = ensurePositions({
+      balance: 50_000,
+      positions: [
+        {
+          id: "p-other",
+          symbol: "TCS",
+          exchange: "NSE",
+          quantity: 2,
+          entryPrice: 3000,
+          ltp: 3100,
+          ownerStrategyId: "s1",
+          state: "OPEN",
+          entryTime: "2026-08-07T04:00:00.000Z",
+        },
+      ],
+      holdings: [
+        { symbol: "TCS", exchange: "NSE", qty: 2, avgPrice: 3000, ltp: 3100 },
+        { symbol: "HDFCLIFE", exchange: "NSE", qty: 14, avgPrice: 780, ltp: 790 },
+      ],
+      trades: [],
+    });
+    assert.equal(
+      hasOpenPositionForSymbol(state, "HDFCLIFE", "NSE"),
+      true
+    );
+    const hdfc = state.holdings?.find((h) => h.symbol === "HDFCLIFE");
+    assert.equal(hdfc?.qty, 14);
+  });
+
+  it("treats holdings qty as an open position for add-on gate", () => {
+    const state: PaperTradingState = {
+      balance: 50_000,
+      positions: [],
+      holdings: [
+        { symbol: "HDFCLIFE", exchange: "NSE", qty: 14, avgPrice: 780, ltp: 790 },
+      ],
+      trades: [],
+    };
+    assert.equal(hasOpenPositionForSymbol(state, "HDFCLIFE", "NSE"), true);
+    assert.equal(hasOpenPositionForSymbol(state, "TCS", "NSE"), false);
+  });
+
+  it("addToOpenPosition merges qty and average", () => {
+    const pos = createOpenPosition({
+      symbol: "HDFCLIFE",
+      exchange: "NSE",
+      quantity: 10,
+      entryPrice: 700,
+      ltp: 700,
+      ownerStrategyId: "s1",
+      ownerStrategyName: "A",
+    });
+    let state = addPositionToState(emptyState(), pos);
+    state = addToOpenPosition(state, pos.id, 5, 800, 800);
+    assert.equal(state.positions?.[0]?.quantity, 15);
+    assert.equal(state.positions?.[0]?.entryPrice, 733.33);
+    assert.equal(state.holdings?.[0]?.qty, 15);
+  });
+
+  it("collapses duplicate open lots for the same symbol", () => {
+    const a = createOpenPosition({
+      symbol: "HDFCLIFE",
+      exchange: "NSE",
+      quantity: 10,
+      entryPrice: 700,
+      ltp: 700,
+      ownerStrategyId: "s1",
+    });
+    const b = createOpenPosition({
+      symbol: "HDFCLIFE",
+      exchange: "NSE",
+      quantity: 6,
+      entryPrice: 800,
+      ltp: 800,
+      ownerStrategyId: "s2",
+    });
+    const state = addPositionToState(addPositionToState(emptyState(), a), b);
+    const open = (state.positions ?? []).filter(
+      (p) => p.state === "OPEN" || p.state === "PARTIAL_EXIT"
+    );
+    assert.equal(open.length, 1);
+    assert.equal(open[0].quantity, 16);
+    assert.equal(state.holdings?.[0]?.qty, 16);
   });
 });
