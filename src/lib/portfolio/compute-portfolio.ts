@@ -154,12 +154,59 @@ function sellCashIn(t: PaperTrade): number {
   return typeof t.charges === "number" ? turnover - t.charges : turnover;
 }
 
+export type PortfolioChartPeriod = "week" | "month" | "year";
+
+export function portfolioChartWindowDays(period: PortfolioChartPeriod): number {
+  if (period === "week") return 7;
+  if (period === "month") return 30;
+  return 365;
+}
+
+export function portfolioChartPeriodLabel(period: PortfolioChartPeriod): string {
+  if (period === "week") return "Last 7 days (IST)";
+  if (period === "month") return "Last 30 days (IST)";
+  return "Last 12 months (IST)";
+}
+
+function shiftDateKeyIST(dateKey: string, days: number): string {
+  const ms = new Date(`${dateKey}T12:00:00+05:30`).getTime() + days * 86_400_000;
+  return new Date(ms).toLocaleDateString("en-CA", { timeZone: IST });
+}
+
+function listDateKeysInclusive(fromKey: string, toKey: string): string[] {
+  const keys: string[] = [];
+  let key = fromKey;
+  for (let i = 0; i < 400 && key <= toKey; i++) {
+    keys.push(key);
+    key = shiftDateKeyIST(key, 1);
+  }
+  return keys;
+}
+
+function formatChartLabel(dateKey: string, period: PortfolioChartPeriod): string {
+  const d = new Date(`${dateKey}T12:00:00+05:30`);
+  if (period === "year") {
+    return d.toLocaleDateString("en-IN", {
+      month: "short",
+      year: "2-digit",
+      timeZone: IST,
+    });
+  }
+  return d.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    timeZone: IST,
+  });
+}
+
 /** Reconstruct cost-basis portfolio value after each trade (excludes unrealized). */
 export function buildPortfolioChart(
   trades: PaperTrade[],
   balance: number,
   holdings: PortfolioHolding[],
-  startingBalance: number
+  startingBalance: number,
+  period: PortfolioChartPeriod = "week",
+  now = new Date()
 ): { date: string; value: number }[] {
   const sorted = [...trades].sort(
     (a, b) => tradeExecutedAtMs(a) - tradeExecutedAtMs(b)
@@ -177,17 +224,7 @@ export function buildPortfolioChart(
     return sum;
   }
 
-  const points: { date: string; value: number }[] = [];
-  const firstMs = tradeExecutedAtMs(sorted[0]);
-  if (firstMs > 0) {
-    const d = new Date(firstMs);
-    d.setDate(d.getDate() - 1);
-    points.push({
-      date: d.toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-      value: Math.round(startingBalance),
-    });
-  }
-
+  const daily = new Map<string, number>();
   for (const t of sorted) {
     const key = positionKey(t.symbol, t.exchange);
     if (t.side === "BUY") {
@@ -211,23 +248,47 @@ export function buildPortfolioChart(
     }
 
     const ms = tradeExecutedAtMs(t);
-    points.push({
-      date:
-        ms > 0
-          ? new Date(ms).toLocaleDateString("en-IN", { day: "2-digit", month: "short" })
-          : t.date ?? "",
-      value: Math.round(runBalance + investedAtCost()),
+    const dateKey =
+      ms > 0
+        ? new Date(ms).toLocaleDateString("en-CA", { timeZone: IST })
+        : t.date || todayDateKeyIST(now);
+    daily.set(dateKey, Math.round(runBalance + investedAtCost()));
+  }
+
+  const today = todayDateKeyIST(now);
+  daily.set(
+    today,
+    Math.round(computePortfolio(holdings, balance).portfolioValue)
+  );
+
+  const windowDays = portfolioChartWindowDays(period);
+  const windowStart = shiftDateKeyIST(today, -(windowDays - 1));
+  const sortedKeys = [...daily.keys()].sort();
+  let lastKnown = Math.round(startingBalance);
+  for (const key of sortedKeys) {
+    if (key < windowStart) lastKnown = daily.get(key) ?? lastKnown;
+  }
+
+  const series: { date: string; value: number; dateKey: string }[] = [];
+  for (const dateKey of listDateKeysInclusive(windowStart, today)) {
+    if (daily.has(dateKey)) lastKnown = daily.get(dateKey) ?? lastKnown;
+    series.push({
+      dateKey,
+      date: formatChartLabel(dateKey, period),
+      value: lastKnown,
     });
   }
 
-  const current = computePortfolio(holdings, balance).portfolioValue;
-  const last = points[points.length - 1];
-  if (!last || Math.abs(last.value - current) > 1) {
-    points.push({
-      date: new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short" }),
-      value: Math.round(current),
-    });
+  if (period !== "year") {
+    return series.map(({ date, value }) => ({ date, value }));
   }
 
-  return points.length > 30 ? points.slice(-30) : points;
+  const byMonth = new Map<string, { date: string; value: number }>();
+  for (const point of series) {
+    byMonth.set(point.dateKey.slice(0, 7), {
+      date: formatChartLabel(point.dateKey, "year"),
+      value: point.value,
+    });
+  }
+  return [...byMonth.values()];
 }

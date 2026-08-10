@@ -35,6 +35,8 @@ import { loadSettingsFromCache } from "@/lib/settings/cache";
 import {
   buildPortfolioChart,
   computePnlBreakdown,
+  portfolioChartPeriodLabel,
+  type PortfolioChartPeriod,
 } from "@/lib/portfolio/compute-portfolio";
 import MarketTrendHero from "@/components/dashboard/market-trend-hero";
 import SectorPerformanceChart from "@/components/dashboard/sector-performance-chart";
@@ -104,6 +106,7 @@ export default function DashboardPage() {
 
   const [paperState, setPaperState] = useState<PaperState>({ balance: INITIAL_BALANCE, holdings: [], trades: [] });
   const [startingBalance, setStartingBalance] = useState(INITIAL_BALANCE);
+  const [chartPeriod, setChartPeriod] = useState<PortfolioChartPeriod>("week");
 
   useEffect(() => {
     if (!user) return;
@@ -202,9 +205,10 @@ export default function DashboardPage() {
         normalizedTradesForPnl,
         paperState.balance,
         paperState.holdings,
-        startingBalance
+        startingBalance,
+        chartPeriod
       ),
-    [normalizedTradesForPnl, paperState.balance, paperState.holdings, startingBalance]
+    [normalizedTradesForPnl, paperState.balance, paperState.holdings, startingBalance, chartPeriod]
   );
   const chartHasData = chartData.length > 1;
   const chartMin = chartHasData ? Math.min(...chartData.map((d) => d.value)) * 0.998 : 990000;
@@ -330,18 +334,43 @@ export default function DashboardPage() {
       <SectorPerformanceChart marketOpen={marketOpen} />
 
       <div className="card">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
           <div>
             <h2 className="text-lg font-semibold text-text-primary">
               Portfolio Performance
             </h2>
             <p className="text-sm text-text-secondary">
-              {chartHasData ? "Based on trading activity" : "Start trading to see performance"}
+              {chartHasData
+                ? portfolioChartPeriodLabel(chartPeriod)
+                : "Start trading to see performance"}
             </p>
           </div>
-          <div className="flex items-center gap-2 rounded-lg bg-bg-tertiary px-3 py-1.5 text-xs font-medium text-text-secondary">
-            <BarChart3 className="h-3.5 w-3.5" />
-            Portfolio
+          <div
+            className="flex w-full sm:w-auto items-center gap-1 rounded-lg bg-bg-tertiary p-1"
+            role="tablist"
+            aria-label="Portfolio performance period"
+          >
+            {([
+              ["week", "Week"],
+              ["month", "Month"],
+              ["year", "Year"],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={chartPeriod === value}
+                onClick={() => setChartPeriod(value)}
+                className={cn(
+                  "flex-1 sm:flex-none rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                  chartPeriod === value
+                    ? "bg-bg-elevated text-text-primary shadow-sm"
+                    : "text-text-secondary hover:text-text-primary"
+                )}
+              >
+                {label}
+              </button>
+            ))}
           </div>
         </div>
         <div className="h-72">

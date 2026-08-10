@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildPortfolioChart,
   computeInvested,
   computePortfolio,
   computeTodayPnl,
@@ -176,5 +177,53 @@ describe("computeInvested", () => {
       ]),
       0
     );
+  });
+});
+
+describe("buildPortfolioChart", () => {
+  function trade(
+    id: string,
+    dateIST: string,
+    side: "BUY" | "SELL",
+    qty: number,
+    price: number,
+    extra: Partial<PaperTrade> = {}
+  ): PaperTrade {
+    return {
+      id,
+      time: "10:00:00",
+      date: dateIST,
+      executedAt: `${dateIST}T10:00:00+05:30`,
+      symbol: "INFY",
+      exchange: "NSE",
+      side,
+      qty,
+      price,
+      ...extra,
+    };
+  }
+
+  it("defaults to a 7-day week window", () => {
+    const trades = [
+      trade("b1", "2026-07-01", "BUY", 10, 1000),
+      trade("s1", "2026-08-03", "SELL", 10, 1100, { netPnl: 1000 }),
+    ];
+    const now = new Date("2026-08-05T12:00:00+05:30");
+    const week = buildPortfolioChart(trades, 1_001_000, [], 1_000_000, "week", now);
+    assert.equal(week.length, 7);
+    assert.equal(week[week.length - 1].value, 1_001_000);
+  });
+
+  it("uses daily points for month and monthly points for year", () => {
+    const trades = [
+      trade("b1", "2026-01-15", "BUY", 10, 1000),
+      trade("s1", "2026-06-10", "SELL", 10, 1200, { netPnl: 2000 }),
+    ];
+    const now = new Date("2026-08-05T12:00:00+05:30");
+    const month = buildPortfolioChart(trades, 1_002_000, [], 1_000_000, "month", now);
+    const year = buildPortfolioChart(trades, 1_002_000, [], 1_000_000, "year", now);
+    assert.equal(month.length, 30);
+    assert.ok(year.length >= 8 && year.length <= 13);
+    assert.equal(year[year.length - 1].value, 1_002_000);
   });
 });
