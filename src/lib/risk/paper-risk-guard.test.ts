@@ -65,7 +65,7 @@ describe("evaluatePositionRiskExit", () => {
     assert.equal(sig?.reason, "stop_loss");
   });
 
-  it("does not trigger trailing stop until min profit reached", () => {
+  it("does not trigger trailing stop until arm threshold (~stop distance)", () => {
     const sig = evaluatePositionRiskExit(
       {
         id: "p1",
@@ -73,15 +73,48 @@ describe("evaluatePositionRiskExit", () => {
         exchange: "NSE",
         quantity: 10,
         entryPrice: 100,
-        ltp: 103,
-        peakPrice: 104,
+        ltp: 101,
+        peakPrice: 101.5,
         state: "OPEN",
         ownerStrategyId: "s1",
         entryTime: new Date().toISOString(),
       },
-      { ...baseSettings, autoTrailingStop: true, trailingStopPercent: 2, takeProfitPercent: 5 }
+      {
+        ...baseSettings,
+        autoTrailingStop: true,
+        trailingStopPercent: 2,
+        takeProfitPercent: 5,
+        stopLossPercent: 2,
+        autoTakeProfit: false,
+      }
     );
     assert.equal(sig, null);
+  });
+
+  it("triggers trailing stop after ~+2% peak when basic barriers are asymmetric", () => {
+    const sig = evaluatePositionRiskExit(
+      {
+        id: "p1",
+        symbol: "TCS",
+        exchange: "NSE",
+        quantity: 10,
+        entryPrice: 100,
+        ltp: 101.2,
+        peakPrice: 103,
+        state: "OPEN",
+        ownerStrategyId: "s1",
+        entryTime: new Date().toISOString(),
+      },
+      {
+        ...baseSettings,
+        autoTrailingStop: true,
+        trailingStopPercent: 1.5,
+        takeProfitPercent: 5,
+        stopLossPercent: 2,
+        autoTakeProfit: true,
+      }
+    );
+    assert.equal(sig?.reason, "trailing_stop");
   });
 
   it("triggers trailing stop from peak after min profit armed", () => {

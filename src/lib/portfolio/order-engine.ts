@@ -124,7 +124,9 @@ export function executePortfolioDecision(
       return { state: current, executed: false, message: "Insufficient balance" };
     }
 
-    const costPerShare = round2(cashOut / qty);
+    const fillPrice = round2(price);
+    // Risk % marks off market fill — charges affect cash only, not stop/target distance.
+    const entryMark = fillPrice;
     const existingOpen = getOpenPositions(current, { symbol: sym, exchange: ex })[0];
 
     const strength =
@@ -140,7 +142,7 @@ export function executePortfolioDecision(
         current,
         existingOpen.id,
         qty,
-        costPerShare,
+        entryMark,
         price
       );
       const updated = getOpenPositions(current, { symbol: sym, exchange: ex })[0];
@@ -151,7 +153,7 @@ export function executePortfolioDecision(
         symbol: sym,
         exchange: ex,
         quantity: qty,
-        entryPrice: costPerShare,
+        entryPrice: entryMark,
         ltp: price,
         ownerStrategyId: decision.ownerStrategyId,
         ownerStrategyName: decision.ownerStrategyName,

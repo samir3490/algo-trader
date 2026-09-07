@@ -68,7 +68,8 @@ describe("normalizeAppSettings", () => {
     assert.equal(out.autoTakeProfit, true);
     assert.equal(out.stopLossPercent, 2);
     assert.equal(out.takeProfitPercent, 5);
-    assert.equal(out.autoTrailingStop, false);
+    assert.equal(out.autoTrailingStop, true);
+    assert.equal(out.trailingStopPercent, 1.5);
     assert.equal(out.enableStrategySellSignals, false);
     assert.equal(out.rebuyCooldownMinutes, 0);
     assert.equal(out.noSameDayRebuyAfterSell, false);

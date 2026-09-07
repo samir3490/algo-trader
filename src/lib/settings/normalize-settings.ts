@@ -61,7 +61,9 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     next.autoTakeProfit = true;
     next.stopLossPercent = 2;
     next.takeProfitPercent = 5;
-    next.autoTrailingStop = false;
+    // Lock gains once price has moved ~+2%; don't wait for full +5% or fall back to stop.
+    next.autoTrailingStop = true;
+    next.trailingStopPercent = 1.5;
     next.maxHoldDays = 0;
     next.noProgressDays = 0;
     next.autoPauseEnabled = false;

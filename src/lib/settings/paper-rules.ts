@@ -36,9 +36,9 @@ export const PAPER_RULE_CATALOG: PaperRuleDefinition[] = [
   {
     key: "ruleBasicExits2and5",
     category: "Exits",
-    label: "Basic exits (−2% stop / +5% target)",
+    label: "Basic exits (−2% stop / +5% target + trail)",
     description:
-      "Auto stop-loss at −2% and take-profit at +5%. Also keeps trailing stop, max-hold, and no-progress exits off. Turn off to use Risk fields on the Paper tab.",
+      "Stop at −2%, hard target at +5%, and a 1.5% trailing stop that arms after about +2% so winners are not given back. Turn off to use Risk fields on the Paper tab.",
     defaultOn: true,
   },
   {

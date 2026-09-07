@@ -156,12 +156,20 @@ export function evaluateStopLossExit(
 /** Whether peak price has reached the min-profit % (arms trailing stop). */
 export function isTrailingStopArmed(
   position: Pick<PaperPosition, "entryPrice" | "ltp" | "peakPrice">,
-  settings: Pick<AppSettings, "takeProfitPercent">
+  settings: Pick<AppSettings, "takeProfitPercent" | "stopLossPercent">
 ): boolean {
-  const minProfit = settings.takeProfitPercent ?? 0;
-  if (minProfit <= 0) return true;
+  const takeProfit = settings.takeProfitPercent ?? 0;
+  const stopLoss = settings.stopLossPercent ?? 0;
+  // Arm after a real move — never wait for full take-profit (that made trailing useless).
+  const armAt =
+    takeProfit > 0 && stopLoss > 0
+      ? Math.min(takeProfit, Math.max(stopLoss, 1))
+      : takeProfit > 0
+        ? takeProfit
+        : 0;
+  if (armAt <= 0) return true;
   const peak = Math.max(position.peakPrice ?? position.entryPrice, position.ltp);
-  return holdingPnlPercent(position.entryPrice, peak) >= minProfit;
+  return holdingPnlPercent(position.entryPrice, peak) >= armAt;
 }
 
 /** Whether a held position has reached the min-profit % gate for strategy SELL signals. */

@@ -35,15 +35,17 @@ import {
 } from "@/lib/portfolio/paper-order-record";
 import { loadSettingsFromCache, saveSettingsToCache } from "@/lib/settings/cache";
 import {
+  ensurePositions,
+  getManualExitPosition,
+  refreshPositionLtps,
+} from "@/lib/portfolio/position-manager";
+import {
   applyPaperRiskExits,
   canPlacePaperBuy,
+  ratchetPositionPeakPrices,
 } from "@/lib/risk/paper-risk-guard";
 import { canExecuteStrategyTrade } from "@/lib/strategies/portfolio-gate";
 import { executePortfolioDecision } from "@/lib/portfolio/order-engine";
-import {
-  ensurePositions,
-  getManualExitPosition,
-} from "@/lib/portfolio/position-manager";
 import type { PaperPosition } from "@/lib/portfolio/types";
 import { resolveHoldingBuySignalCount } from "@/lib/portfolio/holding-strength";
 import { OWNER_MANUAL } from "@/lib/portfolio/types";
@@ -390,6 +392,24 @@ export default function PaperTradingPage() {
 
       const settings = settingsRef.current;
       if (!settings) return;
+
+      const ltpMap: Record<string, number> = {};
+      for (const h of updated) {
+        ltpMap[
+          `${h.symbol.trim().toUpperCase()}:${(h.exchange || "NSE").trim().toUpperCase()}`
+        ] = h.ltp;
+      }
+      let paperBase = buildPaperBase(
+        balanceRef.current,
+        updated,
+        tradesRef.current as PaperTrade[]
+      );
+      paperBase = refreshPositionLtps(paperBase, ltpMap);
+      paperBase = {
+        ...paperBase,
+        positions: ratchetPositionPeakPrices(paperBase.positions, ltpMap),
+      };
+
       if (
         settings.autoStopLoss ||
         settings.autoTakeProfit ||
@@ -397,14 +417,7 @@ export default function PaperTradingPage() {
         (settings.maxHoldDays ?? 0) > 0 ||
         (settings.noProgressDays ?? 0) > 0
       ) {
-        const { state, exits } = applyPaperRiskExits(
-          buildPaperBase(
-            balanceRef.current,
-            updated,
-            tradesRef.current as PaperTrade[]
-          ),
-          settings
-        );
+        const { state, exits } = applyPaperRiskExits(paperBase, settings);
         if (exits.length > 0) {
           const tradesBefore = tradesRef.current as PaperTrade[];
           positionsRef.current = state.positions ?? [];
@@ -431,7 +444,8 @@ export default function PaperTradingPage() {
         }
       }
 
-      setHoldings(updated);
+      positionsRef.current = paperBase.positions ?? positionsRef.current;
+      setHoldings((paperBase.holdings ?? updated) as Holding[]);
     }
 
     refreshLtps();
