@@ -60,6 +60,57 @@ export function remainingPositionSlots(
   return Math.max(0, maxPositions - openPositionCount);
 }
 
+export interface BuyQualityFilterOptions {
+  /** Minimum distinct strategy BUY signals on the symbol (default 1). */
+  minBuySignalCount?: number;
+  /**
+   * When true, drop names with sectorIsStrong === false.
+   * Unknown sector (undefined) is allowed so unmapped symbols are not wiped out.
+   */
+  requireStrongSector?: boolean;
+}
+
+export interface BuyQualitySkip {
+  decision: PortfolioDecision;
+  reason: string;
+}
+
+/** Drop weak-sector / single-signal buys before ranking fills slots. */
+export function filterBuyDecisionsByQuality(
+  decisions: PortfolioDecision[],
+  options: BuyQualityFilterOptions = {}
+): {
+  eligible: PortfolioDecision[];
+  skipped: BuyQualitySkip[];
+} {
+  const minSignals = Math.max(1, options.minBuySignalCount ?? 1);
+  const requireStrong = options.requireStrongSector === true;
+  const eligible: PortfolioDecision[] = [];
+  const skipped: BuyQualitySkip[] = [];
+
+  for (const d of decisions) {
+    if (d.action !== "BUY") continue;
+    const signals = d.buySignalCount ?? 1;
+    if (signals < minSignals) {
+      skipped.push({
+        decision: d,
+        reason: `Need ${minSignals}+ strategy signals (had ${signals})`,
+      });
+      continue;
+    }
+    if (requireStrong && d.sectorIsStrong === false) {
+      skipped.push({
+        decision: d,
+        reason: "Lagging sector — strong-sector buys only",
+      });
+      continue;
+    }
+    eligible.push(d);
+  }
+
+  return { eligible, skipped };
+}
+
 /**
  * Ranked queue capped to available position slots (from settings maxPositions).
  */
@@ -68,14 +119,21 @@ export function selectTopBuyDecisionsForScan(
   options: {
     openPositionCount: number;
     maxPositions: number;
+    minBuySignalCount?: number;
+    requireStrongSector?: boolean;
   }
 ): {
   ranked: PortfolioDecision[];
   toExecute: PortfolioDecision[];
   deferred: PortfolioDecision[];
+  skippedQuality: BuyQualitySkip[];
   slotsToFill: number;
 } {
-  const ranked = rankBuyDecisionsByStrength(decisions);
+  const { eligible, skipped } = filterBuyDecisionsByQuality(decisions, {
+    minBuySignalCount: options.minBuySignalCount,
+    requireStrongSector: options.requireStrongSector,
+  });
+  const ranked = rankBuyDecisionsByStrength(eligible);
   const slotsToFill = remainingPositionSlots(
     options.openPositionCount,
     options.maxPositions
@@ -85,5 +143,6 @@ export function selectTopBuyDecisionsForScan(
     slotsToFill,
     toExecute: ranked.slice(0, slotsToFill),
     deferred: ranked.slice(slotsToFill),
+    skippedQuality: skipped,
   };
 }

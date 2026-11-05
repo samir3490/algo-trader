@@ -8,6 +8,7 @@ export type PaperRuleKey =
   | "ruleStrategySellsOff"
   | "ruleClearRebuyLocks"
   | "rulePreferStrongSectors"
+  | "ruleMinBuySignals2"
   | "ruleAutoSeedUniverse"
   | "enableRegimeWeighting"
   | "enableEntryConnectedExits"
@@ -68,9 +69,17 @@ export const PAPER_RULE_CATALOG: PaperRuleDefinition[] = [
   {
     key: "rulePreferStrongSectors",
     category: "Ranking",
-    label: "Prefer strong sectors for buys",
+    label: "Strong sectors only for buys",
     description:
-      "Ranks BUY candidates by Nifty sector performance first (strong sectors before lagging). Turn off to rank by signal count / confidence only.",
+      "Buys only names in today's leading Nifty sectors (hard skip on lagging sectors). Turn off to allow any sector, ranked by signal count / confidence.",
+    defaultOn: true,
+  },
+  {
+    key: "ruleMinBuySignals2",
+    category: "Ranking",
+    label: "Require 2+ strategy signals to buy",
+    description:
+      "A paper BUY needs agreement from at least two strategies on the same symbol. Turn off to allow single-strategy entries.",
     defaultOn: true,
   },
   {

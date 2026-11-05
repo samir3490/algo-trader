@@ -51,6 +51,8 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
       ?.clearRebuyLocks as boolean | undefined,
     rulePreferStrongSectors: (parsed.paperRules as Record<string, unknown> | undefined)
       ?.preferStrongSectors as boolean | undefined,
+    ruleMinBuySignals2: (parsed.paperRules as Record<string, unknown> | undefined)
+      ?.minBuySignals2 as boolean | undefined,
     ruleAutoSeedUniverse: (parsed.paperRules as Record<string, unknown> | undefined)
       ?.autoSeedUniverse as boolean | undefined,
     stopLossPercent: rm?.stopLossPercent as number | undefined,

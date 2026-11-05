@@ -775,16 +775,39 @@ export async function runStrategiesForUser(
       pos.ownerStrategyName
     );
   }
-  const { ranked: rankedQueue, slotsToFill } = selectTopBuyDecisionsForScan(
-    buyQueue,
-    { openPositionCount, maxPositions }
+  const preferStrongSectors = isPaperRuleOn(
+    userSettings,
+    "rulePreferStrongSectors"
   );
+  const minBuySignalCount = isPaperRuleOn(userSettings, "ruleMinBuySignals2")
+    ? 2
+    : 1;
+  const {
+    ranked: rankedQueue,
+    slotsToFill,
+    skippedQuality,
+  } = selectTopBuyDecisionsForScan(buyQueue, {
+    openPositionCount,
+    maxPositions,
+    minBuySignalCount,
+    requireStrongSector: preferStrongSectors && sectorBias != null,
+  });
 
-  diagnostics.buyDecisions = buyQueue.length;
+  diagnostics.buyDecisions = rankedQueue.length;
   diagnostics.rankedBuyCandidates = rankedForDisplay;
   diagnostics.slotsToFill = slotsToFill;
   diagnostics.buyQueueSize = rankedQueue.length;
-  for (const d of buyQueue) {
+  for (const skip of skippedQuality) {
+    bumpReason(diagnostics.skipReasons, skip.reason);
+    diagnostics.gateBlocked += 1;
+    addScanDetail(
+      diagnostics,
+      "gateBlocked",
+      skip.decision.symbol,
+      skip.reason
+    );
+  }
+  for (const d of rankedQueue) {
     const count = d.buySignalCount ?? 1;
     const sectorNote = d.sectorName
       ? `${d.sectorName} ${d.sectorChangePercent != null ? `${d.sectorChangePercent >= 0 ? "+" : ""}${d.sectorChangePercent.toFixed(2)}%` : ""}`
@@ -923,13 +946,7 @@ export async function runStrategiesForUser(
       side: "BUY",
       entry: sectorEntry,
       symbol: baseDecision.symbol,
-      extra: [
-        strengthLabel,
-        sizingNote,
-        baseDecision.sectorIsStrong === false
-          ? "Bought after stronger-sector names filled / unavailable"
-          : undefined,
-      ].filter((x): x is string => Boolean(x)),
+      extra: [strengthLabel, sizingNote].filter((x): x is string => Boolean(x)),
     });
 
     const decision = {

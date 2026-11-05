@@ -96,6 +96,7 @@ interface AppSettings {
     strategySellsOff: boolean;
     clearRebuyLocks: boolean;
     preferStrongSectors: boolean;
+    minBuySignals2: boolean;
     autoSeedUniverse: boolean;
     regimeWeighting: boolean;
     entryConnectedExits: boolean;
@@ -265,6 +266,7 @@ const defaultSettings: AppSettings = {
     strategySellsOff: true,
     clearRebuyLocks: true,
     preferStrongSectors: true,
+    minBuySignals2: true,
     autoSeedUniverse: true,
     regimeWeighting: true,
     entryConnectedExits: true,
@@ -363,6 +365,7 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       strategySellsOff: fs.ruleStrategySellsOff !== false,
       clearRebuyLocks: fs.ruleClearRebuyLocks !== false,
       preferStrongSectors: fs.rulePreferStrongSectors !== false,
+      minBuySignals2: fs.ruleMinBuySignals2 !== false,
       autoSeedUniverse: fs.ruleAutoSeedUniverse !== false,
       regimeWeighting: fs.enableRegimeWeighting !== false,
       entryConnectedExits: fs.enableEntryConnectedExits !== false,
@@ -496,6 +499,7 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     ruleStrategySellsOff: s.paperRules.strategySellsOff,
     ruleClearRebuyLocks: s.paperRules.clearRebuyLocks,
     rulePreferStrongSectors: s.paperRules.preferStrongSectors,
+    ruleMinBuySignals2: s.paperRules.minBuySignals2,
     ruleAutoSeedUniverse: s.paperRules.autoSeedUniverse,
   };
 }
@@ -869,6 +873,7 @@ function SettingsContent() {
     { catalogKey: "ruleStrategySellsOff", localKey: "strategySellsOff" },
     { catalogKey: "ruleClearRebuyLocks", localKey: "clearRebuyLocks" },
     { catalogKey: "rulePreferStrongSectors", localKey: "preferStrongSectors" },
+    { catalogKey: "ruleMinBuySignals2", localKey: "minBuySignals2" },
     { catalogKey: "ruleAutoSeedUniverse", localKey: "autoSeedUniverse" },
     { catalogKey: "enableRegimeWeighting", localKey: "regimeWeighting" },
     { catalogKey: "enableEntryConnectedExits", localKey: "entryConnectedExits" },

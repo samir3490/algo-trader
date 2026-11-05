@@ -99,4 +99,43 @@ describe("buy-selection", () => {
     assert.equal(ranked[0].symbol, "TCS");
     assert.equal(ranked[1].symbol, "TATASTEEL");
   });
+
+  it("hard-skips lagging sectors and single-signal buys when quality filters are on", () => {
+    const { ranked, skippedQuality } = selectTopBuyDecisionsForScan(
+      [
+        {
+          ...buy("TATASTEEL", 5),
+          sectorIsStrong: false,
+          sectorChangePercent: -1.2,
+        },
+        {
+          ...buy("INFY", 1),
+          sectorIsStrong: true,
+          sectorChangePercent: 1.2,
+        },
+        {
+          ...buy("TCS", 3),
+          sectorIsStrong: true,
+          sectorChangePercent: 1.5,
+        },
+      ],
+      {
+        openPositionCount: 0,
+        maxPositions: 10,
+        minBuySignalCount: 2,
+        requireStrongSector: true,
+      }
+    );
+    assert.deepEqual(
+      ranked.map((d) => d.symbol),
+      ["TCS"]
+    );
+    assert.equal(skippedQuality.length, 2);
+    assert.ok(
+      skippedQuality.some((s) => /Lagging sector/i.test(s.reason))
+    );
+    assert.ok(
+      skippedQuality.some((s) => /2\+ strategy signals/i.test(s.reason))
+    );
+  });
 });

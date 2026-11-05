@@ -393,6 +393,8 @@ export interface AppSettings {
   ruleStrategySellsOff: boolean;
   ruleClearRebuyLocks: boolean;
   rulePreferStrongSectors: boolean;
+  /** Require ≥2 strategy BUY signals on a symbol before paper entry. */
+  ruleMinBuySignals2: boolean;
   ruleAutoSeedUniverse: boolean;
   /** Minutes before same symbol can be bought after a sell (default 4h). */
   rebuyCooldownMinutes: number;
@@ -493,6 +495,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ruleStrategySellsOff: true,
   ruleClearRebuyLocks: true,
   rulePreferStrongSectors: true,
+  ruleMinBuySignals2: true,
   ruleAutoSeedUniverse: true,
   rebuyCooldownMinutes: 0,
   maxRoundTripsPerSymbolPerDay: 0,
