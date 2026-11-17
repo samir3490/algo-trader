@@ -64,12 +64,80 @@ export function computePortfolio(
   };
 }
 
-/** Sum of net P&L from all closed (SELL) trades. */
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function positionKey(symbol: string, exchange: string): string {
+  return `${symbol.trim().toUpperCase()}:${(exchange || "NSE").trim().toUpperCase()}`;
+}
+
+function buyCashOut(t: PaperTrade): number {
+  const turnover = t.grossAmount ?? t.qty * t.price;
+  return typeof t.charges === "number" ? turnover + t.charges : turnover;
+}
+
+function sellCashIn(t: PaperTrade): number {
+  const turnover = t.grossAmount ?? t.qty * t.price;
+  return typeof t.charges === "number" ? turnover - t.charges : turnover;
+}
+
+/** Legacy: sum of stored netPnl on SELL rows (incomplete when fields are missing). */
 export function computeRealizedPnl(trades: PaperTrade[]): number {
   return trades.reduce((sum, t) => {
     if (t.side !== "SELL" || typeof t.netPnl !== "number") return sum;
     return sum + t.netPnl;
   }, 0);
+}
+
+/**
+ * Realized P&L from matched BUY→SELL lots (FIFO).
+ * Ignores orphan sells (cash credits with no buy still in history) so inflated
+ * books cannot fake profits.
+ */
+export function computeFifoRealizedPnl(trades: PaperTrade[]): number {
+  const sorted = [...trades].sort(
+    (a, b) => tradeExecutedAtMs(a) - tradeExecutedAtMs(b)
+  );
+  const lots = new Map<string, { qty: number; costPerShare: number }[]>();
+  let realized = 0;
+
+  for (const t of sorted) {
+    const key = positionKey(t.symbol, t.exchange);
+    if (t.side === "BUY") {
+      const list = lots.get(key) ?? [];
+      const cashOut = buyCashOut(t);
+      const costPerShare = t.qty > 0 ? cashOut / t.qty : t.price;
+      list.push({ qty: Math.floor(t.qty), costPerShare });
+      lots.set(key, list);
+      continue;
+    }
+
+    let rem = Math.floor(t.qty);
+    if (rem <= 0) continue;
+    const proceedsPerShare = t.qty > 0 ? sellCashIn(t) / t.qty : t.price;
+    const list = lots.get(key) ?? [];
+    while (rem > 0 && list.length > 0) {
+      const lot = list[0];
+      const take = Math.min(rem, lot.qty);
+      realized += (proceedsPerShare - lot.costPerShare) * take;
+      lot.qty -= take;
+      rem -= take;
+      if (lot.qty <= 0) list.shift();
+    }
+    lots.set(key, list);
+  }
+
+  return round2(realized);
+}
+
+/** Cash that must remain after matched trading: start − invested + realized. */
+export function deriveHonestCash(
+  startingBalance: number,
+  invested: number,
+  realizedPnl: number
+): number {
+  return round2(startingBalance - Math.max(0, invested) + realizedPnl);
 }
 
 export interface PnlBreakdown {
@@ -79,6 +147,8 @@ export interface PnlBreakdown {
   realizedPnl: number;
   allTimePnl: number;
   allTimePnlPercent: number;
+  /** True when stored cash was replaced with the reconstructed honest balance. */
+  cashRepaired: boolean;
   today: ReturnType<typeof computeTodayPnl>;
 }
 
@@ -88,9 +158,15 @@ export function computePnlBreakdown(
   balance: number,
   startingBalance: number
 ): PnlBreakdown {
-  const portfolio = computePortfolio(holdings, balance);
-  const realizedPnl = computeRealizedPnl(trades);
-  const allTimePnl = computeAllTimePnl(portfolio.portfolioValue, startingBalance);
+  const invested = computeInvested(holdings);
+  const realizedPnl = computeFifoRealizedPnl(trades);
+  const honestCash = deriveHonestCash(startingBalance, invested, realizedPnl);
+  const cashRepaired = Math.abs((balance ?? 0) - honestCash) >= 1;
+  const portfolio = computePortfolio(holdings, honestCash);
+  // Mark-to-market all-time vs start (honest cash + live holdings value).
+  const allTimePnl = round2(
+    honestCash + portfolio.currentValue - startingBalance
+  );
   const allTimePnlPercent =
     startingBalance > 0 ? (allTimePnl / startingBalance) * 100 : 0;
   return {
@@ -100,6 +176,7 @@ export function computePnlBreakdown(
     realizedPnl,
     allTimePnl,
     allTimePnlPercent,
+    cashRepaired,
     today: computeTodayPnl(trades, holdings),
   };
 }
@@ -138,20 +215,6 @@ export function computeTodayPnl(
   }
 
   return { pnl: 0, tradeCount: 0, mode: "none" };
-}
-
-function positionKey(symbol: string, exchange: string): string {
-  return `${symbol.trim().toUpperCase()}:${(exchange || "NSE").trim().toUpperCase()}`;
-}
-
-function buyCashOut(t: PaperTrade): number {
-  const turnover = t.grossAmount ?? t.qty * t.price;
-  return typeof t.charges === "number" ? turnover + t.charges : turnover;
-}
-
-function sellCashIn(t: PaperTrade): number {
-  const turnover = t.grossAmount ?? t.qty * t.price;
-  return typeof t.charges === "number" ? turnover - t.charges : turnover;
 }
 
 export type PortfolioChartPeriod = "week" | "month" | "year";
@@ -236,15 +299,20 @@ export function buildPortfolioChart(
     } else {
       let sellQty = t.qty;
       const list = lots.get(key) ?? [];
+      let matched = 0;
       while (sellQty > 0 && list.length > 0) {
         const lot = list[0];
         const take = Math.min(sellQty, lot.qty);
         lot.qty -= take;
         sellQty -= take;
+        matched += take;
         if (lot.qty <= 0) list.shift();
       }
       lots.set(key, list);
-      runBalance += sellCashIn(t);
+      // Credit only matched shares — orphan sells must not inflate chart equity.
+      if (matched > 0 && t.qty > 0) {
+        runBalance += (sellCashIn(t) / t.qty) * matched;
+      }
     }
 
     const ms = tradeExecutedAtMs(t);

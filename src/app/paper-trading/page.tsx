@@ -284,29 +284,47 @@ export default function PaperTradingPage() {
   const syncFromCloud = useCallback(async () => {
     if (!user) return;
     try {
-      const [state, orders] = await Promise.all([
+      const [state, orders, settings] = await Promise.all([
         getPaperTradingState(),
         getOrders(500),
+        getSettings().catch(() => settingsRef.current),
       ]);
+      if (settings) {
+        setAppSettings(settings);
+        settingsRef.current = settings;
+      }
       setOrderHistory(orders);
       const rawTrades = (state.trades ?? []) as PaperTrade[];
       const normalized = mergePaperFills(rawTrades, orders);
-      if (tradesNormalizedChanged(rawTrades, normalized)) {
+      const startBal = resolvePaperStartingBalance(
+        settings ?? settingsRef.current
+      );
+      const pnlCheck = computePnlBreakdown(
+        normalized,
+        (state.holdings ?? []) as Holding[],
+        state.balance ?? startBal,
+        startBal
+      );
+      const repairedBalance = pnlCheck.portfolio.balance;
+      if (
+        tradesNormalizedChanged(rawTrades, normalized) ||
+        pnlCheck.cashRepaired
+      ) {
         await savePaperTradingState({
-          balance: state.balance,
+          balance: repairedBalance,
           holdings: state.holdings,
           positions: state.positions,
           trades: normalized,
         });
       }
       const synced = ensurePositions({
-        balance: state.balance,
+        balance: repairedBalance,
         holdings: state.holdings ?? [],
         positions: state.positions ?? [],
         trades: normalized,
       });
       applyCloudState({
-        balance: synced.balance ?? state.balance,
+        balance: repairedBalance,
         holdings: (synced.holdings ?? []) as Holding[],
         positions: synced.positions,
         trades: normalized as Trade[],
@@ -1058,7 +1076,7 @@ export default function PaperTradingPage() {
       primary: `${pnlBreakdown.realizedPnl >= 0 ? "+" : ""}${formatCurrency(pnlBreakdown.realizedPnl)}`,
       icon: pnlBreakdown.realizedPnl >= 0 ? TrendingUp : TrendingDown,
       colorClass: pnlBreakdown.realizedPnl >= 0 ? "text-profit" : "text-loss",
-      hint: "Closed sell trades",
+      hint: "Matched closed lots (FIFO)",
     },
   ];
 

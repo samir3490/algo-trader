@@ -27,11 +27,13 @@ import {
   getPaperTradingState,
   getOrders,
   getSettings,
+  savePaperTradingState,
   type PaperTrade,
 } from "@/lib/firebase";
 import { mergePaperFills } from "@/lib/paper-trades/normalize";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { loadSettingsFromCache } from "@/lib/settings/cache";
+import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import {
   buildPortfolioChart,
   computePnlBreakdown,
@@ -123,15 +125,34 @@ export default function DashboardPage() {
           getSettings(),
         ]);
 
-        setStartingBalance(fsSettings.paperStartingBalance ?? INITIAL_BALANCE);
+        const startBal = resolvePaperStartingBalance(fsSettings);
+        setStartingBalance(startBal);
 
         const normalizedTrades = mergePaperFills(
           fsState.trades as PaperTrade[],
           orders
         );
-        const paperWithTrades = { ...fsState, trades: normalizedTrades };
+        const pnlCheck = computePnlBreakdown(
+          normalizedTrades,
+          (fsState.holdings ?? []) as Holding[],
+          fsState.balance ?? startBal,
+          startBal
+        );
+        const paperWithTrades = {
+          ...fsState,
+          balance: pnlCheck.portfolio.balance,
+          trades: normalizedTrades,
+        };
         setPaperState(paperWithTrades);
         localStorage.setItem(PAPER_STORAGE_KEY, JSON.stringify(paperWithTrades));
+        if (pnlCheck.cashRepaired) {
+          void savePaperTradingState({
+            balance: pnlCheck.portfolio.balance,
+            holdings: fsState.holdings,
+            positions: fsState.positions,
+            trades: normalizedTrades,
+          }).catch(() => {});
+        }
       } catch (e) {
         console.error("Failed to load from Firestore, using localStorage cache:", e);
       }
@@ -326,7 +347,9 @@ export default function DashboardPage() {
             </span>
             <span className="text-xs text-text-tertiary ml-1">vs start</span>
           </div>
-          <p className="text-xs text-text-tertiary mt-1">From closed sell trades</p>
+          <p className="text-xs text-text-tertiary mt-1">
+            Matched closed lots (FIFO)
+          </p>
         </div>
       </div>
 

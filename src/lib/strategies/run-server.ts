@@ -28,6 +28,7 @@ import {
 } from "@/lib/portfolio/portfolio-manager";
 import { detectStrategyConflicts } from "@/lib/portfolio/conflict-detector";
 import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trading/balance";
+import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
 import {
   selectTopBuyDecisionsForScan,
 } from "@/lib/portfolio/buy-selection";
@@ -107,6 +108,7 @@ import {
 } from "@/lib/market-data/resolve-execution-price";
 import type { OrderRecord } from "@/lib/firebase";
 import {
+  mergePaperFills,
   normalizePaperTrades,
   tradesNormalizedChanged,
 } from "@/lib/paper-trades/normalize";
@@ -598,7 +600,7 @@ export async function runStrategiesForUser(
       holdings: paperState.holdings,
     };
   }
-  const cleaned = normalizePaperTrades(paperState.trades ?? [], recentOrders);
+  const cleaned = mergePaperFills(paperState.trades ?? [], recentOrders);
   const tradesChanged = tradesNormalizedChanged(
     paperState.trades ?? [],
     cleaned
@@ -606,7 +608,18 @@ export async function runStrategiesForUser(
   if (tradesChanged) {
     paperState = { ...paperState, trades: cleaned };
   }
-  if (tradesChanged || booksRepaired) {
+  const startBal = resolvePaperStartingBalance(userSettings);
+  const pnlCheck = computePnlBreakdown(
+    paperState.trades ?? [],
+    paperState.holdings ?? [],
+    paperState.balance ?? startBal,
+    startBal
+  );
+  const cashRepaired = pnlCheck.cashRepaired;
+  if (cashRepaired) {
+    paperState = { ...paperState, balance: pnlCheck.portfolio.balance };
+  }
+  if (tradesChanged || booksRepaired || cashRepaired) {
     await persistPaperState(db, userId, paperState, recentOrders);
   }
 

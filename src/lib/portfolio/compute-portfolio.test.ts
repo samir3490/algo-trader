@@ -6,7 +6,9 @@ import {
   computePortfolio,
   computeTodayPnl,
   computeRealizedPnl,
+  computeFifoRealizedPnl,
   computePnlBreakdown,
+  deriveHonestCash,
   isTradeTodayIST,
   todayDateKeyIST,
 } from "./compute-portfolio";
@@ -143,29 +145,107 @@ describe("computeRealizedPnl", () => {
   });
 });
 
-describe("computePnlBreakdown", () => {
-  it("aligns unrealized, realized, and all-time figures", () => {
+describe("computeFifoRealizedPnl", () => {
+  it("matches buys to sells and ignores orphan sells", () => {
     const trades: PaperTrade[] = [
       {
-        id: "s1",
+        id: "b1",
         time: "x",
+        date: "2026-10-01",
+        executedAt: "2026-10-01T04:00:00.000Z",
+        symbol: "TCS",
+        exchange: "NSE",
+        side: "BUY",
+        qty: 10,
+        price: 100,
+      },
+      {
+        id: "s1",
+        time: "y",
+        date: "2026-10-02",
+        executedAt: "2026-10-02T04:00:00.000Z",
         symbol: "TCS",
         exchange: "NSE",
         side: "SELL",
-        qty: 5,
-        price: 4200,
-        netPnl: 1000,
+        qty: 10,
+        price: 110,
+        netPnl: 9999,
+      },
+      {
+        id: "orphan",
+        time: "z",
+        date: "2026-10-03",
+        executedAt: "2026-10-03T04:00:00.000Z",
+        symbol: "INFY",
+        exchange: "NSE",
+        side: "SELL",
+        qty: 50,
+        price: 1500,
+        netPnl: 50_000,
+      },
+    ];
+    assert.equal(computeFifoRealizedPnl(trades), 100);
+    assert.equal(computeRealizedPnl(trades), 59_999);
+  });
+});
+
+describe("deriveHonestCash", () => {
+  it("is start minus invested plus realized", () => {
+    assert.equal(deriveHonestCash(1_000_000, 100_000, -5_000), 895_000);
+  });
+});
+
+describe("computePnlBreakdown", () => {
+  it("repairs inflated cash and uses FIFO realized (not orphan netPnl)", () => {
+    const trades: PaperTrade[] = [
+      {
+        id: "b1",
+        time: "x",
+        date: "2026-10-01",
+        executedAt: "2026-10-01T04:00:00.000Z",
+        symbol: "TCS",
+        exchange: "NSE",
+        side: "BUY",
+        qty: 10,
+        price: 100,
+      },
+      {
+        id: "s1",
+        time: "y",
+        date: "2026-10-02",
+        executedAt: "2026-10-02T04:00:00.000Z",
+        symbol: "TCS",
+        exchange: "NSE",
+        side: "SELL",
+        qty: 10,
+        price: 110,
+        netPnl: 100,
+      },
+      {
+        id: "orphan",
+        time: "z",
+        date: "2026-10-03",
+        executedAt: "2026-10-03T04:00:00.000Z",
+        symbol: "WIPRO",
+        exchange: "NSE",
+        side: "SELL",
+        qty: 100,
+        price: 500,
+        netPnl: 200_000,
       },
     ];
     const breakdown = computePnlBreakdown(
       trades,
       [{ symbol: "INFY", exchange: "NSE", qty: 10, avgPrice: 1500, ltp: 1550 }],
-      900_000,
+      1_200_000,
       1_000_000
     );
-    assert.equal(breakdown.realizedPnl, 1000);
+    assert.equal(breakdown.realizedPnl, 100);
     assert.equal(breakdown.unrealizedPnl, 500);
-    assert.equal(breakdown.allTimePnl, breakdown.portfolio.portfolioValue - 1_000_000);
+    assert.equal(breakdown.portfolio.invested, 15_000);
+    assert.equal(breakdown.portfolio.balance, 985_100);
+    assert.equal(breakdown.cashRepaired, true);
+    assert.equal(breakdown.allTimePnl, 985_100 + 15_500 - 1_000_000);
   });
 });
 
