@@ -53,14 +53,15 @@ describe("normalizeAppSettings", () => {
     const out = normalizeAppSettings({
       ...DEFAULT_SETTINGS,
       ruleBasicExits2and5: true,
+      // Clear-locks with a non-zero cooldown = intentional opt-in (not legacy churn).
       ruleClearRebuyLocks: true,
+      rebuyCooldownMinutes: 240,
+      noSameDayRebuyAfterSell: true,
       ruleMaxPositions25: true,
       ruleStrategySellsOff: true,
       autoTakeProfit: false,
       autoTrailingStop: true,
       enableStrategySellSignals: true,
-      rebuyCooldownMinutes: 240,
-      noSameDayRebuyAfterSell: true,
       maxRoundTripsPerSymbolPerDay: 1,
       maxPositions: 5,
     });
@@ -77,6 +78,23 @@ describe("normalizeAppSettings", () => {
     assert.equal(out.maxPositions, SIMPLE_PAPER_MAX_POSITIONS);
   });
 
+  it("migrates legacy clear-locks + zero cooldown to anti-churn gates", () => {
+    const out = normalizeAppSettings({
+      ...DEFAULT_SETTINGS,
+      ruleClearRebuyLocks: true,
+      rebuyCooldownMinutes: 0,
+      noSameDayRebuyAfterSell: false,
+      maxRoundTripsPerSymbolPerDay: 0,
+      ruleMaxPositions25: true,
+      maxPositions: 25,
+    });
+    assert.equal(out.ruleClearRebuyLocks, false);
+    assert.equal(out.rebuyCooldownMinutes, 240);
+    assert.equal(out.noSameDayRebuyAfterSell, true);
+    assert.equal(out.maxRoundTripsPerSymbolPerDay, 1);
+    assert.equal(out.maxPositions, SIMPLE_PAPER_MAX_POSITIONS);
+  });
+
   it("preserves custom exits when basic-exits rule is off", () => {
     const out = normalizeAppSettings({
       ...DEFAULT_SETTINGS,
@@ -90,6 +108,7 @@ describe("normalizeAppSettings", () => {
       takeProfitPercent: 8,
       enableStrategySellSignals: true,
       rebuyCooldownMinutes: 120,
+      noSameDayRebuyAfterSell: false,
       maxPositions: 8,
     });
     assert.equal(out.autoStopLoss, false);
@@ -97,6 +116,7 @@ describe("normalizeAppSettings", () => {
     assert.equal(out.takeProfitPercent, 8);
     assert.equal(out.enableStrategySellSignals, true);
     assert.equal(out.rebuyCooldownMinutes, 120);
+    assert.equal(out.noSameDayRebuyAfterSell, false);
     assert.equal(out.maxPositions, 8);
   });
 

@@ -45,9 +45,9 @@ export const PAPER_RULE_CATALOG: PaperRuleDefinition[] = [
   {
     key: "ruleMaxPositions25",
     category: "Portfolio",
-    label: "Cap open positions at 25",
+    label: "Cap open positions at 10",
     description:
-      "At most 25 open paper names. Turn off to use Max positions from the Paper tab.",
+      "At most 10 open paper names (fewer, higher-conviction slots). Turn off to use Max positions from the Paper tab.",
     defaultOn: true,
   },
   {
@@ -63,23 +63,23 @@ export const PAPER_RULE_CATALOG: PaperRuleDefinition[] = [
     category: "Gates",
     label: "Clear rebuy / day locks each scan",
     description:
-      "Zeros rebuy cooldown, same-day rebuy ban, and round-trip caps, and clears day-locks at the start of every scan so fills are not blocked. Turn off to enforce cooldown settings from the Paper tab.",
-    defaultOn: true,
+      "Zeros rebuy cooldown, same-day rebuy ban, and round-trip caps, and clears day-locks at the start of every scan so fills are not blocked. Leave off to enforce a 4h cooldown and same-day rebuy ban (recommended).",
+    defaultOn: false,
   },
   {
     key: "rulePreferStrongSectors",
     category: "Ranking",
     label: "Strong sectors only for buys",
     description:
-      "Buys only names in today's leading Nifty sectors (hard skip on lagging sectors). Turn off to allow any sector, ranked by signal count / confidence.",
+      "Buys only names in today's leading Nifty sectors. Skips lagging and unknown sectors, and skips all buys if sector data fails to load. Turn off to allow any sector, ranked by signal count / confidence.",
     defaultOn: true,
   },
   {
     key: "ruleMinBuySignals2",
     category: "Ranking",
-    label: "Require 2+ strategy signals to buy",
+    label: "Require 3+ strategy signals to buy",
     description:
-      "A paper BUY needs agreement from at least two strategies on the same symbol. Turn off to allow single-strategy entries.",
+      "A paper BUY needs agreement from at least three strategies on the same symbol. Turn off to allow single-strategy entries.",
     defaultOn: true,
   },
   {

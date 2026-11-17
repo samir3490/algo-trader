@@ -38,8 +38,11 @@ import {
   integerShareQtyForBudget,
 } from "@/lib/portfolio/paper-position-size";
 import {
+  antiChurnSettingsPersistPatch,
   normalizeAppSettings,
   resolvePaperBuyNotional,
+  SIMPLE_PAPER_MAX_POSITIONS,
+  SIMPLE_PAPER_MIN_BUY_SIGNALS,
 } from "@/lib/settings/normalize-settings";
 import { isPaperRuleOn } from "@/lib/settings/paper-rules";
 import { todayDateKeyIST } from "@/lib/portfolio/compute-portfolio";
@@ -292,7 +295,20 @@ async function loadUserSettings(
 ): Promise<AppSettings> {
   const snap = await db.doc(`users/${userId}/data/settings`).get();
   if (!snap.exists) return normalizeAppSettings(DEFAULT_SETTINGS);
-  return normalizeAppSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as AppSettings);
+  const before = {
+    ...DEFAULT_SETTINGS,
+    ...snap.data(),
+  } as AppSettings;
+  const after = normalizeAppSettings(before);
+  const patch = antiChurnSettingsPersistPatch(before, after);
+  if (patch) {
+    try {
+      await db.doc(`users/${userId}/data/settings`).set(patch, { merge: true });
+    } catch (e) {
+      console.warn(`Failed to persist anti-churn settings for ${userId}:`, e);
+    }
+  }
+  return after;
 }
 
 async function logTradeExecutionAudit(
@@ -775,7 +791,7 @@ export async function runStrategiesForUser(
     sectorBias
   );
   const openPositionCount = getOpenPositions(paperState).length;
-  const maxPositions = cronSettings.maxPositions ?? 25;
+  const maxPositions = cronSettings.maxPositions ?? SIMPLE_PAPER_MAX_POSITIONS;
   diagnostics.openPositions = openPositionCount;
   diagnostics.paperBalance = paperState.balance ?? 0;
   diagnostics.maxPositions = maxPositions;
@@ -793,8 +809,13 @@ export async function runStrategiesForUser(
     "rulePreferStrongSectors"
   );
   const minBuySignalCount = isPaperRuleOn(userSettings, "ruleMinBuySignals2")
-    ? 2
+    ? SIMPLE_PAPER_MIN_BUY_SIGNALS
     : 1;
+  if (preferStrongSectors && sectorBias == null) {
+    writeSystemLog("WARN", "SectorBias", "sector_required_skip_buys", {
+      summary: "Strong-sector rule on but sector data missing — skipping buys",
+    });
+  }
   const {
     ranked: rankedQueue,
     slotsToFill,
@@ -803,7 +824,8 @@ export async function runStrategiesForUser(
     openPositionCount,
     maxPositions,
     minBuySignalCount,
-    requireStrongSector: preferStrongSectors && sectorBias != null,
+    // Fail closed: when the rule is on, unknown / missing sector data does not fill slots.
+    requireStrongSector: preferStrongSectors,
   });
 
   diagnostics.buyDecisions = rankedQueue.length;

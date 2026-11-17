@@ -64,8 +64,8 @@ export interface BuyQualityFilterOptions {
   /** Minimum distinct strategy BUY signals on the symbol (default 1). */
   minBuySignalCount?: number;
   /**
-   * When true, drop names with sectorIsStrong === false.
-   * Unknown sector (undefined) is allowed so unmapped symbols are not wiped out.
+   * When true, only names with sectorIsStrong === true pass.
+   * Unknown / missing sector data is skipped (fail closed).
    */
   requireStrongSector?: boolean;
 }
@@ -98,10 +98,13 @@ export function filterBuyDecisionsByQuality(
       });
       continue;
     }
-    if (requireStrong && d.sectorIsStrong === false) {
+    if (requireStrong && d.sectorIsStrong !== true) {
       skipped.push({
         decision: d,
-        reason: "Lagging sector — strong-sector buys only",
+        reason:
+          d.sectorIsStrong === false
+            ? "Lagging sector — strong-sector buys only"
+            : "Sector unknown / data missing — strong-sector buys only",
       });
       continue;
     }

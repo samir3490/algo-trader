@@ -100,7 +100,7 @@ describe("buy-selection", () => {
     assert.equal(ranked[1].symbol, "TATASTEEL");
   });
 
-  it("hard-skips lagging sectors and single-signal buys when quality filters are on", () => {
+  it("hard-skips lagging sectors and under-signal buys when quality filters are on", () => {
     const { ranked, skippedQuality } = selectTopBuyDecisionsForScan(
       [
         {
@@ -109,7 +109,7 @@ describe("buy-selection", () => {
           sectorChangePercent: -1.2,
         },
         {
-          ...buy("INFY", 1),
+          ...buy("INFY", 2),
           sectorIsStrong: true,
           sectorChangePercent: 1.2,
         },
@@ -122,7 +122,7 @@ describe("buy-selection", () => {
       {
         openPositionCount: 0,
         maxPositions: 10,
-        minBuySignalCount: 2,
+        minBuySignalCount: 3,
         requireStrongSector: true,
       }
     );
@@ -135,7 +135,33 @@ describe("buy-selection", () => {
       skippedQuality.some((s) => /Lagging sector/i.test(s.reason))
     );
     assert.ok(
-      skippedQuality.some((s) => /2\+ strategy signals/i.test(s.reason))
+      skippedQuality.some((s) => /3\+ strategy signals/i.test(s.reason))
+    );
+  });
+
+  it("fail-closes unknown sectors when strong-sector filter is on", () => {
+    const { ranked, skippedQuality } = selectTopBuyDecisionsForScan(
+      [
+        buy("UNKNOWN", 4),
+        {
+          ...buy("TCS", 4),
+          sectorIsStrong: true,
+          sectorChangePercent: 1.2,
+        },
+      ],
+      {
+        openPositionCount: 0,
+        maxPositions: 10,
+        minBuySignalCount: 3,
+        requireStrongSector: true,
+      }
+    );
+    assert.deepEqual(
+      ranked.map((d) => d.symbol),
+      ["TCS"]
+    );
+    assert.ok(
+      skippedQuality.some((s) => /Sector unknown/i.test(s.reason))
     );
   });
 });

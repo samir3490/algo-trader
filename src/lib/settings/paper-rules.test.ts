@@ -13,9 +13,10 @@ describe("paper-rules", () => {
     assert.ok(PAPER_RULE_CATALOG.every((r) => r.label && r.description));
   });
 
-  it("defaults missing flags to on", () => {
+  it("defaults missing flags from catalog", () => {
     assert.equal(isPaperRuleOn({}, "rulePreferStrongSectors"), true);
     assert.equal(isPaperRuleOn({}, "ruleMinBuySignals2"), true);
+    assert.equal(isPaperRuleOn({}, "ruleClearRebuyLocks"), false);
     assert.equal(
       isPaperRuleOn({ rulePreferStrongSectors: false }, "rulePreferStrongSectors"),
       false
@@ -27,5 +28,7 @@ describe("paper-rules", () => {
     assert.equal(snap.ruleFixedNotional1L, true);
     assert.equal(snap.rulePreferStrongSectors, true);
     assert.equal(snap.ruleMinBuySignals2, true);
+    assert.equal(snap.ruleClearRebuyLocks, false);
+    assert.equal(snap.ruleMaxPositions25, true);
   });
 });

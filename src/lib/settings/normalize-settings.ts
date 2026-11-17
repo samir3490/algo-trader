@@ -6,8 +6,12 @@ import {
 import { isPaperRuleOn } from "./paper-rules";
 
 /** Simple paper loop defaults when the matching Rules are on. */
-export const SIMPLE_PAPER_MAX_POSITIONS = 25;
+export const SIMPLE_PAPER_MAX_POSITIONS = 10;
 export const SIMPLE_PAPER_ORDER_NOTIONAL = 100_000;
+/** Min distinct strategy BUY signals when the quality rule is on. */
+export const SIMPLE_PAPER_MIN_BUY_SIGNALS = 3;
+/** Rebuy cooldown when clear-locks is off (stops same-day stop-out → rebuy loops). */
+export const SIMPLE_PAPER_REBUY_COOLDOWN_MINUTES = 240;
 
 /**
  * Prefer fixed ₹ notional when "Fixed ₹1L buy size" rule is on.
@@ -23,6 +27,20 @@ export function effectivePositionSizingMode(
     return settings.positionSizingMode ?? "notional";
   }
   return "notional";
+}
+
+/** True when stored profile still has the old clear-locks + zero-cooldown combo. */
+export function hasLegacyChurnDefaults(
+  settings: Pick<
+    AppSettings,
+    "ruleClearRebuyLocks" | "rebuyCooldownMinutes" | "noSameDayRebuyAfterSell"
+  >
+): boolean {
+  return (
+    settings.ruleClearRebuyLocks === true &&
+    (settings.rebuyCooldownMinutes ?? 0) <= 0 &&
+    settings.noSameDayRebuyAfterSell !== true
+  );
 }
 
 /** Align paper sizing / exits / locks based on Settings → Rules checkboxes. */
@@ -78,10 +96,29 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     next.minHoldMinutesBeforeSell = 0;
   }
 
-  if (isPaperRuleOn(settings, "ruleClearRebuyLocks")) {
+  // Old default was clear-locks ON + zero cooldown (stop-out → same-day rebuy).
+  const legacyChurnDefaults = hasLegacyChurnDefaults(settings);
+  if (legacyChurnDefaults) {
+    next.ruleClearRebuyLocks = false;
+  }
+
+  if (isPaperRuleOn(next, "ruleClearRebuyLocks")) {
     next.rebuyCooldownMinutes = 0;
     next.noSameDayRebuyAfterSell = false;
     next.maxRoundTripsPerSymbolPerDay = 0;
+  } else {
+    // Anti-churn gates: cooldown + same-day rebuy ban.
+    if ((next.rebuyCooldownMinutes ?? 0) <= 0) {
+      next.rebuyCooldownMinutes = SIMPLE_PAPER_REBUY_COOLDOWN_MINUTES;
+    }
+    if (legacyChurnDefaults) {
+      next.noSameDayRebuyAfterSell = true;
+      if ((settings.maxRoundTripsPerSymbolPerDay ?? 0) <= 0) {
+        next.maxRoundTripsPerSymbolPerDay = 1;
+      }
+    } else if (settings.noSameDayRebuyAfterSell !== false) {
+      next.noSameDayRebuyAfterSell = true;
+    }
   }
 
   // Keep notification / regime booleans as stored (Rules tab writes them).
@@ -97,6 +134,31 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   return next;
 }
 
+/**
+ * Fields to merge back to Firestore after anti-churn / position-cap migration.
+ * Returns null when nothing needs persisting.
+ */
+export function antiChurnSettingsPersistPatch(
+  before: AppSettings,
+  after: AppSettings
+): Partial<AppSettings> | null {
+  const patch: Partial<AppSettings> = {};
+  if (before.ruleClearRebuyLocks === true && after.ruleClearRebuyLocks === false) {
+    patch.ruleClearRebuyLocks = false;
+    patch.rebuyCooldownMinutes = after.rebuyCooldownMinutes;
+    patch.noSameDayRebuyAfterSell = after.noSameDayRebuyAfterSell;
+    patch.maxRoundTripsPerSymbolPerDay = after.maxRoundTripsPerSymbolPerDay;
+  }
+  if (
+    isPaperRuleOn(after, "ruleMaxPositions25") &&
+    before.maxPositions !== after.maxPositions &&
+    after.maxPositions === SIMPLE_PAPER_MAX_POSITIONS
+  ) {
+    patch.maxPositions = SIMPLE_PAPER_MAX_POSITIONS;
+  }
+  return Object.keys(patch).length > 0 ? patch : null;
+}
+
 /** Resolve ₹ budget for a paper BUY under current rules. */
 export function resolvePaperBuyNotional(settings: AppSettings): number {
   if (isPaperRuleOn(settings, "ruleFixedNotional1L")) {
@@ -104,4 +166,3 @@ export function resolvePaperBuyNotional(settings: AppSettings): number {
   }
   return Math.max(1000, settings.paperOrderNotional || SIMPLE_PAPER_ORDER_NOTIONAL);
 }
-

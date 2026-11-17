@@ -5,7 +5,10 @@ import {
   type PaperTradingState,
   type StrategyRunnerMeta,
 } from "@/lib/firebase";
-import { normalizeAppSettings } from "@/lib/settings/normalize-settings";
+import {
+  antiChurnSettingsPersistPatch,
+  normalizeAppSettings,
+} from "@/lib/settings/normalize-settings";
 import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 
 export async function listStrategyUserIds(db: Firestore): Promise<string[]> {
@@ -25,7 +28,20 @@ export async function loadUserSettingsAdmin(
 ): Promise<AppSettings> {
   const snap = await db.doc(`users/${userId}/data/settings`).get();
   if (!snap.exists) return normalizeAppSettings(DEFAULT_SETTINGS);
-  return normalizeAppSettings({ ...DEFAULT_SETTINGS, ...snap.data() } as AppSettings);
+  const before = {
+    ...DEFAULT_SETTINGS,
+    ...snap.data(),
+  } as AppSettings;
+  const after = normalizeAppSettings(before);
+  const patch = antiChurnSettingsPersistPatch(before, after);
+  if (patch) {
+    try {
+      await db.doc(`users/${userId}/data/settings`).set(patch, { merge: true });
+    } catch {
+      /* best-effort persist */
+    }
+  }
+  return after;
 }
 
 export async function loadPaperStateAdmin(

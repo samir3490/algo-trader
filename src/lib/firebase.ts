@@ -1,4 +1,7 @@
-import { normalizeAppSettings } from "@/lib/settings/normalize-settings";
+import {
+  antiChurnSettingsPersistPatch,
+  normalizeAppSettings,
+} from "@/lib/settings/normalize-settings";
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import {
@@ -393,7 +396,7 @@ export interface AppSettings {
   ruleStrategySellsOff: boolean;
   ruleClearRebuyLocks: boolean;
   rulePreferStrongSectors: boolean;
-  /** Require ≥2 strategy BUY signals on a symbol before paper entry. */
+  /** Require ≥3 strategy BUY signals on a symbol before paper entry (rule name kept for Firestore compat). */
   ruleMinBuySignals2: boolean;
   ruleAutoSeedUniverse: boolean;
   /** Minutes before same symbol can be bought after a sell (default 4h). */
@@ -480,7 +483,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   takeProfitPercent: 5,
   autoStopLoss: true,
   autoTakeProfit: true,
-  maxPositions: 25,
+  maxPositions: 10,
   squareOffTime: "15:15",
   notifyOrders: true,
   notifyEmailDigest: true,
@@ -493,13 +496,13 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ruleBasicExits2and5: true,
   ruleMaxPositions25: true,
   ruleStrategySellsOff: true,
-  ruleClearRebuyLocks: true,
+  ruleClearRebuyLocks: false,
   rulePreferStrongSectors: true,
   ruleMinBuySignals2: true,
   ruleAutoSeedUniverse: true,
-  rebuyCooldownMinutes: 0,
-  maxRoundTripsPerSymbolPerDay: 0,
-  noSameDayRebuyAfterSell: false,
+  rebuyCooldownMinutes: 240,
+  maxRoundTripsPerSymbolPerDay: 1,
+  noSameDayRebuyAfterSell: true,
   minHoldMinutesBeforeSell: 0,
   enableStrategySellSignals: false,
   strategySellMinSignals: 2,
@@ -531,10 +534,16 @@ export async function getSettings(): Promise<AppSettings> {
     const ref = doc(db, "users", getUserId(), "data", "settings");
     const snap = await getDoc(ref);
     if (snap.exists()) {
-      return normalizeAppSettings({
+      const before = {
         ...DEFAULT_SETTINGS,
         ...snap.data(),
-      } as AppSettings);
+      } as AppSettings;
+      const after = normalizeAppSettings(before);
+      const patch = antiChurnSettingsPersistPatch(before, after);
+      if (patch) {
+        void saveSettings(patch).catch(() => {});
+      }
+      return after;
     }
   } catch (e) {
     console.error("Error loading settings:", e);
