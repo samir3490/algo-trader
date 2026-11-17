@@ -40,6 +40,10 @@ import {
   portfolioChartPeriodLabel,
   type PortfolioChartPeriod,
 } from "@/lib/portfolio/compute-portfolio";
+import {
+  computeTradePeriodTotals,
+  resolveTradeDateRange,
+} from "@/lib/portfolio/trade-period";
 import MarketTrendHero from "@/components/dashboard/market-trend-hero";
 import SectorPerformanceChart from "@/components/dashboard/sector-performance-chart";
 import PaperHealthStrip from "@/components/dashboard/paper-health-strip";
@@ -231,6 +235,10 @@ export default function DashboardPage() {
       ),
     [normalizedTradesForPnl, paperState.balance, paperState.holdings, startingBalance, chartPeriod]
   );
+  const chartPeriodTotals = useMemo(() => {
+    const range = resolveTradeDateRange(chartPeriod);
+    return computeTradePeriodTotals(normalizedTradesForPnl, range);
+  }, [normalizedTradesForPnl, chartPeriod]);
   const chartHasData = chartData.length > 1;
   const chartMin = chartHasData ? Math.min(...chartData.map((d) => d.value)) * 0.998 : 990000;
   const chartMax = chartHasData ? Math.max(...chartData.map((d) => d.value)) * 1.002 : 1010000;
@@ -396,6 +404,47 @@ export default function DashboardPage() {
             ))}
           </div>
         </div>
+        {chartHasData && (
+          <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Trades</p>
+              <p className="text-sm font-semibold tabular-nums text-text-primary">
+                {chartPeriodTotals.tradeCount}
+              </p>
+              <p className="text-[11px] text-text-tertiary">
+                {chartPeriodTotals.buyCount} buy · {chartPeriodTotals.sellCount} sell
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Total traded</p>
+              <p className="text-sm font-semibold tabular-nums text-text-primary">
+                {formatCurrency(chartPeriodTotals.totalTurnover)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Realized P&amp;L</p>
+              <p
+                className={cn(
+                  "text-sm font-semibold tabular-nums",
+                  chartPeriodTotals.realizedPnl >= 0 ? "text-profit" : "text-loss"
+                )}
+              >
+                {chartPeriodTotals.realizedPnl >= 0 ? "+" : ""}
+                {formatCurrency(chartPeriodTotals.realizedPnl)}
+              </p>
+              <p className="text-[11px] text-text-tertiary">
+                {chartPeriodTotals.wins}W / {chartPeriodTotals.losses}L
+                {chartPeriodTotals.winRate > 0 ? ` · ${chartPeriodTotals.winRate}%` : ""}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Fees</p>
+              <p className="text-sm font-semibold tabular-nums text-text-primary">
+                {formatCurrency(chartPeriodTotals.fees)}
+              </p>
+            </div>
+          </div>
+        )}
         <div className="h-72">
           {chartHasData ? (
             <ResponsiveContainer width="100%" height="100%">

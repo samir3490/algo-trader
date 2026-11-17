@@ -71,6 +71,13 @@ import { fetchMarketQuote } from "@/lib/market-data/fetch-quote-client";
 import { formatBuyStrength, resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
+import {
+  computeTradePeriodTotals,
+  filterTradesByDateRange,
+  resolveTradeDateRange,
+  tradePeriodLabel,
+  type TradePeriodPreset,
+} from "@/lib/portfolio/trade-period";
 import { PaperOrderPanel } from "@/app/paper-trading/order-panel";
 import PaperExportMenu from "@/components/paper-export-menu";
 import PaperHealthPanel from "@/components/paper-health-panel";
@@ -249,6 +256,9 @@ export default function PaperTradingPage() {
     null
   );
   const [activeTab, setActiveTab] = useState<PaperTradingTab>("holdings");
+  const [tradePeriod, setTradePeriod] = useState<TradePeriodPreset>("week");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [riskToast, setRiskToast] = useState<string | null>(null);
   const [orderPanelOpen, setOrderPanelOpen] = useState(false);
@@ -1028,10 +1038,28 @@ export default function PaperTradingPage() {
     [strategyDetails, strategySort.sortRows]
   );
 
+  const tradeDateRange = useMemo(
+    () =>
+      resolveTradeDateRange(tradePeriod, new Date(), {
+        from: customFrom,
+        to: customTo,
+      }),
+    [tradePeriod, customFrom, customTo]
+  );
+  const periodFilteredTrades = useMemo(
+    () => filterTradesByDateRange(enrichedTrades, tradeDateRange),
+    [enrichedTrades, tradeDateRange]
+  );
+  const periodTotals = useMemo(
+    () => computeTradePeriodTotals(normalizedTrades, tradeDateRange),
+    [normalizedTrades, tradeDateRange]
+  );
+  const periodLabel = tradePeriodLabel(tradePeriod, tradeDateRange);
+
   const tradesSort = useTableSort({ key: "when", dir: "desc" });
   const sortedEnrichedTrades = useMemo(
     () =>
-      tradesSort.sortRows(enrichedTrades, {
+      tradesSort.sortRows(periodFilteredTrades, {
         when: (t) => tradeExecutedAtMs(t),
         symbol: (t) => t.symbol,
         strategy: (t) => t.displayStrategyName ?? "",
@@ -1041,7 +1069,7 @@ export default function PaperTradingPage() {
         total: (t) => t.qty * t.price,
         netPnl: (t) => t.netPnl ?? 0,
       }),
-    [enrichedTrades, tradesSort.sortRows]
+    [periodFilteredTrades, tradesSort.sortRows]
   );
 
   const summaryItems = [
@@ -1843,7 +1871,8 @@ export default function PaperTradingPage() {
             Trade History
             {enrichedTrades.length > 0 && (
               <span className="ml-2 text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">
-                {enrichedTrades.length}
+                {periodFilteredTrades.length}
+                {tradePeriod !== "all" ? ` / ${enrichedTrades.length}` : ""}
               </span>
             )}
           </h2>
@@ -1868,8 +1897,126 @@ export default function PaperTradingPage() {
           </div>
         </div>
 
+        {enrichedTrades.length > 0 && (
+          <div className="mb-4 space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div
+                className="flex flex-wrap items-center gap-1 rounded-lg bg-bg-tertiary p-1"
+                role="tablist"
+                aria-label="Trade history period"
+              >
+                {(
+                  [
+                    ["week", "Week"],
+                    ["month", "Month"],
+                    ["year", "Year"],
+                    ["all", "All"],
+                    ["custom", "Custom"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    role="tab"
+                    aria-selected={tradePeriod === value}
+                    onClick={() => setTradePeriod(value)}
+                    className={cn(
+                      "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                      tradePeriod === value
+                        ? "bg-bg-elevated text-text-primary shadow-sm"
+                        : "text-text-secondary hover:text-text-primary"
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-xs text-text-tertiary">{periodLabel}</p>
+            </div>
+
+            {tradePeriod === "custom" && (
+              <div className="flex flex-wrap items-end gap-3">
+                <label className="flex flex-col gap-1 text-xs text-text-tertiary">
+                  From
+                  <input
+                    type="date"
+                    value={customFrom}
+                    onChange={(e) => setCustomFrom(e.target.value)}
+                    className="rounded-md border border-border bg-bg-secondary px-3 py-1.5 text-sm text-text-primary"
+                  />
+                </label>
+                <label className="flex flex-col gap-1 text-xs text-text-tertiary">
+                  To
+                  <input
+                    type="date"
+                    value={customTo}
+                    onChange={(e) => setCustomTo(e.target.value)}
+                    className="rounded-md border border-border bg-bg-secondary px-3 py-1.5 text-sm text-text-primary"
+                  />
+                </label>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Trades</p>
+                <p className="text-sm font-semibold tabular-nums text-text-primary">
+                  {periodTotals.tradeCount}
+                </p>
+                <p className="text-[11px] text-text-tertiary">
+                  {periodTotals.buyCount} buy · {periodTotals.sellCount} sell
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Buy amount</p>
+                <p className="text-sm font-semibold tabular-nums text-text-primary">
+                  {formatCurrency(periodTotals.buyTurnover)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Sell amount</p>
+                <p className="text-sm font-semibold tabular-nums text-text-primary">
+                  {formatCurrency(periodTotals.sellTurnover)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Total traded</p>
+                <p className="text-sm font-semibold tabular-nums text-text-primary">
+                  {formatCurrency(periodTotals.totalTurnover)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Realized P&amp;L</p>
+                <p
+                  className={cn(
+                    "text-sm font-semibold tabular-nums",
+                    periodTotals.realizedPnl >= 0 ? "text-profit" : "text-loss"
+                  )}
+                >
+                  {periodTotals.realizedPnl >= 0 ? "+" : ""}
+                  {formatCurrency(periodTotals.realizedPnl)}
+                </p>
+                <p className="text-[11px] text-text-tertiary">
+                  {periodTotals.wins}W / {periodTotals.losses}L
+                  {periodTotals.winRate > 0 ? ` · ${periodTotals.winRate}%` : ""}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Fees</p>
+                <p className="text-sm font-semibold tabular-nums text-text-primary">
+                  {formatCurrency(periodTotals.fees)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {enrichedTrades.length === 0 ? (
           <div className="py-12 text-center text-text-tertiary">No trades yet.</div>
+        ) : periodFilteredTrades.length === 0 ? (
+          <div className="py-12 text-center text-text-tertiary">
+            No trades in {periodLabel.toLowerCase()}.
+          </div>
         ) : (
           <>
         <div className="md:hidden space-y-3">
