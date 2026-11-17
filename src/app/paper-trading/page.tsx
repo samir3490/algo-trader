@@ -72,6 +72,7 @@ import { formatBuyStrength, resolvePaperStartingBalance } from "@/lib/paper-trad
 import { refreshHoldingsLtpClient } from "@/lib/market-data/refresh-holdings-ltp";
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
 import {
+  attachFifoNetPnl,
   computeTradePeriodTotals,
   filterTradesByDateRange,
   resolveTradeDateRange,
@@ -945,7 +946,10 @@ export default function PaperTradingPage() {
   );
 
   const enrichedTrades = useMemo(
-    () => enrichTradesWithStrategy(normalizedTrades, enrichOptions),
+    () =>
+      attachFifoNetPnl(
+        enrichTradesWithStrategy(normalizedTrades, enrichOptions)
+      ),
     [normalizedTrades, enrichOptions]
   );
   const strategyDetails = useMemo(

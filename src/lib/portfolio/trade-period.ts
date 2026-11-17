@@ -175,6 +175,66 @@ export function computeFifoRealizedPnlInRange(
   };
 }
 
+/**
+ * Per-sell FIFO net P&L keyed by trade id (matched lots only).
+ * Used to fill blank Net P&L cells when stored netPnl was dropped in merge.
+ */
+export function buildFifoNetPnlByTradeId(
+  trades: PaperTrade[]
+): Map<string, number> {
+  const sorted = [...trades].sort(
+    (a, b) => tradeExecutedAtMs(a) - tradeExecutedAtMs(b)
+  );
+  const lots = new Map<string, { qty: number; costPerShare: number }[]>();
+  const byId = new Map<string, number>();
+
+  for (const t of sorted) {
+    const key = positionKey(t.symbol, t.exchange);
+    if (t.side === "BUY") {
+      const list = lots.get(key) ?? [];
+      const cashOut = buyCashOut(t);
+      const costPerShare = t.qty > 0 ? cashOut / t.qty : t.price;
+      list.push({ qty: Math.floor(t.qty), costPerShare });
+      lots.set(key, list);
+      continue;
+    }
+
+    let rem = Math.floor(t.qty);
+    if (rem <= 0) continue;
+    const proceedsPerShare = t.qty > 0 ? sellCashIn(t) / t.qty : t.price;
+    const list = lots.get(key) ?? [];
+    let sellPnl = 0;
+    let matched = 0;
+    while (rem > 0 && list.length > 0) {
+      const lot = list[0];
+      const take = Math.min(rem, lot.qty);
+      sellPnl += (proceedsPerShare - lot.costPerShare) * take;
+      matched += take;
+      lot.qty -= take;
+      rem -= take;
+      if (lot.qty <= 0) list.shift();
+    }
+    lots.set(key, list);
+    if (matched > 0 && t.id) {
+      byId.set(t.id, round2(sellPnl));
+    }
+  }
+
+  return byId;
+}
+
+/** Copy trades with netPnl filled from FIFO (keeps existing netPnl when FIFO has no match). */
+export function attachFifoNetPnl<T extends PaperTrade>(trades: T[]): T[] {
+  const byId = buildFifoNetPnlByTradeId(trades);
+  return trades.map((t) => {
+    if (t.side !== "SELL") return t;
+    const fifo = t.id ? byId.get(t.id) : undefined;
+    if (fifo != null) return { ...t, netPnl: fifo };
+    if (typeof t.netPnl === "number") return t;
+    return t;
+  });
+}
+
 export function computeTradePeriodTotals(
   trades: PaperTrade[],
   range: TradeDateRange

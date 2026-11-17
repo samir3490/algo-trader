@@ -75,24 +75,64 @@ function strategyDayKey(t: PaperTrade): string {
 }
 
 function pickBetterTrade(a: PaperTrade, b: PaperTrade): PaperTrade {
-  const aScore =
-    (a.strategyName ? 4 : 0) +
-    (a.strategyId ? 2 : 0) +
-    (a.reason ? 1 : 0);
-  const bScore =
-    (b.strategyName ? 4 : 0) +
-    (b.strategyId ? 2 : 0) +
-    (b.reason ? 1 : 0);
-  if (bScore !== aScore) return bScore > aScore ? b : a;
+  const score = (t: PaperTrade) =>
+    (t.strategyName ? 4 : 0) +
+    (t.strategyId ? 2 : 0) +
+    (t.reason ? 1 : 0) +
+    (typeof t.netPnl === "number" ? 2 : 0) +
+    (typeof t.charges === "number" ? 1 : 0);
+  const aScore = score(a);
+  const bScore = score(b);
+  if (bScore !== aScore) {
+    const winner = bScore > aScore ? b : a;
+    const other = winner === b ? a : b;
+    return {
+      ...winner,
+      reason: pickRicherReason(winner.reason, other.reason) ?? winner.reason,
+      netPnl:
+        typeof winner.netPnl === "number" ? winner.netPnl : other.netPnl,
+      charges:
+        typeof winner.charges === "number" ? winner.charges : other.charges,
+      grossAmount:
+        typeof winner.grossAmount === "number"
+          ? winner.grossAmount
+          : other.grossAmount,
+    };
+  }
   const richer = pickRicherReason(a.reason, b.reason);
-  if (richer && richer !== a.reason && richer === b.reason) return b;
-  if (richer && richer !== b.reason && richer === a.reason) return a;
+  if (richer && richer !== a.reason && richer === b.reason) {
+    return {
+      ...b,
+      reason: richer,
+      netPnl: typeof b.netPnl === "number" ? b.netPnl : a.netPnl,
+      charges: typeof b.charges === "number" ? b.charges : a.charges,
+      grossAmount:
+        typeof b.grossAmount === "number" ? b.grossAmount : a.grossAmount,
+    };
+  }
+  if (richer && richer !== b.reason && richer === a.reason) {
+    return {
+      ...a,
+      reason: richer,
+      netPnl: typeof a.netPnl === "number" ? a.netPnl : b.netPnl,
+      charges: typeof a.charges === "number" ? a.charges : b.charges,
+      grossAmount:
+        typeof a.grossAmount === "number" ? a.grossAmount : b.grossAmount,
+    };
+  }
   const winner =
     tradeExecutedAtMs(b) >= tradeExecutedAtMs(a) ? b : a;
   const other = winner === b ? a : b;
   return {
     ...winner,
     reason: pickRicherReason(winner.reason, other.reason) ?? winner.reason,
+    netPnl: typeof winner.netPnl === "number" ? winner.netPnl : other.netPnl,
+    charges:
+      typeof winner.charges === "number" ? winner.charges : other.charges,
+    grossAmount:
+      typeof winner.grossAmount === "number"
+        ? winner.grossAmount
+        : other.grossAmount,
   };
 }
 

@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { PaperTrade } from "@/lib/firebase";
 import {
+  attachFifoNetPnl,
   computeFifoRealizedPnlInRange,
   computeTradePeriodTotals,
   filterTradesByDateRange,
@@ -113,6 +114,32 @@ describe("computeFifoRealizedPnlInRange", () => {
       toKey: "2026-10-31",
     });
     assert.equal(before.realizedPnl, 0);
+  });
+});
+
+describe("attachFifoNetPnl", () => {
+  it("fills missing netPnl on sells from FIFO cost basis", () => {
+    const trades = [
+      trade({
+        id: "b",
+        symbol: "AAA",
+        side: "BUY",
+        qty: 10,
+        price: 100,
+        executedAt: "2026-11-12T10:00:00+05:30",
+      }),
+      trade({
+        id: "s",
+        symbol: "AAA",
+        side: "SELL",
+        qty: 10,
+        price: 110,
+        executedAt: "2026-11-14T10:00:00+05:30",
+      }),
+    ];
+    const withPnl = attachFifoNetPnl(trades);
+    assert.equal(withPnl[0].netPnl, undefined);
+    assert.equal(withPnl[1].netPnl, 100);
   });
 });
 
