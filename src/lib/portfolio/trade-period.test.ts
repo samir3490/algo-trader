@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { PaperTrade } from "@/lib/firebase";
+import { resolveTradeCharges } from "@/lib/brokerage/trade-charges";
 import {
   attachFifoNetPnl,
   computeFifoRealizedPnlInRange,
@@ -176,10 +177,40 @@ describe("computeTradePeriodTotals", () => {
     assert.equal(totals.sellTurnover, 900);
     assert.equal(totals.realizedPnl, -110);
     assert.equal(totals.losses, 1);
-    assert.equal(totals.fees, 10);
+    const expectedFees =
+      resolveTradeCharges(trades[0]).total + resolveTradeCharges(trades[1]).total;
+    assert.equal(totals.fees, Math.round(expectedFees * 100) / 100);
+    assert.equal(totals.feesEstimated, false);
     assert.equal(
       tradePeriodLabel("week", { fromKey: "2026-11-11", toKey: "2026-11-17" }),
       "Last 7 days (IST)"
     );
+  });
+
+  it("estimates fees when charges are missing on trades", () => {
+    const trades = [
+      trade({
+        id: "b",
+        symbol: "AAA",
+        side: "BUY",
+        qty: 10,
+        price: 100,
+        executedAt: "2026-11-12T10:00:00+05:30",
+      }),
+      trade({
+        id: "s",
+        symbol: "AAA",
+        side: "SELL",
+        qty: 10,
+        price: 110,
+        executedAt: "2026-11-14T10:00:00+05:30",
+      }),
+    ];
+    const totals = computeTradePeriodTotals(trades, {
+      fromKey: "2026-11-11",
+      toKey: "2026-11-17",
+    });
+    assert.ok(totals.fees > 0);
+    assert.equal(totals.feesEstimated, true);
   });
 });

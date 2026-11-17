@@ -442,6 +442,9 @@ export default function DashboardPage() {
               <p className="text-sm font-semibold tabular-nums text-text-primary">
                 {formatCurrency(chartPeriodTotals.fees)}
               </p>
+              {chartPeriodTotals.feesEstimated && (
+                <p className="text-[11px] text-text-tertiary">est. Zerodha schedule</p>
+              )}
             </div>
           </div>
         )}

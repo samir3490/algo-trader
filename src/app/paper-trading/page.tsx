@@ -2010,6 +2010,9 @@ export default function PaperTradingPage() {
                 <p className="text-sm font-semibold tabular-nums text-text-primary">
                   {formatCurrency(periodTotals.fees)}
                 </p>
+                {periodTotals.feesEstimated && (
+                  <p className="text-[11px] text-text-tertiary">est. Zerodha schedule</p>
+                )}
               </div>
             </div>
           </div>

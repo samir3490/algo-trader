@@ -1,4 +1,5 @@
 import type { PaperTrade } from "@/lib/firebase";
+import { resolveTradeCharges } from "@/lib/brokerage/trade-charges";
 import { tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
 import {
   portfolioChartWindowDays,
@@ -31,6 +32,8 @@ export interface TradePeriodTotals {
   losses: number;
   winRate: number;
   fees: number;
+  /** True when any fee in the total was estimated (Zerodha schedule). */
+  feesEstimated: boolean;
 }
 
 function round2(n: number): number {
@@ -245,10 +248,13 @@ export function computeTradePeriodTotals(
   let buyTurnover = 0;
   let sellTurnover = 0;
   let fees = 0;
+  let feesEstimated = false;
 
   for (const t of inRange) {
     const turnover = tradeTurnover(t);
-    if (typeof t.charges === "number") fees += t.charges;
+    const charges = resolveTradeCharges(t);
+    fees += charges.total;
+    if (charges.estimated) feesEstimated = true;
     if (t.side === "BUY") {
       buyCount += 1;
       buyTurnover += turnover;
@@ -275,5 +281,6 @@ export function computeTradePeriodTotals(
     losses,
     winRate: closed > 0 ? round2((wins / closed) * 100) : 0,
     fees: round2(fees),
+    feesEstimated: inRange.length > 0 && feesEstimated,
   };
 }
