@@ -16,7 +16,6 @@ import type {
   SectorPerformancePayload,
   SectorPerformanceRow,
 } from "@/lib/market-data/sector-performance";
-import { chartTokens } from "@/lib/ui/chart-tokens";
 
 const REFRESH_MS = 5 * 60 * 1000;
 
@@ -78,19 +77,21 @@ export default function SectorPerformanceChart({
 
   return (
     <div className="card">
-      <div className="flex items-start justify-between gap-3 mb-5">
-        <div className="space-y-1">
-          <h2 className="type-title text-text-primary">Sector performance</h2>
-          <p className="type-caption">Nifty sectorals · best to worst today</p>
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h2 className="text-lg font-semibold text-text-primary">Sector Performance</h2>
+          <p className="text-sm text-text-secondary">
+            Nifty sectoral indices · best to worst (today)
+          </p>
         </div>
-        {loading && <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />}
+        {loading && <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />}
       </div>
 
-      {error && <p className="text-sm text-loss mb-2">{error}</p>}
+      {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
 
       {chartData.length > 0 ? (
         <>
-          <div className="h-[220px] sm:h-[280px] mb-3">
+          <div className="h-[280px] sm:h-[360px] mb-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={chartData}
@@ -100,7 +101,7 @@ export default function SectorPerformanceChart({
                 <XAxis
                   type="number"
                   tickFormatter={(v: number) => `${v.toFixed(1)}%`}
-                  tick={{ fill: chartTokens.axis, fontSize: 11 }}
+                  tick={{ fill: "#595959", fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -108,7 +109,7 @@ export default function SectorPerformanceChart({
                   type="category"
                   dataKey="name"
                   width={96}
-                  tick={{ fill: chartTokens.axis, fontSize: 10 }}
+                  tick={{ fill: "#595959", fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -117,9 +118,7 @@ export default function SectorPerformanceChart({
                   {chartData.map((entry) => (
                     <Cell
                       key={entry.id}
-                      fill={
-                        entry.changePercent >= 0 ? chartTokens.profit : chartTokens.loss
-                      }
+                      fill={entry.changePercent >= 0 ? "#10b981" : "#ef4444"}
                       fillOpacity={0.85}
                     />
                   ))}
@@ -141,9 +140,9 @@ export default function SectorPerformanceChart({
                     <button
                       type="button"
                       onClick={() => setExpandedId(open ? null : row.id)}
-                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-bg-hover/50 transition-colors"
+                      className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-bg-hover/50 transition-colors"
                     >
-                      <div className="flex items-center gap-2 w-36 shrink-0 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
                         {hasDrivers ? (
                           open ? (
                             <ChevronDown className="h-4 w-4 text-text-tertiary shrink-0" />
@@ -159,7 +158,7 @@ export default function SectorPerformanceChart({
                       </div>
                       <span
                         className={cn(
-                          "text-sm font-semibold tabular-nums shrink-0",
+                          "text-sm font-semibold tabular-nums shrink-0 ml-2",
                           row.changePercent >= 0 ? "text-profit" : "text-loss"
                         )}
                       >
@@ -218,9 +217,9 @@ function DriverList({
         {stocks.map((s) => (
           <li
             key={s.symbol}
-            className="inline-flex items-center gap-3 text-sm rounded-md bg-bg-tertiary/50 px-2 py-1"
+            className="flex items-center justify-between text-xs rounded-md bg-bg-tertiary/50 px-2 py-1.5"
           >
-            <span className="font-medium text-text-primary w-20 truncate">{s.symbol}</span>
+            <span className="font-medium text-text-primary">{s.symbol}</span>
             <span
               className={cn(
                 "font-semibold tabular-nums",

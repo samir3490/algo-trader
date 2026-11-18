@@ -30,16 +30,6 @@ import {
 } from "@/lib/portfolio/sector-bias";
 import { normalizeExitReasonLabel } from "@/lib/portfolio/exit-label";
 import PaperExportMenu from "@/components/paper-export-menu";
-import PageHeader from "@/components/ui/page-header";
-import EmptyState from "@/components/ui/empty-state";
-import DataTable from "@/components/ui/data-table";
-import Button from "@/components/ui/button";
-import { SkeletonTable } from "@/components/ui/skeleton";
-import { useOptionalToast } from "@/components/ui/toast";
-import {
-  downloadCombinedOrdersCsv,
-  downloadLiveOrdersCsv,
-} from "@/lib/export/live-data-export";
 import {
   ClipboardList,
   Search,
@@ -51,7 +41,8 @@ import {
   XCircle,
   AlertCircle,
   RefreshCw,
-  Download,
+  Loader2,
+  Users,
 } from "lucide-react";
 
 type OrderStatus = "EXECUTED" | "PENDING" | "REJECTED" | "CANCELLED" | "OPEN" | "COMPLETE";
@@ -173,16 +164,11 @@ function mapPaperTrade(t: PaperTrade, idx: number): Order {
 
 export default function OrdersPage() {
   const { user } = useAuth();
-  const toast = useOptionalToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "ALL">("ALL");
   const [searchQuery, setSearchQuery] = useState("");
-  const [strategyFilter, setStrategyFilter] = useState<string>("ALL");
-  const [accountFilter, setAccountFilter] = useState<string>("ALL");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
 
   function mapFirestoreOrder(o: OrderRecord): Order {
     return {
@@ -315,59 +301,13 @@ export default function OrdersPage() {
     fetchAllOrders();
   }, [fetchAllOrders, user]);
 
-  const strategyOptions = useMemo(() => {
-    const names = new Set<string>();
-    for (const o of orders) {
-      if (o.strategyName) names.add(o.strategyName);
-    }
-    return Array.from(names).sort();
-  }, [orders]);
-
-  const accountOptions = useMemo(() => {
-    const ids = new Set<string>();
-    for (const o of orders) {
-      if (o.accountId) ids.add(o.accountId);
-    }
-    return Array.from(ids).sort();
-  }, [orders]);
-
   const filtered = orders.filter((o) => {
     if (activeTab === "paper" && o.mode !== "PAPER") return false;
     if (activeTab === "live" && o.mode !== "LIVE") return false;
     if (statusFilter !== "ALL" && o.status !== statusFilter) return false;
     if (searchQuery && !o.symbol.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    if (strategyFilter !== "ALL" && (o.strategyName || "") !== strategyFilter) return false;
-    if (accountFilter !== "ALL" && (o.accountId || "") !== accountFilter) return false;
-    if (dateFrom || dateTo) {
-      const ms = parseDateTimeMs(o.time, o.date);
-      if (dateFrom) {
-        const fromMs = Date.parse(`${dateFrom}T00:00:00+05:30`);
-        if (!Number.isNaN(fromMs) && ms < fromMs) return false;
-      }
-      if (dateTo) {
-        const toMs = Date.parse(`${dateTo}T23:59:59+05:30`);
-        if (!Number.isNaN(toMs) && ms > toMs) return false;
-      }
-    }
     return true;
   });
-
-  const hasActiveFilters =
-    statusFilter !== "ALL" ||
-    searchQuery.length > 0 ||
-    strategyFilter !== "ALL" ||
-    accountFilter !== "ALL" ||
-    Boolean(dateFrom) ||
-    Boolean(dateTo);
-
-  function clearFilters() {
-    setStatusFilter("ALL");
-    setSearchQuery("");
-    setStrategyFilter("ALL");
-    setAccountFilter("ALL");
-    setDateFrom("");
-    setDateTo("");
-  }
 
   const { sortKey, sortDir, toggleSort, sortRows } = useTableSort({
     key: "when",
@@ -396,75 +336,39 @@ export default function OrdersPage() {
     live: orders.filter((o) => o.mode === "LIVE").length,
   };
 
-  function exportLive() {
-    const live = orders.filter((o) => o.mode === "LIVE");
-    if (live.length === 0) {
-      toast.info("No live orders to export");
-      return;
-    }
-    downloadLiveOrdersCsv(live);
-    toast.success(`Exported ${live.length} live orders`);
-  }
-
-  function exportBlotter() {
-    if (sortedFiltered.length === 0) {
-      toast.info("Nothing to export for current filters");
-      return;
-    }
-    downloadCombinedOrdersCsv(sortedFiltered);
-    toast.success(`Exported ${sortedFiltered.length} orders`);
-  }
-
   return (
-    <div className="p-4 sm:p-6 lg:p-8">
-      <div className="mx-auto w-full max-w-[1400px] space-y-6 sm:space-y-8">
-      <PageHeader
-        title="Orders"
-        subtitle="Paper + live blotter"
-        mode="neutral"
-        padded={false}
-        actions={
-          <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
-            <PaperExportMenu variant="compact" />
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<Download className="h-3.5 w-3.5" />}
-              onClick={exportLive}
-              className="min-h-9"
-            >
-              Live CSV
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              leftIcon={<Download className="h-3.5 w-3.5" />}
-              onClick={exportBlotter}
-              className="min-h-9"
-            >
-              Blotter
-            </Button>
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={isLoading}
-              leftIcon={<RefreshCw className="h-4 w-4" />}
-              onClick={() => void fetchAllOrders()}
-              className="min-h-9"
-            >
-              Refresh
-            </Button>
+    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent/10">
+            <ClipboardList className="h-5 w-5 text-accent" />
           </div>
-        }
-      />
+          <div>
+            <h1 className="text-2xl font-bold text-text-primary">Orders</h1>
+            <p className="text-sm text-text-secondary">Track and manage all your trading orders</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <PaperExportMenu variant="compact" />
+          <button
+          onClick={fetchAllOrders}
+          disabled={isLoading}
+          className="flex items-center gap-2 rounded-lg bg-bg-secondary px-4 py-2 text-sm font-medium text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary border border-border disabled:opacity-50"
+        >
+          {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          Refresh
+        </button>
+        </div>
+      </div>
 
-      {/* Tabs — scrollable on mobile */}
-      <div className="flex items-center gap-1 rounded-xl bg-bg-secondary p-1 border border-border w-full overflow-x-auto touch-pan-x">
+      {/* Tabs */}
+      <div className="flex items-center gap-1 rounded-xl bg-bg-secondary p-1 border border-border w-full sm:w-fit overflow-x-auto">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2.5 min-h-11 text-sm font-medium transition-all whitespace-nowrap touch-manipulation ${
+            className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
               activeTab === tab.key
                 ? "bg-accent text-brand shadow-sm"
                 : "text-text-secondary hover:text-text-primary hover:bg-bg-hover"
@@ -484,26 +388,26 @@ export default function OrdersPage() {
         ))}
       </div>
 
-      {/* Filters — stacked for phones */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2 sm:gap-3">
-        <div className="relative sm:col-span-2 xl:col-span-2">
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative flex-1 w-full sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
           <input
             type="text"
-            placeholder="Search symbol..."
+            placeholder="Search by symbol..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full min-h-11 rounded-lg border border-border bg-bg-secondary py-2 pl-10 pr-4 text-sm text-text-primary placeholder-text-tertiary outline-none focus:border-accent"
+            className="w-full rounded-lg border border-border bg-bg-secondary py-2 pl-10 pr-4 text-sm text-text-primary placeholder-text-tertiary outline-none transition-colors focus:border-accent"
           />
         </div>
-        <div className="relative">
-          <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary pointer-events-none" />
+        <div className="relative w-full sm:w-auto">
+          <Filter className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-tertiary" />
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as OrderStatus | "ALL")}
-            className="w-full appearance-none min-h-11 rounded-lg border border-border bg-bg-secondary py-2 pl-10 pr-8 text-sm text-text-primary outline-none focus:border-accent"
+            className="appearance-none rounded-lg border border-border bg-bg-secondary py-2 pl-10 pr-8 text-sm text-text-primary outline-none transition-colors focus:border-accent cursor-pointer"
           >
-            <option value="ALL">All status</option>
+            <option value="ALL">All Status</option>
             <option value="EXECUTED">Executed</option>
             <option value="PENDING">Pending</option>
             <option value="OPEN">Open</option>
@@ -511,78 +415,19 @@ export default function OrdersPage() {
             <option value="CANCELLED">Cancelled</option>
           </select>
         </div>
-        <select
-          value={strategyFilter}
-          onChange={(e) => setStrategyFilter(e.target.value)}
-          className="w-full min-h-11 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary outline-none focus:border-accent"
-        >
-          <option value="ALL">All strategies</option>
-          {strategyOptions.map((name) => (
-            <option key={name} value={name}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <select
-          value={accountFilter}
-          onChange={(e) => setAccountFilter(e.target.value)}
-          className="w-full min-h-11 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary outline-none focus:border-accent"
-        >
-          <option value="ALL">All accounts</option>
-          {accountOptions.map((id) => (
-            <option key={id} value={id}>
-              {id}
-            </option>
-          ))}
-        </select>
-        <input
-          type="date"
-          value={dateFrom}
-          onChange={(e) => setDateFrom(e.target.value)}
-          className="w-full min-h-11 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary outline-none focus:border-accent"
-          aria-label="From date"
-        />
-        <input
-          type="date"
-          value={dateTo}
-          onChange={(e) => setDateTo(e.target.value)}
-          className="w-full min-h-11 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary outline-none focus:border-accent"
-          aria-label="To date"
-        />
       </div>
-      {hasActiveFilters && (
-        <div className="flex justify-end -mt-1">
-          <Button variant="ghost" size="sm" onClick={clearFilters}>
-            Clear filters
-          </Button>
-        </div>
-      )}
 
       {/* Orders — mobile cards */}
       <div className="md:hidden space-y-2">
         {isLoading ? (
-          <SkeletonTable rows={4} />
+          <div className="flex items-center justify-center gap-2 py-12 text-text-tertiary">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            Loading orders...
+          </div>
         ) : sortedFiltered.length === 0 ? (
-          <EmptyState
-            icon={ClipboardList}
-            title={hasActiveFilters ? "No matching orders" : "No orders yet"}
-            description={
-              hasActiveFilters
-                ? "Try clearing filters or widening the date range."
-                : "Paper and live fills will show up here after your first trade."
-            }
-            action={
-              hasActiveFilters ? (
-                <Button variant="secondary" size="sm" onClick={clearFilters}>
-                  Clear filters
-                </Button>
-              ) : (
-                <Button variant="paper" size="sm" onClick={() => (window.location.href = "/paper-trading")}>
-                  Go to Paper Trading
-                </Button>
-              )
-            }
-          />
+          <p className="py-12 text-center text-sm text-text-tertiary">
+            No orders found matching your filters.
+          </p>
         ) : (
           sortedFiltered.map((order) => {
             const sc = statusConfig[order.status] || statusConfig.PENDING;
@@ -626,11 +471,11 @@ export default function OrdersPage() {
                   </span>
                   <span className="text-text-secondary">{order.type}</span>
                 </div>
-                <div className="inline-flex items-center gap-3 text-xs text-text-secondary">
+                <div className="flex justify-between text-xs text-text-secondary">
                   <span>
                     {order.quantity} @ {formatCurrency(order.price)}
                   </span>
-                  <span className="font-medium text-text-primary tabular-nums">
+                  <span className="font-medium text-text-primary">
                     {formatCurrency(order.price * order.quantity)}
                   </span>
                 </div>
@@ -647,45 +492,36 @@ export default function OrdersPage() {
       </div>
 
       {/* Orders Table — desktop */}
-      <div className="hidden md:block rounded-lg border border-border bg-bg-secondary overflow-hidden p-1 sm:p-0">
-        <DataTable
-          aria-label="Orders"
-          minWidthClass="min-w-[720px]"
-          empty={!isLoading && sortedFiltered.length === 0}
-          emptyIcon={ClipboardList}
-          emptyTitle={hasActiveFilters ? "No matching orders" : "No orders yet"}
-          emptyDescription={
-            hasActiveFilters
-              ? "Try clearing filters or widening the date range."
-              : "Paper (simulated) and live (Zerodha) fills appear here after your first trade."
-          }
-          emptyAction={
-            hasActiveFilters ? (
-              <Button variant="secondary" size="sm" onClick={clearFilters}>
-                Clear filters
-              </Button>
-            ) : undefined
-          }
-        >
+      <div className="hidden md:block rounded-xl border border-border bg-bg-secondary overflow-hidden">
+        <table className="w-full">
           <thead>
             <tr className="border-b border-border">
-              <SortableTh sortKey="when" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className={cn(tableDateTimeThClass, "px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary")}>When</SortableTh>
-              <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Symbol</SortableTh>
-              <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Side</SortableTh>
-              <SortableTh sortKey="type" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Type</SortableTh>
-              <SortableTh sortKey="qty" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Qty</SortableTh>
-              <SortableTh sortKey="price" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Price</SortableTh>
-              <SortableTh sortKey="reason" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary min-w-[12rem] max-w-[20rem]">Reason</SortableTh>
-              <SortableTh sortKey="status" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Status</SortableTh>
-              <SortableTh sortKey="mode" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Mode</SortableTh>
-              <SortableTh sortKey="account" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Account</SortableTh>
+              <SortableTh sortKey="when" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className={cn(tableDateTimeThClass, "px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary")}>When</SortableTh>
+              <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Symbol</SortableTh>
+              <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Side</SortableTh>
+              <SortableTh sortKey="type" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Type</SortableTh>
+              <SortableTh sortKey="qty" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Qty</SortableTh>
+              <SortableTh sortKey="price" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Price</SortableTh>
+              <SortableTh sortKey="reason" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary min-w-[12rem] max-w-[20rem]">Reason</SortableTh>
+              <SortableTh sortKey="status" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Status</SortableTh>
+              <SortableTh sortKey="mode" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Mode</SortableTh>
+              <SortableTh sortKey="account" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Account</SortableTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
             {isLoading ? (
               <tr>
-                <td colSpan={10} className="px-4 py-4">
-                  <SkeletonTable rows={6} />
+                <td colSpan={10} className="px-4 py-12 text-center text-text-tertiary">
+                  <div className="flex items-center justify-center gap-2">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                    Loading orders...
+                  </div>
+                </td>
+              </tr>
+            ) : sortedFiltered.length === 0 ? (
+              <tr>
+                <td colSpan={10} className="px-4 py-12 text-center text-text-tertiary">
+                  No orders found matching your filters.
                 </td>
               </tr>
             ) : (
@@ -764,11 +600,11 @@ export default function OrdersPage() {
               })
             )}
           </tbody>
-        </DataTable>
+        </table>
       </div>
 
       {/* Footer Summary */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-tertiary">
+      <div className="flex items-center justify-between text-sm text-text-tertiary">
         <span>Showing {sortedFiltered.length} of {orders.length} orders</span>
         <span>
           Total value: {formatCurrency(
@@ -777,7 +613,6 @@ export default function OrdersPage() {
               .reduce((sum, o) => sum + o.price * o.quantity, 0)
           )}
         </span>
-      </div>
       </div>
     </div>
   );

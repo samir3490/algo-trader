@@ -19,8 +19,6 @@ import {
   getZerodhaAccounts,
 } from "@/lib/firebase";
 import { cn } from "@/lib/utils";
-import Button from "@/components/ui/button";
-
 const DISMISS_KEY = "algo_onboarding_dismissed";
 
 interface ChecklistState {
@@ -181,9 +179,13 @@ export default function OnboardingChecklist() {
       </ul>
 
       <div className="mt-1.5 flex justify-end">
-        <Button variant="ghost" size="sm" onClick={dismiss} className="!min-h-8">
+        <button
+          type="button"
+          onClick={dismiss}
+          className="rounded-lg px-3 py-1.5 text-xs font-medium text-text-secondary hover:bg-bg-hover"
+        >
           Skip
-        </Button>
+        </button>
       </div>
     </section>
   );

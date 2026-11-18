@@ -4,8 +4,6 @@ import { useEffect, useState } from "react";
 import { Loader2, Radio } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import EmptyState from "@/components/ui/empty-state";
-
 interface LiveSnap {
   available: number;
   used: number;
@@ -87,13 +85,12 @@ export default function LiveAnalyticsPanel() {
 
   if (!snap) {
     return (
-      <div className="rounded-lg border border-border bg-bg-secondary">
-        <EmptyState
-          compact
-          icon={Radio}
-          title="Live analytics unavailable"
-          description="Connect a Zerodha account to mirror live cash, day P&L, and open risk."
-        />
+      <div className="card text-center py-10">
+        <Radio className="h-8 w-8 text-text-tertiary mx-auto mb-3" />
+        <p className="text-sm font-semibold text-text-primary">Live analytics unavailable</p>
+        <p className="text-sm text-text-secondary mt-1">
+          Connect a Zerodha account to mirror live cash, day P&L, and open risk.
+        </p>
       </div>
     );
   }
@@ -116,20 +113,21 @@ export default function LiveAnalyticsPanel() {
   ];
 
   return (
-    <section className="rounded-lg border border-mode-live-border/60 bg-bg-secondary p-2.5 sm:p-3 w-fit max-w-full">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <h2 className="text-sm font-semibold text-text-primary">Live analytics</h2>
-        <span className="text-[10px] text-mode-live font-medium">{snap.accountId}</span>
+    <section className="card">
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h2 className="text-lg font-semibold text-text-primary">Live analytics</h2>
+        <span className="text-xs text-emerald-700 font-medium">{snap.accountId}</span>
       </div>
-      <div className="flex flex-wrap gap-x-5 gap-y-2">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         {items.map((item) => (
-          <div key={item.label} className="min-w-0 shrink-0">
-            <p className="text-xs text-text-tertiary">{item.label}</p>
+          <div key={item.label}>
+            <p className="text-xs text-text-tertiary mb-1">{item.label}</p>
             <p
               className={cn(
-                "text-base font-bold tabular-nums leading-tight whitespace-nowrap",
+                "text-xl font-bold tabular-nums",
                 item.tone === "profit" && "text-profit",
-                item.tone === "loss" && "text-loss"
+                item.tone === "loss" && "text-loss",
+                !item.tone && "text-text-primary"
               )}
             >
               {item.value}

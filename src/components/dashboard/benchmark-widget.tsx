@@ -2,15 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import type { ReactNode } from "react";
 import { formatPercent } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getOrders, getPaperTradingState, getSettings } from "@/lib/firebase";
 import { normalizePaperTrades, tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
 import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import { computePaperPortfolioAnalytics } from "@/lib/analytics/paper-analytics";
-import MetricStrip from "@/components/ui/metric-strip";
-import Panel, { PanelHeader } from "@/components/ui/panel";
 
 interface BenchResult {
   paperReturnPct: number;
@@ -18,14 +15,7 @@ interface BenchResult {
   alphaPct: number;
 }
 
-/** Nifty 50 comparison for the paper book. */
-export default function BenchmarkWidget({
-  actions,
-  className,
-}: {
-  actions?: ReactNode;
-  className?: string;
-} = {}) {
+export default function BenchmarkWidget() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<BenchResult | null>(null);
@@ -97,35 +87,45 @@ export default function BenchmarkWidget({
   }, [user]);
 
   return (
-    <Panel className={className}>
-      <PanelHeader
-        title="vs Nifty 50"
-        subtitle="Simulated paper book"
-        action={actions}
-      />
+    <section className="card">
+      <h3 className="text-lg font-semibold text-text-primary mb-1">vs Nifty 50</h3>
+      <p className="text-sm text-text-secondary mb-4">Paper book comparison</p>
       {loading ? (
-        <div className="flex items-center gap-2 text-sm text-text-tertiary py-1">
+        <div className="flex items-center gap-2 text-sm text-text-tertiary py-2">
           <Loader2 className="h-4 w-4 animate-spin" /> Comparing…
         </div>
       ) : error || !data ? (
         <p className="text-sm text-text-tertiary">{error || "Unavailable"}</p>
       ) : (
-        <MetricStrip
-          items={[
-            {
-              label: "Paper",
-              value: formatPercent(data.paperReturnPct),
-              tone: data.paperReturnPct >= 0 ? "profit" : "loss",
-            },
-            { label: "Nifty", value: formatPercent(data.benchmarkReturnPct) },
-            {
-              label: "Alpha",
-              value: formatPercent(data.alphaPct),
-              tone: data.alphaPct >= 0 ? "profit" : "loss",
-            },
-          ]}
-        />
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <p className="text-xs text-text-tertiary mb-1">Paper</p>
+            <p
+              className={`text-xl font-bold tabular-nums ${
+                data.paperReturnPct >= 0 ? "text-profit" : "text-loss"
+              }`}
+            >
+              {formatPercent(data.paperReturnPct)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-text-tertiary mb-1">Nifty</p>
+            <p className="text-xl font-bold tabular-nums text-text-primary">
+              {formatPercent(data.benchmarkReturnPct)}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs text-text-tertiary mb-1">Alpha</p>
+            <p
+              className={`text-xl font-bold tabular-nums ${
+                data.alphaPct >= 0 ? "text-profit" : "text-loss"
+              }`}
+            >
+              {formatPercent(data.alphaPct)}
+            </p>
+          </div>
+        </div>
       )}
-    </Panel>
+    </section>
   );
 }

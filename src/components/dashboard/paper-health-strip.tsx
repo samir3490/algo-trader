@@ -30,10 +30,10 @@ const LEVEL_STYLES = {
   },
   critical: {
     icon: XCircle,
-    iconClass: "text-loss",
-    badge: "bg-loss-muted text-loss",
+    iconClass: "text-red-400",
+    badge: "bg-red-500/15 text-red-400",
     label: "Needs attention",
-    border: "border-loss/40",
+    border: "border-red-500/40",
   },
 } as const;
 
@@ -85,7 +85,7 @@ export default function PaperHealthStrip() {
   return (
     <section
       className={cn(
-        "rounded-2xl border bg-bg-secondary px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-[var(--shadow-panel)]",
+        "rounded-xl border bg-bg-secondary px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3",
         health ? styles.border : "border-border"
       )}
     >

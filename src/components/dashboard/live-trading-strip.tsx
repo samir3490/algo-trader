@@ -2,12 +2,10 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2 } from "lucide-react";
+import { IndianRupee, Wallet, TrendingUp, TrendingDown, Loader2 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getSettings } from "@/lib/firebase";
-import MetricStrip from "@/components/ui/metric-strip";
-import Panel, { PanelHeader } from "@/components/ui/panel";
 
 interface LiveSnapshot {
   available: number;
@@ -34,7 +32,7 @@ const EMPTY: LiveSnapshot = {
   orderNotional: 5_000,
 };
 
-/** Live book summary for the dashboard. */
+/** Compact live Zerodha numbers — separate from paper KPIs on the dashboard. */
 export default function LiveTradingDashboardStrip() {
   const { user } = useAuth();
   const [snap, setSnap] = useState<LiveSnapshot>(EMPTY);
@@ -60,33 +58,42 @@ export default function LiveTradingDashboardStrip() {
           ...EMPTY,
           autoOn: settings.liveAutoTradingEnabled === true,
           capitalLimit: settings.liveCapitalLimit ?? 50_000,
-          orderNotional: settings.liveOrderNotional ?? settings.maxOrderValue ?? 5_000,
+          orderNotional: settings.liveOrderNotional ?? 5_000,
           accountId: connected?.kiteUserId,
-          connected: Boolean(connected),
+          connected: Boolean(connected?.kiteUserId),
         };
 
-        if (!connected) {
+        if (!connected?.kiteUserId) {
           if (!cancelled) setSnap(base);
           return;
         }
 
+        const id = connected.kiteUserId;
         const [marginsRes, positionsRes] = await Promise.all([
-          fetch(`/api/zerodha/margins?accountId=${connected.kiteUserId}`),
-          fetch(`/api/zerodha/positions?accountId=${connected.kiteUserId}`),
+          fetch(`/api/zerodha/margins?accountId=${id}`),
+          fetch(`/api/zerodha/positions?accountId=${id}`),
         ]);
-        const margins = marginsRes.ok ? await marginsRes.json() : {};
-        const positionsJson = positionsRes.ok ? await positionsRes.json() : {};
-        const positions = positionsJson.positions || [];
+        const margins = await marginsRes.json().catch(() => ({}));
+        const positionsJson = await positionsRes.json().catch(() => ({}));
+
+        const available = Number(margins.available ?? 0);
+        const used = Number(margins.used ?? 0);
+        const net = Number(margins.net ?? available);
+
+        const kitePositions = positionsJson.positions || positionsJson;
+        const netList: {
+          quantity?: number;
+          qty?: number;
+          pnl?: number;
+          m2m?: number;
+        }[] = kitePositions.net || kitePositions.day || [];
         let dayPnl = 0;
         let openQty = 0;
-        for (const p of positions) {
-          dayPnl += Number(p.pnl || 0);
-          openQty += Math.abs(Number(p.qty || p.quantity || 0));
+        for (const p of netList) {
+          const q = Number(p.quantity ?? p.qty ?? 0);
+          if (q !== 0) openQty += 1;
+          dayPnl += Number(p.pnl ?? p.m2m ?? 0);
         }
-        const available =
-          Number(margins.available?.cash ?? margins.available?.live_balance ?? 0) || 0;
-        const used = Number(margins.utilised?.debits ?? margins.utilised?.span ?? 0) || 0;
-        const net = Number(margins.net ?? available - used) || available;
 
         if (!cancelled) {
           setSnap({
@@ -113,61 +120,112 @@ export default function LiveTradingDashboardStrip() {
   }, [user]);
 
   return (
-    <Panel tone="live">
-      <PanelHeader
-        title="Live"
-        subtitle="Real money · Zerodha"
-        action={
+    <section className="rounded-xl border-2 border-emerald-400 bg-emerald-50/80 p-4 sm:p-5 space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-800">
+            Real money
+          </p>
           <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-emerald-950">Live trading</h2>
             <span
               className={cn(
-                "rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide",
-                snap.autoOn ? "bg-loss-muted text-loss" : "bg-mode-live-soft text-mode-live-fg"
+                "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                snap.autoOn
+                  ? "bg-red-100 text-red-800"
+                  : "bg-emerald-200/80 text-emerald-900"
               )}
             >
               Auto {snap.autoOn ? "ON" : "OFF"}
             </span>
-            <Link
-              href="/live-trading"
-              className="rounded-lg bg-mode-live px-3 py-1.5 text-xs font-semibold text-white hover:bg-mode-live-hover transition-colors"
-            >
-              Open
-            </Link>
           </div>
-        }
-      />
+        </div>
+        <Link
+          href="/live-trading"
+          className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+        >
+          Open live →
+        </Link>
+      </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-2 text-sm text-text-tertiary">
+        <div className="rounded-lg border border-emerald-200 bg-white/70 flex items-center gap-2 py-6 px-4 text-sm text-text-tertiary">
           <Loader2 className="h-4 w-4 animate-spin" />
-          Loading…
+          Loading Zerodha balances…
         </div>
       ) : !snap.connected ? (
-        <p className="text-sm text-text-secondary leading-relaxed max-w-md">
-          Connect Zerodha in{" "}
-          <Link href="/settings?tab=live" className="text-mode-live font-medium underline underline-offset-2">
-            Settings → Live
-          </Link>
-          . Cap ₹{snap.capitalLimit.toLocaleString("en-IN")} · order ₹
-          {snap.orderNotional.toLocaleString("en-IN")}.
-        </p>
+        <div className="rounded-lg border border-emerald-200 bg-white/70 px-4 py-4">
+          <p className="text-sm text-text-secondary">
+            Connect a Zerodha account in{" "}
+            <Link href="/settings?tab=live" className="text-emerald-800 font-medium hover:underline">
+              Settings → Live
+            </Link>{" "}
+            to see live cash, margins, and day P&amp;L here.
+          </p>
+          <p className="text-xs text-text-tertiary mt-1">
+            Algo caps: ₹{snap.orderNotional.toLocaleString("en-IN")} / trade · ₹
+            {snap.capitalLimit.toLocaleString("en-IN")} total
+          </p>
+        </div>
       ) : (
-        <MetricStrip
-          items={[
-            { label: "Cash", value: formatCurrency(snap.available), tone: "live" },
-            {
-              label: "Margin",
-              value: formatCurrency(snap.used),
-              sub: `${snap.openQty} open`,
-            },
-            {
-              label: "Day P&L",
-              value: formatCurrency(snap.dayPnl),
-              tone: snap.dayPnl >= 0 ? "profit" : "loss",
-            },
-          ]}
-        />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-lg border border-emerald-200 bg-white/80 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-secondary">Cash available</span>
+              <div className="rounded-lg bg-emerald-100 p-1.5">
+                <IndianRupee className="h-4 w-4 text-emerald-800" />
+              </div>
+            </div>
+            <p className="text-xl font-bold text-emerald-950 tabular-nums break-words">
+              {formatCurrency(snap.available)}
+            </p>
+            <p className="text-xs text-text-tertiary mt-1">
+              Zerodha{snap.accountId ? ` · ${snap.accountId}` : ""}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-emerald-200 bg-white/80 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-secondary">Margin used</span>
+              <div className="rounded-lg bg-emerald-100 p-1.5">
+                <Wallet className="h-4 w-4 text-emerald-800" />
+              </div>
+            </div>
+            <p className="text-xl font-bold text-text-primary tabular-nums break-words">
+              {formatCurrency(snap.used)}
+            </p>
+            <p className="text-xs text-text-tertiary mt-1">
+              Net {formatCurrency(snap.net)} · {snap.openQty} open name
+              {snap.openQty === 1 ? "" : "s"}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-emerald-200 bg-white/80 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-secondary">Day P&amp;L</span>
+              <div className="rounded-lg bg-emerald-100 p-1.5">
+                {snap.dayPnl >= 0 ? (
+                  <TrendingUp className="h-4 w-4 text-profit" />
+                ) : (
+                  <TrendingDown className="h-4 w-4 text-loss" />
+                )}
+              </div>
+            </div>
+            <p
+              className={cn(
+                "text-xl font-bold tabular-nums break-words",
+                snap.dayPnl >= 0 ? "text-profit" : "text-loss"
+              )}
+            >
+              {formatCurrency(snap.dayPnl)}
+            </p>
+            <p className="text-xs text-text-tertiary mt-1">
+              Cap ₹{snap.capitalLimit.toLocaleString("en-IN")} · order ₹
+              {snap.orderNotional.toLocaleString("en-IN")}
+            </p>
+          </div>
+        </div>
       )}
-    </Panel>
+    </section>
   );
 }

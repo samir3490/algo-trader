@@ -85,7 +85,6 @@ import PaperExportMenu from "@/components/paper-export-menu";
 import PaperHealthPanel from "@/components/paper-health-panel";
 import PaperTabBar, { type PaperTradingTab } from "@/components/paper-trading/paper-tab-bar";
 import StatCard from "@/components/ui/stat-card";
-import PageHeader from "@/components/ui/page-header";
 import PaginationBar, {
   DEFAULT_PAGE_SIZE,
   paginateItems,
@@ -1138,31 +1137,30 @@ export default function PaperTradingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-primary p-4 sm:p-6 lg:p-8 pb-8">
-      <div className="mx-auto w-full max-w-[1400px] space-y-6 sm:space-y-8">
-      <div>
-        <PageHeader
-          title="Paper Trading"
-          subtitle={
-            zerodhaConnected
-              ? "Simulated money · live market data (no real orders)"
-              : "Simulated money — connect Zerodha in Settings for live prices"
-          }
-          mode="paper"
-          padded={false}
-          className="mb-2.5"
-          actions={
-            <>
+    <div className="min-h-screen bg-bg-primary p-3 sm:p-4 md:p-6 lg:p-8 pb-6">
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-2xl md:text-3xl font-bold text-text-primary">
+              Paper Trading
+            </h1>
+            <p className="text-text-secondary mt-1 text-sm md:text-base">
+              Practice trading with virtual money
+              {zerodhaConnected ? " using real market data" : " — connect Zerodha for live prices"}
+            </p>
+          </div>
+          <div className="flex items-center gap-3 self-start sm:self-auto">
             {!isCheckingAuth && (
               <div className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border",
                 zerodhaConnected
-                  ? "bg-mode-live-muted border-mode-live-border text-mode-live-fg"
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-900"
                   : "bg-amber-50 border-amber-300 text-amber-950"
               )}>
                 <span className={cn(
                   "w-2 h-2 rounded-full",
-                  zerodhaConnected ? "bg-mode-live" : "bg-amber-500"
+                  zerodhaConnected ? "bg-emerald-600" : "bg-amber-500"
                 )} />
                 {zerodhaConnected ? "Live Prices" : "Manual Prices"}
               </div>
@@ -1177,17 +1175,17 @@ export default function PaperTradingPage() {
               <span className="sm:hidden">Order</span>
               <span className="hidden sm:inline">Place Order</span>
             </button>
-            </>
-          }
-        >
+          </div>
+        </div>
+
         {appSettings && (
-          <div className="mb-2 rounded-md border border-mode-paper-border bg-white/80 px-2.5 py-1.5 text-[11px] text-mode-paper-fg leading-snug">
-            <span className="font-medium">Sizing: </span>
+          <div className="mb-4 rounded-lg border border-border bg-bg-secondary px-4 py-3 text-xs text-text-secondary">
+            <span className="font-medium text-text-primary">Position sizing: </span>
             {formatPaperSizingSummary(appSettings)}
             {" · "}
-            {appSettings.paperDefaultProduct}
-            {" · "}
-            <a href="/settings" className="text-mode-paper underline font-medium">Settings</a>
+            <span className="text-text-tertiary">product {appSettings.paperDefaultProduct}</span>
+            {" "}
+            <a href="/settings" className="text-accent hover:underline">Settings</a>
           </div>
         )}
 
@@ -1197,8 +1195,8 @@ export default function PaperTradingPage() {
             appSettings.autoTrailingStop ||
             (appSettings.maxHoldDays ?? 0) > 0 ||
             (appSettings.noProgressDays ?? 0) > 0) && (
-          <div className="mb-2 rounded-md border border-accent/30 bg-accent/5 px-2.5 py-1.5 text-[11px] text-text-secondary leading-snug">
-            <span className="text-accent font-medium">Risk: </span>
+          <div className="mb-4 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 text-xs text-text-secondary">
+            <span className="text-accent font-medium">Risk guard active: </span>
             {appSettings.autoStopLoss && (
               <span>stop loss at −{appSettings.stopLossPercent}%</span>
             )}
@@ -1218,14 +1216,14 @@ export default function PaperTradingPage() {
         )}
 
         {riskToast && (
-          <div className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-950 flex items-start gap-1.5">
-            <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-700" />
+          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 flex items-start gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-700" />
             {riskToast}
           </div>
         )}
 
         {/* Portfolio Summary */}
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {summaryItems.map((item) => (
             <StatCard
               key={item.label}
@@ -1235,11 +1233,9 @@ export default function PaperTradingPage() {
               hint={item.hint}
               icon={item.icon}
               colorClass={item.colorClass}
-              mode="paper"
             />
           ))}
         </div>
-        </PageHeader>
 
         <PaperTabBar
           active={activeTab}
@@ -1990,57 +1986,57 @@ export default function PaperTradingPage() {
               </div>
             )}
 
-            <div className="flex flex-wrap gap-x-5 gap-y-2">
-              <div className="min-w-0 shrink-0">
-                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Trades</p>
-                <p className="text-base font-bold tabular-nums text-text-primary leading-tight">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Trades</p>
+                <p className="text-sm font-semibold tabular-nums text-text-primary">
                   {periodTotals.tradeCount}
                 </p>
-                <p className="text-xs text-text-tertiary mt-0.5">
-                  {periodTotals.buyCount}B · {periodTotals.sellCount}S
+                <p className="text-[11px] text-text-tertiary">
+                  {periodTotals.buyCount} buy · {periodTotals.sellCount} sell
                 </p>
               </div>
-              <div className="min-w-0 shrink-0">
-                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Buy</p>
-                <p className="text-base font-bold tabular-nums text-text-primary leading-tight whitespace-nowrap">
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Buy amount</p>
+                <p className="text-sm font-semibold tabular-nums text-text-primary">
                   {formatCurrency(periodTotals.buyTurnover)}
                 </p>
               </div>
-              <div className="min-w-0 shrink-0">
-                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Sell</p>
-                <p className="text-base font-bold tabular-nums text-text-primary leading-tight whitespace-nowrap">
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Sell amount</p>
+                <p className="text-sm font-semibold tabular-nums text-text-primary">
                   {formatCurrency(periodTotals.sellTurnover)}
                 </p>
               </div>
-              <div className="min-w-0 shrink-0">
-                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Traded</p>
-                <p className="text-base font-bold tabular-nums text-text-primary leading-tight whitespace-nowrap">
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Total traded</p>
+                <p className="text-sm font-semibold tabular-nums text-text-primary">
                   {formatCurrency(periodTotals.totalTurnover)}
                 </p>
               </div>
-              <div className="min-w-0 shrink-0">
-                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Realized</p>
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Realized P&amp;L</p>
                 <p
                   className={cn(
-                    "text-base font-bold tabular-nums leading-tight whitespace-nowrap",
+                    "text-sm font-semibold tabular-nums",
                     periodTotals.realizedPnl >= 0 ? "text-profit" : "text-loss"
                   )}
                 >
                   {periodTotals.realizedPnl >= 0 ? "+" : ""}
                   {formatCurrency(periodTotals.realizedPnl)}
                 </p>
-                <p className="text-xs text-text-tertiary mt-0.5">
-                  {periodTotals.wins}W/{periodTotals.losses}L
+                <p className="text-[11px] text-text-tertiary">
+                  {periodTotals.wins}W / {periodTotals.losses}L
                   {periodTotals.winRate > 0 ? ` · ${periodTotals.winRate}%` : ""}
                 </p>
               </div>
-              <div className="min-w-0 shrink-0">
-                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Fees</p>
-                <p className="text-base font-bold tabular-nums text-text-primary leading-tight whitespace-nowrap">
+              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Fees</p>
+                <p className="text-sm font-semibold tabular-nums text-text-primary">
                   {formatCurrency(periodTotals.fees)}
                 </p>
                 {periodTotals.feesEstimated && (
-                  <p className="text-xs text-text-tertiary mt-0.5">est.</p>
+                  <p className="text-[11px] text-text-tertiary">est. Zerodha schedule</p>
                 )}
               </div>
             </div>
@@ -2287,7 +2283,6 @@ export default function PaperTradingPage() {
         appSettings={appSettings}
         onPlaceOrder={handlePlaceOrder}
       />
-      </div>
     </div>
   );
 }
@@ -2333,7 +2328,7 @@ function SymbolEventsTable({ events }: { events: StrategyTradeEvent[] }) {
                   {ev.side}
                 </span>
               </div>
-              <div className="inline-flex items-center gap-3 tabular-nums">
+              <div className="flex justify-between tabular-nums">
                 <span className="text-text-secondary">
                   {formatNumber(ev.qty)} @ {formatCurrency(ev.price)}
                 </span>

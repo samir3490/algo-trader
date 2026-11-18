@@ -26,11 +26,6 @@ import {
   X,
 } from "lucide-react";
 import StatCard from "@/components/ui/stat-card";
-import PageHeader from "@/components/ui/page-header";
-import ConfirmDialog from "@/components/ui/confirm-dialog";
-import Banner from "@/components/ui/banner";
-import EmptyState from "@/components/ui/empty-state";
-import { useOptionalToast } from "@/components/ui/toast";
 import PaginationBar, {
   DEFAULT_PAGE_SIZE,
   paginateItems,
@@ -174,7 +169,6 @@ const ERROR_MESSAGES: Record<string, string> = {
 function LiveTradingContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const toast = useOptionalToast();
   const orderFormRef = useRef<HTMLDivElement>(null);
 
   // Multi-account state
@@ -188,8 +182,6 @@ function LiveTradingContent() {
 
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
-  const [pendingKillSwitch, setPendingKillSwitch] = useState<boolean | null>(null);
-  const [confirmPlaceOrder, setConfirmPlaceOrder] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isCancellingOrder, setIsCancellingOrder] = useState<string | null>(null);
@@ -293,19 +285,16 @@ function LiveTradingContent() {
       const merged = { ...appSettings, liveAutoTradingEnabled: next };
       setAppSettings(merged);
       saveSettingsToCache(merged);
-      const msg = next
-        ? "Live auto-trading ON — cron may place real orders (also needs ENABLE_LIVE_TRADING)."
-        : "Live auto-trading OFF — paper continues; no algo live orders.";
-      setStatusMessage(msg);
-      toast.success(msg);
+      setStatusMessage(
+        next
+          ? "Live auto-trading ON — cron may place real orders (also needs ENABLE_LIVE_TRADING)."
+          : "Live auto-trading OFF — paper continues; no algo live orders."
+      );
     } catch {
       setAutoTradingEnabled(!next);
-      const msg = "Could not save live kill switch. Try Settings → Live.";
-      setErrorMessage(msg);
-      toast.error(msg);
+      setErrorMessage("Could not save live kill switch. Try Settings → Live.");
     } finally {
       setSavingKillSwitch(false);
-      setPendingKillSwitch(null);
     }
   }
 
@@ -808,23 +797,18 @@ function LiveTradingContent() {
       const data = await res.json();
 
       if (!res.ok) {
-        const msg = data.error || "Failed to place order. Please try again.";
-        setErrorMessage(msg);
-        toast.error(msg);
+        setErrorMessage(data.error || "Failed to place order. Please try again.");
         return;
       }
 
       const accountLabel = selectedAccount?.label || selectedAccount?.userName || selectedAccountId;
-      const okMsg = `Order placed on ${accountLabel}! Order ID: ${data.orderId}`;
-      setStatusMessage(okMsg);
-      toast.success(okMsg);
+      setStatusMessage(`Order placed on ${accountLabel}! Order ID: ${data.orderId}`);
       setSymbol("");
       setQuantity("");
       setPrice("");
       setTriggerPrice("");
       setSearchInput("");
       setOrderPanelOpen(false);
-      setConfirmPlaceOrder(false);
 
       setTimeout(() => {
         fetchOrders();
@@ -832,9 +816,7 @@ function LiveTradingContent() {
         fetchHoldings();
       }, 2000);
     } catch (err: any) {
-      const msg = err.message || "Network error. Please check your connection.";
-      setErrorMessage(msg);
-      toast.error(msg);
+      setErrorMessage(err.message || "Network error. Please check your connection.");
     } finally {
       setIsPlacingOrder(false);
     }
@@ -936,28 +918,37 @@ function LiveTradingContent() {
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary">
-      <PageHeader
-        title="Live Trading"
-        subtitle="Real money via Zerodha · separate from simulated paper book"
-        mode="live"
-        actions={
-          <>
+      {/* Page header — mirrors Paper Trading layout (green = live) */}
+      <div className="border-b border-emerald-200/80 bg-emerald-50/60 px-3 sm:px-6 py-4 sm:py-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-800">
+              Real money · Zerodha
+            </p>
+            <h1 className="text-2xl md:text-3xl font-bold text-emerald-950">
+              Live Trading
+            </h1>
+            <p className="text-sm text-emerald-900/80 mt-1">
+              Place real orders and monitor positions — separate capital from paper
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/settings?tab=live-rules"
-              className="rounded-lg border border-mode-live-border bg-white px-3 py-1.5 text-xs font-semibold text-mode-live-fg hover:bg-mode-live-soft"
+              className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-100"
             >
               Live Rules
             </Link>
             <Link
               href="/settings?tab=live"
-              className="rounded-lg border border-mode-live-border bg-white px-3 py-1.5 text-xs font-semibold text-mode-live-fg hover:bg-mode-live-soft"
+              className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-100"
             >
               Live Settings
             </Link>
             <LiveAutoSwitch
               enabled={autoTradingEnabled}
               saving={savingKillSwitch}
-              onToggle={(next) => setPendingKillSwitch(next)}
+              onToggle={(next) => void toggleLiveKillSwitch(next)}
             />
             <button
               type="button"
@@ -973,36 +964,37 @@ function LiveTradingContent() {
                   50
                 );
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-mode-live px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-mode-live-hover shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 shrink-0"
             >
               <PlusIcon className="h-3.5 w-3.5" />
               <span className="sm:hidden">Order</span>
               <span className="hidden sm:inline">Place Order</span>
             </button>
-          </>
-        }
-      >
-        <div className="mb-2 rounded-md border border-mode-live-border bg-white/80 px-2.5 py-1.5 text-[11px] text-mode-live-fg leading-snug">
-          <span className="font-medium">Algo: </span>
-          ₹{liveOrderNotional.toLocaleString("en-IN")}/trade · ₹
-          {liveCapitalLimit.toLocaleString("en-IN")} cap · deployed ₹
-          {Math.round(liveDeployed).toLocaleString("en-IN")} · left ₹
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-white/80 px-4 py-3 text-xs text-emerald-950">
+          <span className="font-medium">Algo sizing: </span>
+          ₹{liveOrderNotional.toLocaleString("en-IN")} / trade · ₹
+          {liveCapitalLimit.toLocaleString("en-IN")} algo cap · algo deployed ₹
+          {Math.round(liveDeployed).toLocaleString("en-IN")} · remaining ₹
           {Math.round(liveRemaining).toLocaleString("en-IN")}
+          {" "}
+          (existing holdings do not count)
           {" · "}
           <Link href="/settings?tab=live" className="underline font-medium">
-            Edit
+            Edit limits
           </Link>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <StatCard
             label="Available cash"
             primary={formatCurrency(selectedFunds?.available ?? 0)}
             hint={connected ? selectedAccountId || "Zerodha" : "Connect account"}
             icon={IndianRupee}
             colorClass="text-text-primary"
-            mode="live"
-            className="bg-white"
+            className="border-emerald-200 bg-white"
           />
           <StatCard
             label="Margin used"
@@ -1010,17 +1002,15 @@ function LiveTradingContent() {
             hint={`Net ${formatCurrency(selectedFunds?.net ?? 0)}`}
             icon={Wallet}
             colorClass="text-text-primary"
-            mode="live"
-            className="bg-white"
+            className="border-emerald-200 bg-white"
           />
           <StatCard
             label="Day P&L (positions)"
             primary={formatCurrency(netPnl)}
             hint={`${positions.length} open position${positions.length === 1 ? "" : "s"}`}
             icon={netPnl >= 0 ? TrendingUp : TrendingDown}
-            colorClass={netPnl >= 0 ? "text-profit" : "text-loss"}
-            mode="live"
-            className="bg-white"
+            colorClass={netPnl >= 0 ? "text-emerald-700" : "text-red-700"}
+            className="border-emerald-200 bg-white"
           />
           <StatCard
             label="Holdings P&L"
@@ -1029,13 +1019,12 @@ function LiveTradingContent() {
             hint={`Invested ${formatCurrency(holdingsTotals.invested)}`}
             icon={Wallet}
             colorClass={
-              holdingsTotals.pnl >= 0 ? "text-profit" : "text-loss"
+              holdingsTotals.pnl >= 0 ? "text-emerald-700" : "text-red-700"
             }
-            mode="live"
-            className="bg-white"
+            className="border-emerald-200 bg-white"
           />
         </div>
-      </PageHeader>
+      </div>
 
       {/* Account Selector Banner */}
       <div className="bg-bg-secondary border-b border-emerald-200/50 px-3 sm:px-6 py-2.5">
@@ -1196,7 +1185,7 @@ function LiveTradingContent() {
               <span
                 className={cn(
                   "absolute inline-flex h-full w-full rounded-full opacity-75",
-                  marketOpen ? "bg-profit animate-ping" : "bg-loss"
+                  marketOpen ? "bg-green-400 animate-ping" : "bg-red-400"
                 )}
               />
               <span
@@ -1206,7 +1195,7 @@ function LiveTradingContent() {
                 )}
               />
             </span>
-            <span className={cn("text-sm font-medium", marketOpen ? "text-emerald-700" : "text-loss")}>
+            <span className={cn("text-sm font-medium", marketOpen ? "text-emerald-700" : "text-red-400")}>
               NSE: {marketStatus}
             </span>
           </div>
@@ -1219,37 +1208,49 @@ function LiveTradingContent() {
         </div>
       </div>
 
-      {(errorMessage || statusMessage) && (
-        <div className="px-3 sm:px-6 py-3 space-y-2 border-b border-border bg-bg-primary">
-          {errorMessage && (
-            <Banner tone="danger" onDismiss={() => setErrorMessage("")}>
-              {errorMessage}
-            </Banner>
-          )}
-          {statusMessage && (
-            <Banner tone="success" onDismiss={() => setStatusMessage("")}>
-              {statusMessage}
-            </Banner>
-          )}
+      {/* Error/Success Banners */}
+      {errorMessage && (
+        <div className="bg-red-900/40 border-b border-red-700/50 px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <ShieldAlert className="h-5 w-5 text-red-400 shrink-0" />
+            <span className="text-red-200 text-sm font-medium">{errorMessage}</span>
+          </div>
+          <button onClick={() => setErrorMessage("")} className="text-red-400 hover:text-red-300 text-sm">
+            Dismiss
+          </button>
         </div>
       )}
 
-      <div className="p-4 sm:p-6 lg:p-8">
-        <div className="mx-auto w-full max-w-[1400px] space-y-6 sm:space-y-8">
+      {statusMessage && (
+        <div className="bg-emerald-50 border-b border-emerald-200 px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-3">
+            <CheckCircle2 className="h-5 w-5 text-emerald-700 shrink-0" />
+            <span className="text-emerald-950 text-sm font-medium">{statusMessage}</span>
+          </div>
+          <button
+            onClick={() => setStatusMessage("")}
+            className="text-emerald-800 hover:text-emerald-950 text-sm font-medium"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
         {/* No Account Warning */}
         {!isCheckingAuth && connectedAccounts.length === 0 && (
-          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5 inline-flex flex-wrap items-center gap-3 max-w-full">
-            <div className="flex items-center gap-2 min-w-0">
-              <AlertTriangle className="h-4 w-4 text-emerald-800 shrink-0" />
+          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-5 w-5 text-emerald-800" />
               <span className="text-emerald-950 text-sm font-medium">
-                No Zerodha accounts connected.
+                No Zerodha accounts connected. Connect an account to start live trading.
               </span>
             </div>
             <a
               href="/api/zerodha/login"
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded transition-colors"
+              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded transition-colors"
             >
-              Connect Zerodha
+              Connect to Zerodha
             </a>
           </div>
         )}
@@ -1303,13 +1304,12 @@ function LiveTradingContent() {
             <div className="p-4">
 
               {/* Warning */}
-              <div className="mb-4 flex items-start gap-2 rounded-lg border border-loss/40 bg-loss-muted p-3">
-                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-loss" />
+              <div className="mb-5 flex items-start gap-2 rounded-lg border border-red-500/35 bg-red-500/10 p-3">
+                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
                 <p className="text-xs leading-relaxed text-text-secondary">
-                  Places{" "}
-                  <span className="font-semibold text-loss">real-money</span> Zerodha
-                  orders. Caps in Settings limit algo size — not a safety net for
-                  manual mistakes.
+                  This will place{" "}
+                  <span className="font-semibold text-red-400">REAL</span> orders on
+                  Zerodha. Use with caution.
                 </p>
               </div>
 
@@ -1366,10 +1366,10 @@ function LiveTradingContent() {
                       </span>
                     ) : quote ? (
                       <div className="text-right">
-                        <span className={cn("text-sm font-bold", quote.changePercent >= 0 ? "text-emerald-700" : "text-loss")}>
+                        <span className={cn("text-sm font-bold", quote.changePercent >= 0 ? "text-emerald-700" : "text-red-400")}>
                           {formatCurrency(quote.lastPrice)}
                         </span>
-                        <span className={cn("text-xs ml-2", quote.changePercent >= 0 ? "text-emerald-700" : "text-loss/80")}>
+                        <span className={cn("text-xs ml-2", quote.changePercent >= 0 ? "text-emerald-700" : "text-red-400/80")}>
                           {quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)} ({formatPercent(quote.changePercent)})
                         </span>
                       </div>
@@ -1388,12 +1388,12 @@ function LiveTradingContent() {
                   <div className="bg-bg-primary border border-border rounded-md p-3 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-text-primary">{quote.symbol}</span>
-                      <span className={cn("text-lg font-bold", quote.changePercent >= 0 ? "text-emerald-700" : "text-loss")}>
+                      <span className={cn("text-lg font-bold", quote.changePercent >= 0 ? "text-emerald-700" : "text-red-400")}>
                         {formatCurrency(quote.lastPrice)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", quote.changePercent >= 0 ? "bg-emerald-100 text-emerald-800" : "bg-loss-muted text-loss")}>
+                      <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", quote.changePercent >= 0 ? "bg-emerald-100 text-emerald-800" : "bg-red-900/50 text-red-400")}>
                         {quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)} ({formatPercent(quote.changePercent)})
                       </span>
                       {quote.priceNote && (
@@ -1408,7 +1408,7 @@ function LiveTradingContent() {
                     <div className="grid grid-cols-4 gap-2 text-xs">
                       <div><span className="text-text-tertiary">Open</span><p className="text-text-secondary">{formatCurrency(quote.open)}</p></div>
                       <div><span className="text-text-tertiary">High</span><p className="text-emerald-700">{formatCurrency(quote.high)}</p></div>
-                      <div><span className="text-text-tertiary">Low</span><p className="text-loss">{formatCurrency(quote.low)}</p></div>
+                      <div><span className="text-text-tertiary">Low</span><p className="text-red-400">{formatCurrency(quote.low)}</p></div>
                       <div><span className="text-text-tertiary">Close</span><p className="text-text-secondary">{formatCurrency(quote.close)}</p></div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1438,13 +1438,13 @@ function LiveTradingContent() {
                               <span>Ask</span><span className="text-right">Qty</span><span className="text-right">Ord</span>
                             </div>
                             {quote.sellDepth.map((s, i) => (
-                              <div key={i} className="grid grid-cols-3 text-loss/80 py-0.5">
+                              <div key={i} className="grid grid-cols-3 text-red-400/80 py-0.5">
                                 <span>{s.price.toFixed(2)}</span>
                                 <span className="text-right">{s.quantity}</span>
                                 <span className="text-right">{s.orders}</span>
                               </div>
                             ))}
-                            <div className="mt-1 text-text-tertiary">Total: <span className="text-loss">{(quote.totalSellQty || 0).toLocaleString("en-IN")}</span></div>
+                            <div className="mt-1 text-text-tertiary">Total: <span className="text-red-400">{(quote.totalSellQty || 0).toLocaleString("en-IN")}</span></div>
                           </div>
                         </div>
                       </div>
@@ -1493,7 +1493,7 @@ function LiveTradingContent() {
                       className={cn(
                         "py-2 text-sm font-semibold rounded-md border transition-colors",
                         transactionType === "SELL"
-                          ? "bg-loss-muted border-loss text-loss"
+                          ? "bg-red-600/20 border-red-500 text-red-400"
                           : "bg-bg-primary border-border text-text-secondary hover:border-border-light"
                       )}
                     >
@@ -1604,16 +1604,16 @@ function LiveTradingContent() {
                   </div>
                 )}
 
-                {/* Place Order — confirm before real money */}
+                {/* Place Order */}
                 <button
-                  onClick={() => setConfirmPlaceOrder(true)}
+                  onClick={handlePlaceOrder}
                   disabled={isPlacingOrder || !symbol.trim() || !quantity || !connected}
                   className={cn(
-                    "w-full min-h-12 py-3 rounded-lg font-semibold text-sm transition-colors mt-2 flex items-center justify-center gap-2 text-white touch-manipulation",
+                    "w-full py-2.5 rounded-md font-semibold text-sm transition-colors mt-2 flex items-center justify-center gap-2 text-white",
                     "disabled:opacity-50 disabled:cursor-not-allowed",
                     transactionType === "BUY"
-                      ? "bg-mode-live hover:bg-mode-live-hover"
-                      : "bg-loss hover:bg-loss/90"
+                      ? "bg-emerald-700 hover:bg-emerald-800"
+                      : "bg-red-600 hover:bg-red-700"
                   )}
                 >
                   {isPlacingOrder ? (
@@ -1635,23 +1635,20 @@ function LiveTradingContent() {
                 {activeTab === "positions" && (
                   <div className="card">
                     {positions.length === 0 ? (
-                      <EmptyState
-                        compact
-                        icon={Inbox}
-                        title="No open positions"
-                        description={
-                          connected
-                            ? "Real-money positions from Zerodha will appear here."
-                            : "Connect Zerodha in Settings to view live positions."
-                        }
-                      />
+                      <div className="flex flex-col items-center justify-center py-16 text-text-tertiary">
+                        <Inbox className="h-10 w-10 mb-3 text-text-tertiary" />
+                        <p className="text-sm">No open positions.</p>
+                        <p className="text-xs text-text-tertiary mt-1">
+                          {connected ? "Place an order to see positions here." : "Connect a Zerodha account to view positions."}
+                        </p>
+                      </div>
                     ) : (
                       <>
                         <div className="flex items-center justify-end mb-3">
                           <button
                             onClick={handleSquareOffAll}
                             disabled={isSquaringOff}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-loss-muted text-loss border border-loss/50 rounded-md hover:bg-loss-muted transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600/20 text-red-400 border border-red-700/50 rounded-md hover:bg-red-600/30 transition-colors disabled:opacity-50"
                           >
                             {isSquaringOff ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
                             Square Off All
@@ -1674,12 +1671,12 @@ function LiveTradingContent() {
                               {sortedPositions.map((pos, i) => (
                                 <tr key={i} className="border-b border-border/50 hover:bg-bg-tertiary/30">
                                   <td className="py-2.5 px-3 font-medium">{pos.symbol}</td>
-                                  <td className={cn("text-right py-2.5 px-3", pos.qty > 0 ? "text-emerald-700" : "text-loss")}>
+                                  <td className={cn("text-right py-2.5 px-3", pos.qty > 0 ? "text-emerald-700" : "text-red-400")}>
                                     {pos.qty}
                                   </td>
                                   <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(pos.avgPrice)}</td>
                                   <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(pos.ltp)}</td>
-                                  <td className={cn("text-right py-2.5 px-3 font-medium", pos.pnl >= 0 ? "text-emerald-700" : "text-loss")}>
+                                  <td className={cn("text-right py-2.5 px-3 font-medium", pos.pnl >= 0 ? "text-emerald-700" : "text-red-400")}>
                                     {formatCurrency(pos.pnl)}
                                   </td>
                                   <td className="text-right py-2.5 px-3">
@@ -1700,7 +1697,7 @@ function LiveTradingContent() {
                         </div>
                         <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
                           <span className="text-sm text-text-secondary">Net P&L</span>
-                          <span className={cn("text-lg font-bold", netPnl >= 0 ? "text-emerald-700" : "text-loss")}>
+                          <span className={cn("text-lg font-bold", netPnl >= 0 ? "text-emerald-700" : "text-red-400")}>
                             {formatCurrency(netPnl)}
                           </span>
                         </div>
@@ -1713,12 +1710,10 @@ function LiveTradingContent() {
                 {activeTab === "trades" && (
                   <div className="card">
                     {orders.length === 0 ? (
-                      <EmptyState
-                        compact
-                        icon={Clock}
-                        title="No live orders today"
-                        description="Real-money Zerodha orders for this session will list here."
-                      />
+                      <div className="flex flex-col items-center justify-center py-16 text-text-tertiary">
+                        <Clock className="h-10 w-10 mb-3 text-text-tertiary" />
+                        <p className="text-sm">No orders placed today.</p>
+                      </div>
                     ) : (
                       <div>
                       <div className="overflow-x-auto">
@@ -1747,7 +1742,7 @@ function LiveTradingContent() {
                                 <td className="py-2.5 px-3 font-medium">{order.symbol}</td>
                                 <td className="py-2.5 px-3 text-text-secondary text-xs">{order.type}</td>
                                 <td className="py-2.5 px-3">
-                                  <span className={cn("text-xs font-semibold", order.side === "BUY" ? "text-emerald-700" : "text-loss")}>
+                                  <span className={cn("text-xs font-semibold", order.side === "BUY" ? "text-emerald-700" : "text-red-400")}>
                                     {order.side}
                                   </span>
                                 </td>
@@ -1758,8 +1753,8 @@ function LiveTradingContent() {
                                     className={cn(
                                       "text-xs px-2 py-0.5 rounded-full font-medium",
                                       order.status === "COMPLETE" && "bg-emerald-100 text-emerald-800",
-                                      order.status === "PENDING" && "bg-amber-50 text-amber-800",
-                                      order.status === "REJECTED" && "bg-loss-muted text-loss",
+                                      order.status === "PENDING" && "bg-yellow-900/50 text-yellow-400",
+                                      order.status === "REJECTED" && "bg-red-900/50 text-red-400",
                                       order.status === "CANCELLED" && "bg-bg-tertiary text-text-secondary",
                                       order.status === "OPEN" && "bg-accent-muted text-accent"
                                     )}
@@ -1772,7 +1767,7 @@ function LiveTradingContent() {
                                     <button
                                       onClick={() => handleCancelOrder(order)}
                                       disabled={isCancellingOrder === order.orderId}
-                                      className="flex items-center gap-1 text-xs font-semibold text-loss hover:bg-loss-muted bg-loss-muted/60 px-2 py-1 rounded transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-loss/40"
+                                      className="flex items-center gap-1 text-xs font-semibold text-red-400 hover:text-red-300 bg-red-900/20 hover:bg-red-900/40 px-2 py-1 rounded transition-colors disabled:opacity-50"
                                     >
                                       {isCancellingOrder === order.orderId ? (
                                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -1803,16 +1798,13 @@ function LiveTradingContent() {
                 {activeTab === "holdings" && (
                   <div className="card">
                     {holdings.length === 0 ? (
-                      <EmptyState
-                        compact
-                        icon={Link2}
-                        title="No holdings"
-                        description={
-                          connected
-                            ? "This Zerodha account has no delivery holdings."
-                            : "Connect Zerodha in Settings to view holdings."
-                        }
-                      />
+                      <div className="flex flex-col items-center justify-center py-16 text-text-tertiary">
+                        <Link2 className="h-10 w-10 mb-3 text-text-tertiary" />
+                        <p className="text-sm">No holdings found.</p>
+                        <p className="text-xs text-text-tertiary mt-1">
+                          {connected ? "You don't have any holdings in this account." : "Connect a Zerodha account to view holdings."}
+                        </p>
+                      </div>
                     ) : (
                       <>
                         <div className="overflow-x-auto">
@@ -1843,14 +1835,14 @@ function LiveTradingContent() {
                                   <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(holding.ltp)}</td>
                                   <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(holding.invested)}</td>
                                   <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(holding.currentValue)}</td>
-                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnl >= 0 ? "text-emerald-700" : "text-loss")}>
+                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnl >= 0 ? "text-emerald-700" : "text-red-400")}>
                                     {holding.pnl >= 0 ? "+" : ""}{formatCurrency(holding.pnl)}
                                   </td>
-                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnlPercent >= 0 ? "text-emerald-700" : "text-loss")}>
+                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnlPercent >= 0 ? "text-emerald-700" : "text-red-400")}>
                                     {formatPercent(holding.pnlPercent)}
                                   </td>
                                   <td className="text-right py-2.5 px-3">
-                                    <span className={cn("text-xs font-medium", holding.dayChange >= 0 ? "text-emerald-700" : "text-loss")}>
+                                    <span className={cn("text-xs font-medium", holding.dayChange >= 0 ? "text-emerald-700" : "text-red-400")}>
                                       {formatPercent(holding.dayChange)}
                                     </span>
                                   </td>
@@ -1888,13 +1880,13 @@ function LiveTradingContent() {
                           </div>
                           <div>
                             <p className="text-xs text-text-tertiary">Total P&L</p>
-                            <p className={cn("font-semibold", holdingsTotals.pnl >= 0 ? "text-emerald-700" : "text-loss")}>
+                            <p className={cn("font-semibold", holdingsTotals.pnl >= 0 ? "text-emerald-700" : "text-red-400")}>
                               {holdingsTotals.pnl >= 0 ? "+" : ""}{formatCurrency(holdingsTotals.pnl)}
                             </p>
                           </div>
                           <div>
                             <p className="text-xs text-text-tertiary">Overall P&L %</p>
-                            <p className={cn("font-semibold", holdingsPnlPercent >= 0 ? "text-emerald-700" : "text-loss")}>
+                            <p className={cn("font-semibold", holdingsPnlPercent >= 0 ? "text-emerald-700" : "text-red-400")}>
                               {formatPercent(holdingsPnlPercent)}
                             </p>
                           </div>
@@ -1925,12 +1917,9 @@ function LiveTradingContent() {
               </button>
             </div>
             {strategyPerfRows.length === 0 ? (
-              <EmptyState
-                compact
-                icon={Inbox}
-                title="No live fills today"
-                description="Place a real order or wait for algo fills — this is the live book, not paper."
-              />
+              <div className="py-12 text-center text-text-tertiary text-sm">
+                No live orders yet today. Place an order or wait for algo fills.
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -1984,63 +1973,10 @@ function LiveTradingContent() {
             available={selectedFunds?.available ?? 0}
             autoOn={autoTradingEnabled}
             savingAuto={savingKillSwitch}
-            onToggleAuto={(next) => setPendingKillSwitch(next)}
+            onToggleAuto={(next) => void toggleLiveKillSwitch(next)}
           />
         )}
-        </div>
       </div>
-
-      <ConfirmDialog
-        open={pendingKillSwitch !== null}
-        onClose={() => setPendingKillSwitch(null)}
-        onConfirm={() => {
-          if (pendingKillSwitch !== null) void toggleLiveKillSwitch(pendingKillSwitch);
-        }}
-        title={
-          pendingKillSwitch
-            ? "Turn live auto-trading ON?"
-            : "Turn live auto-trading OFF?"
-        }
-        description={
-          pendingKillSwitch
-            ? "Cron may place real Zerodha orders when market is open (also needs ENABLE_LIVE_TRADING). Paper trading is unchanged."
-            : "Stops algo live orders immediately. Paper trading continues."
-        }
-        confirmLabel={pendingKillSwitch ? "Enable live auto" : "Disable live auto"}
-        tone={pendingKillSwitch ? "live" : "danger"}
-        loading={savingKillSwitch}
-      />
-
-      <ConfirmDialog
-        open={confirmPlaceOrder}
-        onClose={() => setConfirmPlaceOrder(false)}
-        onConfirm={() => void handlePlaceOrder()}
-        title={`Confirm live ${transactionType}`}
-        description="This sends a real order to Zerodha with real money."
-        confirmLabel={`Confirm ${transactionType}`}
-        tone={transactionType === "SELL" ? "danger" : "live"}
-        loading={isPlacingOrder}
-      >
-        <div className="rounded-lg border border-mode-live-border bg-mode-live-muted/50 px-3 py-3 text-sm space-y-1.5">
-          <p>
-            <span className="text-text-tertiary">Symbol </span>
-            <span className="font-semibold text-text-primary">
-              {symbol.toUpperCase()} · {exchange}
-            </span>
-          </p>
-          <p>
-            <span className="text-text-tertiary">Qty </span>
-            <span className="font-semibold tabular-nums">{quantity}</span>
-            <span className="text-text-tertiary"> · </span>
-            <span className="font-semibold">{orderType}</span>
-            <span className="text-text-tertiary"> · </span>
-            <span className="font-semibold">{productType}</span>
-          </p>
-          <p className="text-xs text-text-secondary">
-            Account: {selectedAccount?.label || selectedAccount?.userName || selectedAccountId || "—"}
-          </p>
-        </div>
-      </ConfirmDialog>
     </div>
   );
 }

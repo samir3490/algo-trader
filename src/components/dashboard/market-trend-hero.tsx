@@ -18,7 +18,6 @@ import {
 } from "lucide-react";
 import { cn, formatPercent } from "@/lib/utils";
 import type { MarketRegimePayload } from "@/lib/market-data/market-regime";
-import { chartTokens } from "@/lib/ui/chart-tokens";
 
 const REFRESH_MS = 5 * 60 * 1000;
 
@@ -75,25 +74,25 @@ export default function MarketTrendHero({ marketOpen }: { marketOpen: boolean })
   const regime = data?.regime;
 
   return (
-    <div className="card h-full">
-      <div className="flex flex-col gap-5">
-        <div className="min-w-0">
-          <div className="flex items-start justify-between gap-3 mb-4">
-            <div className="space-y-1">
-              <h2 className="type-title text-text-primary">Market trend</h2>
-              <p className="type-caption">
-                {data?.indexName ?? "Nifty 50"} · regime for strategy weights
+    <div className="card">
+      <div className="flex flex-col lg:flex-row lg:items-stretch gap-6">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-text-primary">Market Trend</h2>
+              <p className="text-sm text-text-secondary">
+                {data?.indexName ?? "Nifty 50"} · index regime for strategy weighting
               </p>
             </div>
-            {loading && <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />}
+            {loading && <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />}
           </div>
 
-          {error && <p className="text-sm text-loss mb-2">{error}</p>}
+          {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
 
           {data && (
-            <div className="flex flex-wrap items-end gap-3">
+            <div className="flex flex-wrap items-end gap-4">
               <div>
-                <p className="text-2xl sm:text-3xl font-bold text-text-primary tabular-nums leading-tight break-words">
+                <p className="text-3xl font-bold text-text-primary tabular-nums leading-tight break-words">
                   {data.lastPrice > 0
                     ? data.lastPrice.toLocaleString("en-IN", { maximumFractionDigits: 2 })
                     : "—"}
@@ -121,10 +120,10 @@ export default function MarketTrendHero({ marketOpen }: { marketOpen: boolean })
                 <div className="flex flex-wrap gap-2">
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-xs font-semibold",
+                      "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold",
                       regime.regime === "TRENDING"
-                        ? "bg-profit-muted text-profit"
-                        : "bg-mode-paper-soft text-mode-paper-fg"
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : "bg-violet-500/15 text-violet-400"
                     )}
                   >
                     {regime.regime === "TRENDING" ? (
@@ -132,9 +131,9 @@ export default function MarketTrendHero({ marketOpen }: { marketOpen: boolean })
                     ) : (
                       <TrendingDown className="h-3.5 w-3.5" />
                     )}
-                    {regime.regime === "TRENDING" ? "Trending" : "Mean reversion"}
+                    {regime.regime === "TRENDING" ? "Trending" : "Mean Reversion"}
                   </span>
-                  <span className="inline-flex items-center rounded-md bg-bg-tertiary px-2 py-0.5 text-xs text-text-secondary">
+                  <span className="inline-flex items-center rounded-full bg-bg-tertiary px-3 py-1 text-xs text-text-secondary">
                     ADX {regime.adx.toFixed(1)}
                     {regime.adxSlope >= 0 ? " ↑" : " ↓"}
                   </span>
@@ -144,23 +143,23 @@ export default function MarketTrendHero({ marketOpen }: { marketOpen: boolean })
           )}
 
           {regime && (
-            <div className="mt-3 flex flex-wrap gap-2.5">
-              <WeightBar label="Trend" pct={regime.weights.trend * 100} color="bg-profit" />
-              <WeightBar label="Momentum" pct={regime.weights.momentum * 100} color="bg-mode-paper" />
+            <div className="mt-4 flex flex-wrap gap-3">
+              <WeightBar label="Trend" pct={regime.weights.trend * 100} color="bg-emerald-500" />
+              <WeightBar label="Momentum" pct={regime.weights.momentum * 100} color="bg-sky-500" />
               <WeightBar
                 label="Reversion"
                 pct={regime.weights.reversion * 100}
-                color="bg-mode-live"
+                color="bg-violet-500"
               />
             </div>
           )}
 
           {data?.priceNote && (
-            <p className="text-[10px] text-text-tertiary mt-2">{data.priceNote}</p>
+            <p className="text-[10px] text-text-tertiary mt-3">{data.priceNote}</p>
           )}
         </div>
 
-        <div className="w-full h-28 sm:h-32 shrink-0">
+        <div className="w-full lg:w-72 h-36 shrink-0">
           {data?.sparkline && data.sparkline.length > 1 ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={data.sparkline} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
@@ -168,12 +167,12 @@ export default function MarketTrendHero({ marketOpen }: { marketOpen: boolean })
                   <linearGradient id="niftySparkGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop
                       offset="0%"
-                      stopColor={isUp ? chartTokens.profit : chartTokens.loss}
+                      stopColor={isUp ? "#10b981" : "#ef4444"}
                       stopOpacity={0.35}
                     />
                     <stop
                       offset="95%"
-                      stopColor={isUp ? chartTokens.profit : chartTokens.loss}
+                      stopColor={isUp ? "#10b981" : "#ef4444"}
                       stopOpacity={0}
                     />
                   </linearGradient>
@@ -184,7 +183,7 @@ export default function MarketTrendHero({ marketOpen }: { marketOpen: boolean })
                 <Area
                   type="monotone"
                   dataKey="close"
-                  stroke={isUp ? chartTokens.profit : chartTokens.loss}
+                  stroke={isUp ? "#10b981" : "#ef4444"}
                   strokeWidth={2}
                   fill="url(#niftySparkGradient)"
                 />

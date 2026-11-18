@@ -2,7 +2,17 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
-import { BarChart3, Clock } from "lucide-react";
+import {
+  TrendingUp,
+  TrendingDown,
+  IndianRupee,
+  Wallet,
+  BarChart3,
+  Clock,
+  ArrowUpRight,
+  ArrowDownRight,
+  Loader2,
+} from "lucide-react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -42,14 +52,7 @@ import OnboardingChecklist from "@/components/dashboard/onboarding-checklist";
 import WatchlistPanel from "@/components/dashboard/watchlist-panel";
 import AttributionWidgets from "@/components/dashboard/attribution-widgets";
 import BenchmarkWidget from "@/components/dashboard/benchmark-widget";
-import PageHeader from "@/components/ui/page-header";
-import PageShell, { ContentGrid, SectionLabel } from "@/components/ui/page-shell";
-import Panel, { PanelHeader } from "@/components/ui/panel";
-import EmptyState from "@/components/ui/empty-state";
-import { SkeletonChart } from "@/components/ui/skeleton";
-import { chartTokens } from "@/lib/ui/chart-tokens";
 import ExecutiveSummaryButton from "@/components/reporting/executive-summary-button";
-import MetricStrip from "@/components/ui/metric-strip";
 
 interface Holding {
   symbol: string;
@@ -248,237 +251,278 @@ export default function DashboardPage() {
 
   if (!mounted) {
     return (
-      <PageShell>
-        <SkeletonChart />
-        <SkeletonChart />
-      </PageShell>
+      <div className="min-h-screen flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-text-tertiary" />
+      </div>
     );
   }
 
   return (
-    <PageShell>
-      <PageHeader
-        title="Dashboard"
-        subtitle="A calm overview of your simulated book, live Zerodha account, and market context."
-        mode="neutral"
-        padded={false}
-        actions={
-          <div className="flex flex-wrap items-center gap-3">
-            <span
-              className={cn(
-                "inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-medium",
-                marketOpen
-                  ? "bg-profit-muted text-profit"
-                  : "bg-bg-tertiary text-text-tertiary"
-              )}
-            >
-              <span className={cn("pulse-dot", marketOpen ? "bg-profit" : "bg-text-tertiary")} />
-              {marketStatus}
-            </span>
-            <span className="hidden sm:inline-flex items-center gap-2 text-sm text-text-secondary">
-              <Clock className="h-4 w-4 text-text-tertiary" />
-              {new Date().toLocaleDateString("en-IN", {
-                weekday: "short",
-                day: "2-digit",
-                month: "short",
-              })}
-            </span>
-            <ExecutiveSummaryButton />
-          </div>
-        }
-      />
+    <div className="min-h-screen p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-text-primary">Dashboard</h1>
+          <p className="text-sm text-text-secondary mt-0.5">
+            Market context &amp; portfolio overview
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-text-secondary">
+          <span
+            className={cn(
+              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+              marketOpen
+                ? "bg-profit/15 text-profit"
+                : "bg-bg-tertiary text-text-tertiary"
+            )}
+          >
+            <span className={cn("pulse-dot", marketOpen ? "bg-profit" : "bg-text-tertiary")} />
+            {marketStatus}
+          </span>
+          <span className="flex items-center gap-2">
+            <Clock className="h-4 w-4" />
+            {new Date().toLocaleDateString("en-IN", {
+              weekday: "short",
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })}
+          </span>
+          <ExecutiveSummaryButton />
+        </div>
+      </div>
 
       <OnboardingChecklist />
+      <WatchlistPanel />
 
-      <section>
-        <SectionLabel>Books</SectionLabel>
-        <ContentGrid>
-          <Panel tone="paper">
-            <PanelHeader
-              title="Paper"
-              subtitle="Simulated capital"
-              action={
-                <Link
-                  href="/paper-trading"
-                  className="rounded-lg bg-mode-paper px-3 py-1.5 text-xs font-semibold text-white hover:bg-mode-paper-hover transition-colors"
-                >
-                  Open
-                </Link>
-              }
-            />
-            <MetricStrip
-              items={[
-                { label: "Cash", value: formatCurrency(portfolio.balance) },
-                {
-                  label: "Invested",
-                  value: formatCurrency(invested),
-                  sub:
-                    invested > 0
-                      ? `Mkt ${formatCurrency(portfolio.currentValue)}`
-                      : undefined,
-                },
-                {
-                  label: "Realized",
-                  value: formatCurrency(realizedPnl),
-                  sub: `${formatPercent(allTimePnlPercent)} vs start`,
-                  tone: realizedPnl >= 0 ? "profit" : "loss",
-                },
-              ]}
-            />
-          </Panel>
-          <LiveTradingDashboardStrip />
-        </ContentGrid>
-      </section>
-
-      <section>
-        <SectionLabel>Watchlist & attribution</SectionLabel>
-        <ContentGrid cols="lg:grid-cols-[minmax(18rem,0.85fr)_minmax(0,1.15fr)]">
-          <WatchlistPanel />
-          <div className="flex flex-col gap-5 min-w-0">
-            <BenchmarkWidget />
-            <AttributionWidgets />
+      <section className="rounded-xl border-2 border-sky-300 bg-sky-50/70 p-4 sm:p-5 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-700">
+              Simulated
+            </p>
+            <h2 className="text-base font-bold text-sky-950">Paper trading</h2>
           </div>
-        </ContentGrid>
+          <Link
+            href="/paper-trading"
+            className="rounded-md bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-700"
+          >
+            Open paper →
+          </Link>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="rounded-lg border border-sky-200 bg-white/80 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-secondary">Cash remaining</span>
+              <div className="rounded-lg bg-sky-100 p-1.5">
+                <IndianRupee className="h-4 w-4 text-sky-700" />
+              </div>
+            </div>
+            <p className="text-xl font-bold text-text-primary tabular-nums break-words">
+              {formatCurrency(portfolio.balance)}
+            </p>
+            <p className="text-xs text-text-tertiary mt-1">Simulated · available to buy</p>
+          </div>
+
+          <div className="rounded-lg border border-sky-200 bg-white/80 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-secondary">Invested</span>
+              <div className="rounded-lg bg-sky-100 p-1.5">
+                <Wallet className="h-4 w-4 text-sky-700" />
+              </div>
+            </div>
+            <p className="text-xl font-bold text-text-primary tabular-nums break-words">
+              {formatCurrency(invested)}
+            </p>
+            <p className="text-xs text-text-tertiary mt-1 leading-relaxed">
+              Cost of open holdings
+              {invested > 0 && (
+                <>
+                  <br />
+                  Mkt value {formatCurrency(portfolio.currentValue)}
+                </>
+              )}
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-sky-200 bg-white/80 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-secondary">Realized P&amp;L</span>
+              <div className="rounded-lg bg-sky-100 p-1.5">
+                {realizedPnl >= 0 ? (
+                  <TrendingUp className="h-4 w-4 text-profit" />
+                ) : (
+                  <TrendingDown className="h-4 w-4 text-loss" />
+                )}
+              </div>
+            </div>
+            <p
+              className={cn(
+                "text-xl font-bold tabular-nums break-words",
+                realizedPnl >= 0 ? "text-profit" : "text-loss"
+              )}
+            >
+              {formatCurrency(realizedPnl)}
+            </p>
+            <div className="flex items-center gap-1 mt-1">
+              {isProfit ? (
+                <ArrowUpRight className="h-3.5 w-3.5 text-profit" />
+              ) : (
+                <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
+              )}
+              <span className={cn("text-sm font-medium", isProfit ? "text-profit" : "text-loss")}>
+                {formatPercent(allTimePnlPercent)}
+              </span>
+              <span className="text-xs text-text-tertiary ml-1">vs start</span>
+            </div>
+            <p className="text-xs text-text-tertiary mt-1">Matched closed lots (FIFO)</p>
+          </div>
+        </div>
       </section>
 
-      <section>
-        <SectionLabel>Market & equity</SectionLabel>
-        <ContentGrid>
-          <MarketTrendHero marketOpen={marketOpen} />
-          <Panel className="flex flex-col">
-            <PanelHeader
-              title="Portfolio performance"
-              subtitle={
-                chartHasData
-                  ? portfolioChartPeriodLabel(chartPeriod)
-                  : "Simulated paper equity"
-              }
-              action={
-                <div
-                  className="flex items-center gap-1 rounded-xl bg-bg-tertiary p-1"
-                  role="tablist"
-                  aria-label="Portfolio performance period"
-                >
-                  {([
-                    ["week", "Week"],
-                    ["month", "Month"],
-                    ["year", "Year"],
-                  ] as const).map(([value, label]) => (
-                    <button
-                      key={value}
-                      type="button"
-                      role="tab"
-                      aria-selected={chartPeriod === value}
-                      onClick={() => setChartPeriod(value)}
-                      className={cn(
-                        "rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
-                        chartPeriod === value
-                          ? "bg-bg-elevated text-text-primary shadow-sm"
-                          : "text-text-secondary hover:text-text-primary"
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              }
-            />
-            {chartHasData && (
-              <MetricStrip
-                className="mb-5"
-                items={[
-                  {
-                    label: "Trades",
-                    value: String(chartPeriodTotals.tradeCount),
-                    sub: `${chartPeriodTotals.buyCount}B · ${chartPeriodTotals.sellCount}S`,
-                  },
-                  {
-                    label: "Traded",
-                    value: formatCurrency(chartPeriodTotals.totalTurnover),
-                  },
-                  {
-                    label: "Realized",
-                    value: formatCurrency(chartPeriodTotals.realizedPnl),
-                    sub: `${chartPeriodTotals.wins}W/${chartPeriodTotals.losses}L`,
-                    tone: chartPeriodTotals.realizedPnl >= 0 ? "profit" : "loss",
-                  },
-                  {
-                    label: "Fees",
-                    value: formatCurrency(chartPeriodTotals.fees),
-                  },
-                ]}
-              />
-            )}
-            <div className="h-52 sm:h-60 flex-1 min-h-[13rem]">
-              {chartHasData ? (
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
-                    <defs>
-                      <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop
-                          offset="0%"
-                          stopColor={isProfit ? chartTokens.profit : chartTokens.loss}
-                          stopOpacity={0.28}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor={isProfit ? chartTokens.profit : chartTokens.loss}
-                          stopOpacity={0}
-                        />
-                      </linearGradient>
-                    </defs>
-                    <XAxis
-                      dataKey="date"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: chartTokens.axis, fontSize: 11 }}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: chartTokens.axis, fontSize: 11 }}
-                      tickFormatter={(v: number) => `₹${(v / 100000).toFixed(1)}L`}
-                      domain={[chartMin, chartMax]}
-                      width={54}
-                    />
-                    <Tooltip content={<ChartTooltip />} />
-                    <Area
-                      type="monotone"
-                      dataKey="value"
-                      stroke={isProfit ? chartTokens.profit : chartTokens.loss}
-                      strokeWidth={2}
-                      fill="url(#portfolioGradient)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              ) : (
-                <EmptyState
-                  compact
-                  icon={BarChart3}
-                  title="No paper trades yet"
-                  description="Run simulated trades to see equity here. No real money involved."
-                  action={
-                    <Link
-                      href="/paper-trading"
-                      className="rounded-xl border border-border bg-bg-secondary px-4 py-2 text-xs font-semibold text-text-primary hover:bg-bg-hover transition-colors"
-                    >
-                      Open paper trading
-                    </Link>
-                  }
-                />
+      <LiveTradingDashboardStrip />
+
+      <BenchmarkWidget />
+      <AttributionWidgets />
+
+      <MarketTrendHero marketOpen={marketOpen} />
+      <SectorPerformanceChart marketOpen={marketOpen} />
+
+      <div className="card">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-text-primary">
+              Portfolio Performance
+            </h2>
+            <p className="text-sm text-text-secondary">
+              {chartHasData
+                ? portfolioChartPeriodLabel(chartPeriod)
+                : "Start trading to see performance"}
+            </p>
+          </div>
+          <div
+            className="flex w-full sm:w-auto items-center gap-1 rounded-lg bg-bg-tertiary p-1"
+            role="tablist"
+            aria-label="Portfolio performance period"
+          >
+            {([
+              ["week", "Week"],
+              ["month", "Month"],
+              ["year", "Year"],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                role="tab"
+                aria-selected={chartPeriod === value}
+                onClick={() => setChartPeriod(value)}
+                className={cn(
+                  "flex-1 sm:flex-none rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+                  chartPeriod === value
+                    ? "bg-bg-elevated text-text-primary shadow-sm"
+                    : "text-text-secondary hover:text-text-primary"
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {chartHasData && (
+          <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Trades</p>
+              <p className="text-sm font-semibold tabular-nums text-text-primary">
+                {chartPeriodTotals.tradeCount}
+              </p>
+              <p className="text-[11px] text-text-tertiary">
+                {chartPeriodTotals.buyCount} buy · {chartPeriodTotals.sellCount} sell
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Total traded</p>
+              <p className="text-sm font-semibold tabular-nums text-text-primary">
+                {formatCurrency(chartPeriodTotals.totalTurnover)}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Realized P&amp;L</p>
+              <p
+                className={cn(
+                  "text-sm font-semibold tabular-nums",
+                  chartPeriodTotals.realizedPnl >= 0 ? "text-profit" : "text-loss"
+                )}
+              >
+                {chartPeriodTotals.realizedPnl >= 0 ? "+" : ""}
+                {formatCurrency(chartPeriodTotals.realizedPnl)}
+              </p>
+              <p className="text-[11px] text-text-tertiary">
+                {chartPeriodTotals.wins}W / {chartPeriodTotals.losses}L
+                {chartPeriodTotals.winRate > 0 ? ` · ${chartPeriodTotals.winRate}%` : ""}
+              </p>
+            </div>
+            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Fees</p>
+              <p className="text-sm font-semibold tabular-nums text-text-primary">
+                {formatCurrency(chartPeriodTotals.fees)}
+              </p>
+              {chartPeriodTotals.feesEstimated && (
+                <p className="text-[11px] text-text-tertiary">est. Zerodha schedule</p>
               )}
             </div>
-          </Panel>
-        </ContentGrid>
-      </section>
-
-      <section>
-        <SectionLabel>Sectors</SectionLabel>
-        <SectorPerformanceChart marketOpen={marketOpen} />
-      </section>
+          </div>
+        )}
+        <div className="h-72">
+          {chartHasData ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
+                <defs>
+                  <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={isProfit ? "#10b981" : "#ef4444"} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={isProfit ? "#10b981" : "#ef4444"} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#595959", fontSize: 11 }}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: "#595959", fontSize: 11 }}
+                  tickFormatter={(v: number) => `₹${(v / 100000).toFixed(1)}L`}
+                  domain={[chartMin, chartMax]}
+                  width={60}
+                />
+                <Tooltip content={<ChartTooltip />} />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke={isProfit ? "#10b981" : "#ef4444"}
+                  strokeWidth={2}
+                  fill="url(#portfolioGradient)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-center">
+              <BarChart3 className="h-12 w-12 text-text-tertiary mb-3 opacity-50" />
+              <p className="text-sm text-text-secondary">No trading activity yet</p>
+              <p className="text-xs text-text-tertiary mt-1">
+                Place trades in{" "}
+                <Link href="/paper-trading" className="text-accent hover:underline">
+                  Paper Trading
+                </Link>{" "}
+                to see your portfolio chart
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
 
       <PaperHealthStrip />
-    </PageShell>
+    </div>
   );
 }

@@ -135,21 +135,21 @@ export default function UnifiedPnlPanel() {
   }, [book, paper, live]);
 
   return (
-    <section className="rounded-lg border border-border bg-bg-secondary p-2.5 sm:p-3 w-fit max-w-full">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-        <h2 className="text-sm font-semibold text-text-primary">Unified P&amp;L</h2>
-        <div className="flex items-center gap-1">
+    <section className="card">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        <h2 className="text-lg font-semibold text-text-primary">Unified P&amp;L</h2>
+        <div className="flex items-center gap-1 rounded-lg bg-bg-tertiary p-1">
           {(["paper", "live"] as Book[]).map((b) => (
             <button
               key={b}
               type="button"
               onClick={() => setBook(b)}
               className={cn(
-                "px-2 py-1 rounded-md text-[11px] font-semibold capitalize min-h-8",
+                "px-3 py-1.5 rounded-md text-xs font-semibold capitalize",
                 book === b
                   ? b === "paper"
-                    ? "bg-mode-paper-soft text-mode-paper-fg"
-                    : "bg-mode-live-soft text-mode-live-fg"
+                    ? "bg-sky-100 text-sky-900"
+                    : "bg-emerald-100 text-emerald-900"
                   : "text-text-tertiary hover:bg-bg-hover"
               )}
             >

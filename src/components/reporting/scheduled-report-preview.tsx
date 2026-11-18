@@ -2,8 +2,6 @@
 
 import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import Button from "@/components/ui/button";
-
 type PreviewKind = "digest" | "shortlist";
 
 /**
@@ -58,9 +56,13 @@ export default function ScheduledReportPreview({
             See digest / shortlist layout without sending mail
           </p>
         </div>
-        <Button variant="secondary" size="sm" onClick={() => setOpen((v) => !v)}>
+        <button
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          className="rounded-lg border border-border bg-bg-secondary px-3 py-1.5 text-xs font-semibold text-text-primary hover:bg-bg-hover"
+        >
           {open ? "Hide" : "Preview"}
-        </Button>
+        </button>
       </div>
       {open && (
         <div className="mt-2 space-y-2">

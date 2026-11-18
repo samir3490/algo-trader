@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { FileText } from "lucide-react";
-import Button from "@/components/ui/button";
 import { useOptionalToast } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
 import {
   getOrders,
   getPaperTradingState,
@@ -116,15 +116,21 @@ export default function ExecutiveSummaryButton({
   }
 
   return (
-    <Button
-      variant="secondary"
-      size="sm"
-      loading={loading}
-      leftIcon={<FileText className="h-3.5 w-3.5" />}
+    <button
+      type="button"
+      disabled={loading}
       onClick={() => void run()}
-      className={className}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-xs font-semibold text-text-primary hover:bg-bg-hover disabled:opacity-50",
+        className
+      )}
     >
+      {loading ? (
+        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-text-tertiary border-t-transparent" />
+      ) : (
+        <FileText className="h-3.5 w-3.5" />
+      )}
       Exec summary
-    </Button>
+    </button>
   );
 }
