@@ -9,7 +9,7 @@ import {
   ShieldAlert,
   Wallet,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import LiveAutoSwitch from "@/components/live-trading/live-auto-switch";
 import { useAuth } from "@/lib/auth-context";
 import { getSettings, type AppSettings } from "@/lib/firebase";
