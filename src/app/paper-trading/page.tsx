@@ -85,6 +85,10 @@ import PaperExportMenu from "@/components/paper-export-menu";
 import PaperHealthPanel from "@/components/paper-health-panel";
 import PaperTabBar, { type PaperTradingTab } from "@/components/paper-trading/paper-tab-bar";
 import StatCard from "@/components/ui/stat-card";
+import PaginationBar, {
+  DEFAULT_PAGE_SIZE,
+  paginateItems,
+} from "@/components/ui/pagination-bar";
 import { useTableSort } from "@/hooks/use-table-sort";
 import SortableTh from "@/components/ui/sortable-th";
 import {
@@ -259,6 +263,7 @@ export default function PaperTradingPage() {
   );
   const [activeTab, setActiveTab] = useState<PaperTradingTab>("holdings");
   const [tradePeriod, setTradePeriod] = useState<TradePeriodPreset>("week");
+  const [tradesPage, setTradesPage] = useState(1);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
@@ -1077,6 +1082,16 @@ export default function PaperTradingPage() {
     [periodFilteredTrades, tradesSort.sortRows]
   );
 
+  useEffect(() => {
+    setTradesPage(1);
+  }, [tradePeriod, customFrom, customTo, tradesSort.sortKey, tradesSort.sortDir]);
+
+  const tradesPagination = useMemo(
+    () => paginateItems(sortedEnrichedTrades, tradesPage, DEFAULT_PAGE_SIZE),
+    [sortedEnrichedTrades, tradesPage]
+  );
+  const pagedEnrichedTrades = tradesPagination.pageItems;
+
   const summaryItems = [
     {
       label: "Cash remaining",
@@ -1894,7 +1909,8 @@ export default function PaperTradingPage() {
             </span>
             {enrichedTrades.length >= PAPER_TRADE_HISTORY_LIMIT && (
               <span className="block text-amber-700 mt-1 leading-snug">
-                Showing the newest {PAPER_TRADE_HISTORY_LIMIT} trades (storage cap).
+                History list shows the newest {PAPER_TRADE_HISTORY_LIMIT} fills;
+                cash / P&amp;L still use full account balance and holdings.
               </span>
             )}
             {holdingsNotInHistory.length > 0 && (
@@ -1929,7 +1945,10 @@ export default function PaperTradingPage() {
                     type="button"
                     role="tab"
                     aria-selected={tradePeriod === value}
-                    onClick={() => setTradePeriod(value)}
+                    onClick={() => {
+                      setTradePeriod(value);
+                      setTradesPage(1);
+                    }}
                     className={cn(
                       "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
                       tradePeriod === value
@@ -2033,7 +2052,7 @@ export default function PaperTradingPage() {
         ) : (
           <>
         <div className="md:hidden space-y-3">
-          {sortedEnrichedTrades.map((t) => {
+          {pagedEnrichedTrades.map((t) => {
             const isBuy = t.side === "BUY";
             const isManual =
               t.displayStrategyName === "Manual" && !t.id?.startsWith("strat-");
@@ -2116,7 +2135,7 @@ export default function PaperTradingPage() {
               </tr>
             </thead>
             <tbody>
-              {sortedEnrichedTrades.map((t) => {
+              {pagedEnrichedTrades.map((t) => {
                 const isBuy = t.side === "BUY";
                 const isManual =
                   t.displayStrategyName === "Manual" &&
@@ -2208,6 +2227,12 @@ export default function PaperTradingPage() {
             </tbody>
           </table>
         </div>
+        <PaginationBar
+          page={tradesPagination.safePage}
+          totalPages={tradesPagination.totalPages}
+          totalItems={sortedEnrichedTrades.length}
+          onPageChange={setTradesPage}
+        />
           </>
         )}
       </div>

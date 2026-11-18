@@ -26,6 +26,10 @@ import {
   X,
 } from "lucide-react";
 import StatCard from "@/components/ui/stat-card";
+import PaginationBar, {
+  DEFAULT_PAGE_SIZE,
+  paginateItems,
+} from "@/components/ui/pagination-bar";
 import LiveTabBar, {
   type LiveTradingTab,
 } from "@/components/live-trading/live-tab-bar";
@@ -222,6 +226,7 @@ function LiveTradingContent() {
       : STOCK_LIST.slice(0, 15);
 
   const [activeTab, setActiveTab] = useState<LiveTradingTab>("holdings");
+  const [ordersPage, setOrdersPage] = useState(1);
   const [orderPanelOpen, setOrderPanelOpen] = useState(false);
 
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(
@@ -682,6 +687,16 @@ function LiveTradingContent() {
       }),
     [orders, ordersSort.sortRows]
   );
+
+  useEffect(() => {
+    setOrdersPage(1);
+  }, [orders.length, ordersSort.sortKey, ordersSort.sortDir]);
+
+  const ordersPagination = useMemo(
+    () => paginateItems(sortedOrders, ordersPage, DEFAULT_PAGE_SIZE),
+    [sortedOrders, ordersPage]
+  );
+  const pagedOrders = ordersPagination.pageItems;
 
   const holdingsSort = useTableSort({ key: "pnl", dir: "desc" });
   const sortedHoldings = useMemo(
@@ -1700,6 +1715,7 @@ function LiveTradingContent() {
                         <p className="text-sm">No orders placed today.</p>
                       </div>
                     ) : (
+                      <div>
                       <div className="overflow-x-auto">
                         <table className="w-full text-sm">
                           <thead>
@@ -1715,8 +1731,8 @@ function LiveTradingContent() {
                             </tr>
                           </thead>
                           <tbody>
-                            {sortedOrders.map((order, i) => (
-                              <tr key={i} className="border-b border-border/50 hover:bg-bg-tertiary/30">
+                            {pagedOrders.map((order, i) => (
+                              <tr key={`${order.orderId || order.time}-${i}`} className="border-b border-border/50 hover:bg-bg-tertiary/30">
                                 <td
                                   className={cn(tableDateTimeTdClass, "py-2.5 px-3")}
                                   title={formatDateTimeIST(order.time)}
@@ -1766,6 +1782,13 @@ function LiveTradingContent() {
                             ))}
                           </tbody>
                         </table>
+                      </div>
+                      <PaginationBar
+                        page={ordersPagination.safePage}
+                        totalPages={ordersPagination.totalPages}
+                        totalItems={sortedOrders.length}
+                        onPageChange={setOrdersPage}
+                      />
                       </div>
                     )}
                   </div>

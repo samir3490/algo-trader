@@ -152,20 +152,47 @@ export interface PnlBreakdown {
   today: ReturnType<typeof computeTodayPnl>;
 }
 
+/**
+ * Paper / algo money truth comes from stored cash + open holdings, not from a
+ * truncated trade list. FIFO on capped history understates old realized P&L and
+ * used to "repair" cash incorrectly when the history limit grew.
+ *
+ * Identity (always):
+ *   realized ≈ cash − startingBalance + invested
+ *   allTime  = cash + markToMarket(holdings) − startingBalance
+ */
 export function computePnlBreakdown(
   trades: PaperTrade[],
   holdings: PortfolioHolding[],
   balance: number,
-  startingBalance: number
+  startingBalance: number,
+  options?: {
+    /**
+     * When true, rebuild cash from FIFO trade history (legacy). Default false:
+     * trust the persisted balance so old dropped trades cannot change totals.
+     */
+    reconstructCashFromTrades?: boolean;
+  }
 ): PnlBreakdown {
   const invested = computeInvested(holdings);
-  const realizedPnl = computeFifoRealizedPnl(trades);
-  const honestCash = deriveHonestCash(startingBalance, invested, realizedPnl);
-  const cashRepaired = Math.abs((balance ?? 0) - honestCash) >= 1;
-  const portfolio = computePortfolio(holdings, honestCash);
-  // Mark-to-market all-time vs start (honest cash + live holdings value).
+  const storedCash = round2(balance ?? 0);
+  const fifoRealized = computeFifoRealizedPnl(trades);
+  const reconstruct = options?.reconstructCashFromTrades === true;
+
+  let cash = storedCash;
+  let realizedPnl = round2(storedCash - startingBalance + invested);
+  let cashRepaired = false;
+
+  if (reconstruct) {
+    const honestCash = deriveHonestCash(startingBalance, invested, fifoRealized);
+    cashRepaired = Math.abs(storedCash - honestCash) >= 1;
+    cash = honestCash;
+    realizedPnl = fifoRealized;
+  }
+
+  const portfolio = computePortfolio(holdings, cash);
   const allTimePnl = round2(
-    honestCash + portfolio.currentValue - startingBalance
+    cash + portfolio.currentValue - startingBalance
   );
   const allTimePnlPercent =
     startingBalance > 0 ? (allTimePnl / startingBalance) * 100 : 0;

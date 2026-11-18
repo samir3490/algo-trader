@@ -196,7 +196,7 @@ describe("deriveHonestCash", () => {
 });
 
 describe("computePnlBreakdown", () => {
-  it("repairs inflated cash and uses FIFO realized (not orphan netPnl)", () => {
+  it("trusts stored cash by default; truncation cannot change all-time P&L", () => {
     const trades: PaperTrade[] = [
       {
         id: "b1",
@@ -234,18 +234,36 @@ describe("computePnlBreakdown", () => {
         netPnl: 200_000,
       },
     ];
-    const breakdown = computePnlBreakdown(
-      trades,
-      [{ symbol: "INFY", exchange: "NSE", qty: 10, avgPrice: 1500, ltp: 1550 }],
+    const holdings = [
+      { symbol: "INFY", exchange: "NSE", qty: 10, avgPrice: 1500, ltp: 1550 },
+    ];
+    // Default: trust stored cash so truncated/orphan history cannot rewrite money.
+    const breakdown = computePnlBreakdown(trades, holdings, 1_200_000, 1_000_000);
+    assert.equal(breakdown.portfolio.balance, 1_200_000);
+    assert.equal(breakdown.unrealizedPnl, 500);
+    assert.equal(breakdown.portfolio.invested, 15_000);
+    assert.equal(breakdown.cashRepaired, false);
+    assert.equal(breakdown.realizedPnl, 1_200_000 - 1_000_000 + 15_000);
+    assert.equal(breakdown.allTimePnl, 1_200_000 + 15_500 - 1_000_000);
+
+    // Truncating old sells must not change all-time when cash/holdings are fixed.
+    const truncated = trades.filter((t) => t.id !== "s1");
+    const truncatedBreakdown = computePnlBreakdown(
+      truncated,
+      holdings,
       1_200_000,
       1_000_000
     );
-    assert.equal(breakdown.realizedPnl, 100);
-    assert.equal(breakdown.unrealizedPnl, 500);
-    assert.equal(breakdown.portfolio.invested, 15_000);
-    assert.equal(breakdown.portfolio.balance, 985_100);
-    assert.equal(breakdown.cashRepaired, true);
-    assert.equal(breakdown.allTimePnl, 985_100 + 15_500 - 1_000_000);
+    assert.equal(truncatedBreakdown.allTimePnl, breakdown.allTimePnl);
+    assert.equal(truncatedBreakdown.portfolio.balance, breakdown.portfolio.balance);
+
+    // Legacy FIFO reconstruct still available when explicitly requested.
+    const legacy = computePnlBreakdown(trades, holdings, 1_200_000, 1_000_000, {
+      reconstructCashFromTrades: true,
+    });
+    assert.equal(legacy.realizedPnl, 100);
+    assert.equal(legacy.portfolio.balance, 985_100);
+    assert.equal(legacy.cashRepaired, true);
   });
 });
 
