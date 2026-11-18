@@ -108,11 +108,11 @@ export default function LiveHealthPanel({
 
   return (
     <div className="space-y-4">
-      <div className="card border-amber-200 space-y-3">
+      <div className="card border-emerald-200 space-y-3">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-amber-100 p-2">
-              <Power className="h-5 w-5 text-amber-900" />
+            <div className="rounded-lg bg-emerald-100 p-2">
+              <Power className="h-5 w-5 text-emerald-900" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-text-primary">
@@ -179,12 +179,12 @@ export default function LiveHealthPanel({
       </div>
 
       <div className="rounded-lg border border-border bg-bg-secondary px-4 py-3 text-xs text-text-secondary flex flex-wrap gap-x-4 gap-y-1">
-        <Link href="/settings?tab=live" className="text-amber-800 font-medium hover:underline">
+        <Link href="/settings?tab=live" className="text-emerald-800 font-medium hover:underline">
           Live Settings →
         </Link>
         <Link
           href="/settings?tab=live-rules"
-          className="text-amber-800 font-medium hover:underline"
+          className="text-emerald-800 font-medium hover:underline"
         >
           Live Rules →
         </Link>

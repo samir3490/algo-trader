@@ -900,30 +900,30 @@ function LiveTradingContent() {
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary">
-      {/* Page header — mirrors Paper Trading layout (amber = live) */}
-      <div className="border-b border-amber-200/80 bg-amber-50/60 px-3 sm:px-6 py-4 sm:py-5">
+      {/* Page header — mirrors Paper Trading layout (green = live) */}
+      <div className="border-b border-emerald-200/80 bg-emerald-50/60 px-3 sm:px-6 py-4 sm:py-5">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-800">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-800">
               Real money · Zerodha
             </p>
-            <h1 className="text-2xl md:text-3xl font-bold text-amber-950">
+            <h1 className="text-2xl md:text-3xl font-bold text-emerald-950">
               Live Trading
             </h1>
-            <p className="text-sm text-amber-900/80 mt-1">
+            <p className="text-sm text-emerald-900/80 mt-1">
               Place real orders and monitor positions — separate capital from paper
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/settings?tab=live-rules"
-              className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+              className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-100"
             >
               Live Rules
             </Link>
             <Link
               href="/settings?tab=live"
-              className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+              className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-100"
             >
               Live Settings
             </Link>
@@ -935,7 +935,7 @@ function LiveTradingContent() {
                 "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-60",
                 autoTradingEnabled
                   ? "bg-red-600 text-white hover:bg-red-700"
-                  : "bg-amber-200 text-amber-950 hover:bg-amber-300"
+                  : "bg-emerald-200 text-emerald-950 hover:bg-emerald-300"
               )}
             >
               <Power className="h-3.5 w-3.5" />
@@ -955,7 +955,7 @@ function LiveTradingContent() {
                   50
                 );
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-amber-700 shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 shrink-0"
             >
               <PlusIcon className="h-3.5 w-3.5" />
               <span className="sm:hidden">Order</span>
@@ -964,7 +964,7 @@ function LiveTradingContent() {
           </div>
         </div>
 
-        <div className="mb-4 rounded-lg border border-amber-200 bg-white/80 px-4 py-3 text-xs text-amber-950">
+        <div className="mb-4 rounded-lg border border-emerald-200 bg-white/80 px-4 py-3 text-xs text-emerald-950">
           <span className="font-medium">Algo sizing: </span>
           ₹{liveOrderNotional.toLocaleString("en-IN")} / trade · ₹
           {liveCapitalLimit.toLocaleString("en-IN")} capital cap · deployed ₹
@@ -983,7 +983,7 @@ function LiveTradingContent() {
             hint={connected ? selectedAccountId || "Zerodha" : "Connect account"}
             icon={IndianRupee}
             colorClass="text-text-primary"
-            className="border-amber-200 bg-white"
+            className="border-emerald-200 bg-white"
           />
           <StatCard
             label="Margin used"
@@ -991,7 +991,7 @@ function LiveTradingContent() {
             hint={`Net ${formatCurrency(selectedFunds?.net ?? 0)}`}
             icon={Wallet}
             colorClass="text-text-primary"
-            className="border-amber-200 bg-white"
+            className="border-emerald-200 bg-white"
           />
           <StatCard
             label="Day P&L (positions)"
@@ -999,7 +999,7 @@ function LiveTradingContent() {
             hint={`${positions.length} open position${positions.length === 1 ? "" : "s"}`}
             icon={netPnl >= 0 ? TrendingUp : TrendingDown}
             colorClass={netPnl >= 0 ? "text-emerald-700" : "text-red-700"}
-            className="border-amber-200 bg-white"
+            className="border-emerald-200 bg-white"
           />
           <StatCard
             label="Holdings P&L"
@@ -1010,17 +1010,17 @@ function LiveTradingContent() {
             colorClass={
               holdingsTotals.pnl >= 0 ? "text-emerald-700" : "text-red-700"
             }
-            className="border-amber-200 bg-white"
+            className="border-emerald-200 bg-white"
           />
         </div>
       </div>
 
       {/* Account Selector Banner */}
-      <div className="bg-bg-secondary border-b border-amber-200/50 px-3 sm:px-6 py-2.5">
+      <div className="bg-bg-secondary border-b border-emerald-200/50 px-3 sm:px-6 py-2.5">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 sm:gap-4">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <Users className="h-4 w-4 text-amber-800 hidden sm:block" />
+              <Users className="h-4 w-4 text-emerald-800 hidden sm:block" />
               <span className="text-xs sm:text-sm text-text-secondary">Account:</span>
             </div>
 
@@ -1032,7 +1032,7 @@ function LiveTradingContent() {
             ) : connectedAccounts.length === 0 ? (
               <a
                 href="/api/zerodha/login"
-                className="px-4 py-1.5 bg-amber-500 hover:bg-amber-400 text-black font-semibold text-sm rounded transition-colors"
+                className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm rounded transition-colors"
               >
                 Connect Zerodha Account
               </a>
@@ -1044,13 +1044,13 @@ function LiveTradingContent() {
                     "flex items-center gap-2 px-3 py-1.5 rounded-md border text-sm font-medium transition-colors",
                     connected
                       ? "border-border bg-bg-elevated text-text-primary hover:bg-bg-tertiary"
-                      : "border-amber-400 bg-amber-50 text-amber-950 hover:bg-amber-100"
+                      : "border-emerald-400 bg-emerald-50 text-emerald-950 hover:bg-emerald-100"
                   )}
                 >
                   <span
                     className={cn(
                       "h-2 w-2 rounded-full",
-                      connected ? "bg-emerald-600" : "bg-amber-500"
+                      connected ? "bg-emerald-600" : "bg-emerald-500"
                     )}
                   />
                   <span className="text-text-primary">
@@ -1228,16 +1228,16 @@ function LiveTradingContent() {
       <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
         {/* No Account Warning */}
         {!isCheckingAuth && connectedAccounts.length === 0 && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-amber-800" />
-              <span className="text-amber-950 text-sm font-medium">
+              <AlertTriangle className="h-5 w-5 text-emerald-800" />
+              <span className="text-emerald-950 text-sm font-medium">
                 No Zerodha accounts connected. Connect an account to start live trading.
               </span>
             </div>
             <a
               href="/api/zerodha/login"
-              className="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold text-sm rounded transition-colors"
+              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded transition-colors"
             >
               Connect to Zerodha
             </a>
@@ -1266,11 +1266,11 @@ function LiveTradingContent() {
             />
             <div
               ref={orderFormRef}
-              className="relative z-50 h-full w-full max-w-md overflow-y-auto border-l border-amber-200 bg-bg-primary shadow-2xl"
+              className="relative z-50 h-full w-full max-w-md overflow-y-auto border-l border-emerald-200 bg-bg-primary shadow-2xl"
             >
             <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-border bg-bg-primary px-4 py-3">
               <div className="flex items-center gap-2 min-w-0">
-                <Zap className="h-4 w-4 text-amber-700 shrink-0" />
+                <Zap className="h-4 w-4 text-emerald-700 shrink-0" />
                 <h2 className="text-sm font-semibold text-text-primary truncate">
                   Place live order
                 </h2>
@@ -1891,7 +1891,7 @@ function LiveTradingContent() {
               <button
                 type="button"
                 onClick={() => setOrderPanelOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
               >
                 <PlusIcon className="h-3.5 w-3.5" />
                 Place Order

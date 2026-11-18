@@ -209,7 +209,7 @@ function SettingsTabBar({
             "flex min-w-[5.5rem] flex-1 flex-col items-center rounded-lg px-3 py-2.5 text-center transition-colors sm:flex-none sm:min-w-[8.5rem] sm:px-4",
             active === tab.id
               ? tab.id === "live" || tab.id === "live-rules"
-                ? "bg-amber-100 text-amber-950 ring-1 ring-amber-400/50"
+                ? "bg-emerald-100 text-emerald-950 ring-1 ring-emerald-400/50"
                 : tab.id === "paper"
                   ? "bg-sky-100 text-sky-950 ring-1 ring-sky-400/50"
                   : tab.id === "rules"
@@ -243,11 +243,11 @@ function ModeBanner({ mode }: { mode: "paper" | "live" }) {
     );
   }
   return (
-    <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-      <p className="text-sm font-medium text-amber-950">
+    <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+      <p className="text-sm font-medium text-emerald-950">
         Live trading — real Zerodha orders and real money
       </p>
-      <p className="text-xs text-amber-900 mt-1">
+      <p className="text-xs text-emerald-900 mt-1">
         Capital limits and Live Rules apply to algo live orders. Use the kill switch below
         (or Live Rules → Automatic live trading) to stop real orders immediately — paper
         trading is unaffected.
@@ -1149,10 +1149,10 @@ function SettingsContent() {
       )}
 
       {activeTab === "live-rules" && (
-        <section className="card border-amber-200">
+        <section className="card border-emerald-200">
           <div className="flex items-center gap-3 mb-4">
-            <div className="rounded-lg bg-amber-100 p-2">
-              <ListChecks className="h-5 w-5 text-amber-800" />
+            <div className="rounded-lg bg-emerald-100 p-2">
+              <ListChecks className="h-5 w-5 text-emerald-800" />
             </div>
             <div>
               <h2 className="text-lg font-semibold text-text-primary">
@@ -1166,14 +1166,14 @@ function SettingsContent() {
             </div>
           </div>
 
-          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
-            <p className="text-xs text-amber-950 leading-relaxed">
+          <div className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+            <p className="text-xs text-emerald-950 leading-relaxed">
               Kill switch is{" "}
               <strong>
                 {settings.liveRules.autoTradingEnabled ? "ON" : "OFF"}
               </strong>
               . Server also requires{" "}
-              <code className="rounded bg-amber-100 px-1">ENABLE_LIVE_TRADING=true</code>
+              <code className="rounded bg-emerald-100 px-1">ENABLE_LIVE_TRADING=true</code>
               . Active rules:{" "}
               <strong>
                 {
@@ -1239,7 +1239,7 @@ function SettingsContent() {
                           />
                           <span
                             className={cn(
-                              "h-6 w-11 rounded-full bg-border peer-checked:bg-amber-600 transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5",
+                              "h-6 w-11 rounded-full bg-border peer-checked:bg-emerald-600 transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5",
                               localKey === "autoTradingEnabled" &&
                                 on &&
                                 "peer-checked:bg-loss"
@@ -1261,11 +1261,11 @@ function SettingsContent() {
           <ModeBanner mode="live" />
 
           {/* Kill switch — live-only */}
-          <section className="card border-amber-300 bg-amber-50/50">
+          <section className="card border-emerald-300 bg-emerald-50/50">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-amber-100 p-2">
-                  <Power className="h-5 w-5 text-amber-900" />
+                <div className="rounded-lg bg-emerald-100 p-2">
+                  <Power className="h-5 w-5 text-emerald-900" />
                 </div>
                 <div>
                   <h2 className="text-lg font-semibold text-text-primary">
@@ -1274,7 +1274,7 @@ function SettingsContent() {
                   <p className="text-xs text-text-secondary mt-0.5">
                     Off by default. Turn on only after the matching Live Rules have
                     been proven on paper. Requires{" "}
-                    <code className="rounded bg-amber-100 px-1 text-[10px]">
+                    <code className="rounded bg-emerald-100 px-1 text-[10px]">
                       ENABLE_LIVE_TRADING=true
                     </code>{" "}
                     on the server.
@@ -1306,10 +1306,10 @@ function SettingsContent() {
           </section>
 
           {/* ── Live Trading (mirrors Paper Trading card) ───────────────── */}
-          <section className="card border-amber-200">
+          <section className="card border-emerald-200">
             <div className="flex items-center gap-3 mb-5">
-              <div className="rounded-lg bg-amber-100 p-2">
-                <Wallet className="h-5 w-5 text-amber-800" />
+              <div className="rounded-lg bg-emerald-100 p-2">
+                <Wallet className="h-5 w-5 text-emerald-800" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-text-primary">
@@ -1337,7 +1337,7 @@ function SettingsContent() {
                         capitalLimit: Math.max(1000, Number(e.target.value) || 50_000),
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   />
                   <p className="mt-1 text-[10px] text-text-tertiary">
                     Max deployed in live holdings/positions. Default ₹50,000.
@@ -1362,7 +1362,7 @@ function SettingsContent() {
                         maxOrderValue: orderNotional,
                       });
                     }}
-                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   />
                   <p className="mt-1 text-[10px] text-text-tertiary">
                     Used when Live Rules → Fixed order size is on. Default ₹5,000.
@@ -1380,7 +1380,7 @@ function SettingsContent() {
                         maxDailyLoss: Number(e.target.value),
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   />
                   <p className="mt-1 text-[10px] text-text-tertiary">0 = no daily loss halt</p>
                 </div>
@@ -1395,7 +1395,7 @@ function SettingsContent() {
                         defaultProductType: e.target.value as "MIS" | "CNC" | "NRML",
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
                     <option value="CNC">CNC (Delivery) — recommended</option>
                     <option value="MIS">MIS (Intraday)</option>
@@ -1413,7 +1413,7 @@ function SettingsContent() {
                         defaultExchange: e.target.value as "NSE" | "BSE",
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
                     <option value="NSE">NSE</option>
                     <option value="BSE">BSE</option>
@@ -1430,7 +1430,7 @@ function SettingsContent() {
                         defaultOrderType: e.target.value as "MARKET" | "LIMIT",
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   >
                     <option value="MARKET">Market</option>
                     <option value="LIMIT">Limit</option>
@@ -1438,11 +1438,11 @@ function SettingsContent() {
                 </div>
               </div>
 
-              <div className="border-t border-amber-200/80 pt-4 space-y-3">
+              <div className="border-t border-emerald-200/80 pt-4 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex items-center gap-3">
-                    <div className="rounded-lg bg-amber-100 p-1.5">
-                      <Users className="h-4 w-4 text-amber-800" />
+                    <div className="rounded-lg bg-emerald-100 p-1.5">
+                      <Users className="h-4 w-4 text-emerald-800" />
                     </div>
                     <div>
                       <h3 className="text-sm font-semibold text-text-primary">
@@ -1457,7 +1457,7 @@ function SettingsContent() {
                     {availableApps.length <= 1 ? (
                       <a
                         href="/api/zerodha/login"
-                        className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+                        className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
                       >
                         <Plus className="h-3.5 w-3.5" />
                         Connect
@@ -1467,7 +1467,7 @@ function SettingsContent() {
                         <a
                           key={app.index}
                           href={`/api/zerodha/login?credIndex=${app.index}`}
-                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+                          className="inline-flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
                           title={`API Key: ${app.apiKeyPrefix}`}
                         >
                           <Plus className="h-3.5 w-3.5" />
@@ -1495,7 +1495,7 @@ function SettingsContent() {
                     Loading accounts…
                   </div>
                 ) : accounts.length === 0 ? (
-                  <div className="rounded-lg border border-dashed border-amber-200 px-4 py-5 text-center">
+                  <div className="rounded-lg border border-dashed border-emerald-200 px-4 py-5 text-center">
                     <p className="text-sm text-text-secondary">No accounts connected</p>
                     <p className="text-xs text-text-tertiary mt-1">
                       Connect LX2075 to use live prices and orders
@@ -1509,7 +1509,7 @@ function SettingsContent() {
                         className={cn(
                           "rounded-md border px-2.5 py-2 flex flex-col gap-1",
                           account.connected
-                            ? "border-amber-300/60 bg-amber-50/40"
+                            ? "border-emerald-300/60 bg-emerald-50/40"
                             : "border-border bg-bg-tertiary/60"
                         )}
                       >
@@ -1567,7 +1567,7 @@ function SettingsContent() {
                             className={cn(
                               "shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
                               account.connected
-                                ? "bg-amber-200/80 text-amber-950"
+                                ? "bg-emerald-200/80 text-emerald-950"
                                 : "bg-loss/15 text-loss"
                             )}
                           >
@@ -1606,7 +1606,7 @@ function SettingsContent() {
                               <button
                                 type="button"
                                 onClick={() => handleReconnect(account.kiteUserId)}
-                                className="rounded bg-amber-600 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-amber-700"
+                                className="rounded bg-emerald-600 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-emerald-700"
                               >
                                 Reconnect
                               </button>
@@ -1629,7 +1629,7 @@ function SettingsContent() {
           </section>
 
           {/* ── Live Auto-Scan — Market Regime (mirrors paper sky card) ─── */}
-          <section className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 sm:p-6 space-y-4">
+          <section className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 sm:p-6 space-y-4">
             <div>
               <h2 className="text-base font-semibold text-text-primary">
                 Live Auto-Scan — Market Regime &amp; Exits
@@ -1653,7 +1653,7 @@ function SettingsContent() {
                   }
                   className="peer sr-only"
                 />
-                <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-amber-600 peer-focus:ring-2 peer-focus:ring-amber-500/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+                <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-emerald-600 peer-focus:ring-2 peer-focus:ring-emerald-500/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
               </label>
               <div>
                 <p className="text-sm font-medium text-text-primary">
@@ -1666,7 +1666,7 @@ function SettingsContent() {
             </div>
 
             {!settings.liveTrading.mirrorPaperAutomation && (
-              <div className="grid gap-4 sm:grid-cols-2 border-t border-amber-200 pt-4">
+              <div className="grid gap-4 sm:grid-cols-2 border-t border-emerald-200 pt-4">
                 <div className="flex items-center gap-3 sm:col-span-2">
                   <label className="relative inline-flex cursor-pointer items-center">
                     <input
@@ -1679,7 +1679,7 @@ function SettingsContent() {
                       }
                       className="peer sr-only"
                     />
-                    <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-amber-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+                    <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-emerald-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
                   </label>
                   <div>
                     <p className="text-sm font-medium text-text-primary">
@@ -1702,7 +1702,7 @@ function SettingsContent() {
                       }
                       className="peer sr-only"
                     />
-                    <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-amber-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+                    <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-emerald-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
                   </label>
                   <div>
                     <p className="text-sm font-medium text-text-primary">
@@ -1730,7 +1730,7 @@ function SettingsContent() {
                         ),
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
                 <div>
@@ -1747,7 +1747,7 @@ function SettingsContent() {
                         momentumRsiOverbought: Number(e.target.value),
                       })
                     }
-                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                   />
                 </div>
               </div>
@@ -1755,10 +1755,10 @@ function SettingsContent() {
           </section>
 
           {/* ── Live Auto-Scan — Risk (mirrors paper risk card) ─────────── */}
-          <section className="card border-amber-200">
+          <section className="card border-emerald-200">
             <div className="flex items-center gap-3 mb-5">
-              <div className="rounded-lg bg-amber-100 p-2">
-                <ShieldCheck className="h-5 w-5 text-amber-800" />
+              <div className="rounded-lg bg-emerald-100 p-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-800" />
               </div>
               <div>
                 <h2 className="text-lg font-semibold text-text-primary">
@@ -1793,7 +1793,7 @@ function SettingsContent() {
                     }
                     className="peer sr-only"
                   />
-                  <div className="h-5 w-9 rounded-full bg-bg-hover peer-checked:bg-amber-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+                  <div className="h-5 w-9 rounded-full bg-bg-hover peer-checked:bg-emerald-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
                 </label>
               </div>
               <div className="flex items-center justify-between rounded-lg bg-bg-tertiary p-4">
@@ -1816,7 +1816,7 @@ function SettingsContent() {
                     }
                     className="peer sr-only"
                   />
-                  <div className="h-5 w-9 rounded-full bg-bg-hover peer-checked:bg-amber-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+                  <div className="h-5 w-9 rounded-full bg-bg-hover peer-checked:bg-emerald-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
                 </label>
               </div>
             </div>
@@ -1836,7 +1836,7 @@ function SettingsContent() {
                       stopLossPercent: Number(e.target.value),
                     })
                   }
-                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
               <div>
@@ -1853,7 +1853,7 @@ function SettingsContent() {
                       takeProfitPercent: Number(e.target.value),
                     })
                   }
-                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
               <div>
@@ -1869,7 +1869,7 @@ function SettingsContent() {
                       maxPositions: Math.max(1, Number(e.target.value) || 1),
                     })
                   }
-                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
               <div>
@@ -1886,7 +1886,7 @@ function SettingsContent() {
                       trailingStopPercent: Number(e.target.value),
                     })
                   }
-                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
               <div>
@@ -1905,7 +1905,7 @@ function SettingsContent() {
                       ),
                     })
                   }
-                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
               <div>
@@ -1924,7 +1924,7 @@ function SettingsContent() {
                       ),
                     })
                   }
-                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
                 />
               </div>
             </div>
