@@ -1032,7 +1032,7 @@ function LiveTradingContent() {
             ) : connectedAccounts.length === 0 ? (
               <a
                 href="/api/zerodha/login"
-                className="px-4 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold text-sm rounded transition-colors"
+                className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded transition-colors"
               >
                 Connect Zerodha Account
               </a>
