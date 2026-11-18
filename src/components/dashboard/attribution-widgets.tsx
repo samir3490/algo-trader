@@ -80,8 +80,8 @@ export default function AttributionWidgets() {
   );
 
   return (
-    <div className="flex flex-wrap gap-3 items-start">
-      <section className="rounded-lg border border-border bg-bg-secondary p-2.5 w-fit max-w-full">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 h-full">
+      <section className="rounded-lg border border-border bg-bg-secondary p-2.5 h-full">
         <h3 className="text-sm font-semibold text-text-primary mb-1.5">
           Strategy attribution
         </h3>
@@ -123,7 +123,7 @@ export default function AttributionWidgets() {
         )}
       </section>
 
-      <section className="rounded-lg border border-border bg-bg-secondary p-2.5 w-fit max-w-full">
+      <section className="rounded-lg border border-border bg-bg-secondary p-2.5 h-full">
         <h3 className="text-sm font-semibold text-text-primary mb-1.5">
           Sector movers (1D)
         </h3>

@@ -30,10 +30,10 @@ const LEVEL_STYLES = {
   },
   critical: {
     icon: XCircle,
-    iconClass: "text-red-400",
-    badge: "bg-red-500/15 text-red-400",
+    iconClass: "text-loss",
+    badge: "bg-loss-muted text-loss",
     label: "Needs attention",
-    border: "border-red-500/40",
+    border: "border-loss/40",
   },
 } as const;
 

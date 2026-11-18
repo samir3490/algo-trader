@@ -112,14 +112,14 @@ export default function LiveTradingDashboardStrip() {
   }, [user]);
 
   return (
-    <section className="rounded-lg border border-mode-live-border bg-mode-live-muted/80 p-2.5 sm:p-3 w-fit max-w-full">
+    <section className="rounded-lg border border-mode-live-border bg-mode-live-muted/80 p-2.5 sm:p-3 h-full w-full">
       <div className="flex flex-wrap items-center gap-2 mb-2">
         <h2 className="text-sm font-semibold text-mode-live-fg">Live</h2>
-        <span className="text-xs uppercase tracking-wide text-mode-live">Real money</span>
+        <span className="text-xs uppercase tracking-wide text-mode-live">Real money · Zerodha</span>
         <span
           className={cn(
             "rounded px-1.5 py-0.5 text-xs font-semibold uppercase",
-            snap.autoOn ? "bg-red-100 text-red-800" : "bg-mode-live-soft text-mode-live-fg"
+            snap.autoOn ? "bg-loss-muted text-loss" : "bg-mode-live-soft text-mode-live-fg"
           )}
         >
           Auto {snap.autoOn ? "ON" : "OFF"}

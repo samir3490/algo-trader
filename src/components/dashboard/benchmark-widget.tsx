@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
-import { formatPercent } from "@/lib/utils";
+import type { ReactNode } from "react";
+import { cn, formatPercent } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getOrders, getPaperTradingState, getSettings } from "@/lib/firebase";
 import { normalizePaperTrades, tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
@@ -17,7 +18,13 @@ interface BenchResult {
 }
 
 /** Default Nifty 50 comparison — packed metrics, no empty stretch. */
-export default function BenchmarkWidget() {
+export default function BenchmarkWidget({
+  actions,
+  className,
+}: {
+  actions?: ReactNode;
+  className?: string;
+} = {}) {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<BenchResult | null>(null);
@@ -89,10 +96,16 @@ export default function BenchmarkWidget() {
   }, [user]);
 
   return (
-    <section className="rounded-lg border border-border bg-bg-secondary p-2.5 w-fit max-w-full">
-      <div className="flex items-center gap-2 mb-1.5">
+    <section
+      className={cn(
+        "rounded-lg border border-border bg-bg-secondary p-2.5 h-full w-full",
+        className
+      )}
+    >
+      <div className="flex flex-wrap items-center gap-2 mb-1.5">
         <h3 className="text-sm font-semibold text-text-primary">vs Nifty 50</h3>
-        <span className="text-xs text-text-tertiary">Paper book</span>
+        <span className="text-xs text-text-tertiary">Simulated paper book</span>
+        {actions ? <div className="ml-auto">{actions}</div> : null}
       </div>
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-text-tertiary py-1">

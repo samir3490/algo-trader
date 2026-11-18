@@ -32,6 +32,7 @@ import { normalizeExitReasonLabel } from "@/lib/portfolio/exit-label";
 import PaperExportMenu from "@/components/paper-export-menu";
 import PageHeader from "@/components/ui/page-header";
 import EmptyState from "@/components/ui/empty-state";
+import DataTable from "@/components/ui/data-table";
 import Button from "@/components/ui/button";
 import { SkeletonTable } from "@/components/ui/skeleton";
 import { useOptionalToast } from "@/components/ui/toast";
@@ -415,7 +416,7 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="space-y-2.5 sm:space-y-3 p-2.5 sm:p-4 md:p-6">
+    <div className="space-y-2 sm:space-y-2.5 p-2.5 sm:p-3 md:p-5">
       <PageHeader
         title="Orders"
         subtitle="Paper + live blotter"
@@ -645,20 +646,38 @@ export default function OrdersPage() {
       </div>
 
       {/* Orders Table — desktop */}
-      <div className="hidden md:block rounded-xl border border-border bg-bg-secondary overflow-hidden">
-        <table className="w-full">
+      <div className="hidden md:block rounded-lg border border-border bg-bg-secondary overflow-hidden p-1 sm:p-0">
+        <DataTable
+          aria-label="Orders"
+          minWidthClass="min-w-[720px]"
+          empty={!isLoading && sortedFiltered.length === 0}
+          emptyIcon={ClipboardList}
+          emptyTitle={hasActiveFilters ? "No matching orders" : "No orders yet"}
+          emptyDescription={
+            hasActiveFilters
+              ? "Try clearing filters or widening the date range."
+              : "Paper (simulated) and live (Zerodha) fills appear here after your first trade."
+          }
+          emptyAction={
+            hasActiveFilters ? (
+              <Button variant="secondary" size="sm" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            ) : undefined
+          }
+        >
           <thead>
             <tr className="border-b border-border">
-              <SortableTh sortKey="when" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className={cn(tableDateTimeThClass, "px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary")}>When</SortableTh>
-              <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Symbol</SortableTh>
-              <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Side</SortableTh>
-              <SortableTh sortKey="type" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Type</SortableTh>
-              <SortableTh sortKey="qty" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Qty</SortableTh>
-              <SortableTh sortKey="price" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Price</SortableTh>
-              <SortableTh sortKey="reason" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary min-w-[12rem] max-w-[20rem]">Reason</SortableTh>
-              <SortableTh sortKey="status" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Status</SortableTh>
-              <SortableTh sortKey="mode" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Mode</SortableTh>
-              <SortableTh sortKey="account" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Account</SortableTh>
+              <SortableTh sortKey="when" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className={cn(tableDateTimeThClass, "px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary")}>When</SortableTh>
+              <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Symbol</SortableTh>
+              <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Side</SortableTh>
+              <SortableTh sortKey="type" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Type</SortableTh>
+              <SortableTh sortKey="qty" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Qty</SortableTh>
+              <SortableTh sortKey="price" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="right" className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Price</SortableTh>
+              <SortableTh sortKey="reason" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary min-w-[12rem] max-w-[20rem]">Reason</SortableTh>
+              <SortableTh sortKey="status" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Status</SortableTh>
+              <SortableTh sortKey="mode" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Mode</SortableTh>
+              <SortableTh sortKey="account" activeKey={sortKey} direction={sortDir} onSort={toggleSort} align="center" className="px-4 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-tertiary">Account</SortableTh>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -666,27 +685,6 @@ export default function OrdersPage() {
               <tr>
                 <td colSpan={10} className="px-4 py-4">
                   <SkeletonTable rows={6} />
-                </td>
-              </tr>
-            ) : sortedFiltered.length === 0 ? (
-              <tr>
-                <td colSpan={10}>
-                  <EmptyState
-                    icon={ClipboardList}
-                    title={hasActiveFilters ? "No matching orders" : "No orders yet"}
-                    description={
-                      hasActiveFilters
-                        ? "Try clearing filters or widening the date range."
-                        : "Paper and live fills will show up here after your first trade."
-                    }
-                    action={
-                      hasActiveFilters ? (
-                        <Button variant="secondary" size="sm" onClick={clearFilters}>
-                          Clear filters
-                        </Button>
-                      ) : undefined
-                    }
-                  />
                 </td>
               </tr>
             ) : (
@@ -765,11 +763,11 @@ export default function OrdersPage() {
               })
             )}
           </tbody>
-        </table>
+        </DataTable>
       </div>
 
       {/* Footer Summary */}
-      <div className="flex items-center justify-between text-sm text-text-tertiary">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-text-tertiary">
         <span>Showing {sortedFiltered.length} of {orders.length} orders</span>
         <span>
           Total value: {formatCurrency(

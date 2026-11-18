@@ -78,21 +78,21 @@ export default function SectorPerformanceChart({
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <div>
-          <h2 className="text-lg font-semibold text-text-primary">Sector Performance</h2>
-          <p className="text-sm text-text-secondary">
-            Nifty sectoral indices · best to worst (today)
+          <h2 className="text-sm font-semibold text-text-primary">Sector performance</h2>
+          <p className="text-xs text-text-secondary">
+            Nifty sectorals · best to worst today
           </p>
         </div>
-        {loading && <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />}
+        {loading && <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />}
       </div>
 
-      {error && <p className="text-sm text-red-400 mb-3">{error}</p>}
+      {error && <p className="text-sm text-loss mb-2">{error}</p>}
 
       {chartData.length > 0 ? (
         <>
-          <div className="h-[280px] sm:h-[360px] mb-4">
+          <div className="h-[220px] sm:h-[280px] mb-3">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
                 data={chartData}

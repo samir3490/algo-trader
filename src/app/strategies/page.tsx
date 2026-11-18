@@ -733,7 +733,7 @@ function StrategiesPageContent() {
   }
 
   return (
-    <div className="min-h-screen p-3 sm:p-4 md:p-6 space-y-6 sm:space-y-8">
+    <div className="min-h-screen p-2.5 sm:p-3 md:p-5 space-y-2.5 sm:space-y-3">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

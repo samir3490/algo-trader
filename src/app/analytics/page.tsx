@@ -24,7 +24,7 @@ export default function AnalyticsPage() {
   const [tab, setTab] = useState<Tab>("paper");
 
   return (
-    <div className="min-h-screen p-2.5 sm:p-4 md:p-6 space-y-2.5 sm:space-y-3">
+    <div className="min-h-screen p-2.5 sm:p-3 md:p-5 space-y-2 sm:space-y-2.5">
       <PageHeader
         title="Analytics"
         subtitle="Paper + live metrics, P&L, audit, exports"

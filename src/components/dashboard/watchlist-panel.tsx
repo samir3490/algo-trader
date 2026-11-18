@@ -113,7 +113,7 @@ export default function WatchlistPanel() {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-bg-secondary p-2.5 sm:p-3 w-fit max-w-full">
+    <section className="rounded-lg border border-border bg-bg-secondary p-2.5 sm:p-3 h-full w-full">
       <div className="flex flex-wrap items-center gap-2 mb-2">
         <div className="flex items-center gap-1.5">
           <Star className="h-4 w-4 text-accent shrink-0" />

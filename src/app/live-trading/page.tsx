@@ -29,6 +29,7 @@ import StatCard from "@/components/ui/stat-card";
 import PageHeader from "@/components/ui/page-header";
 import ConfirmDialog from "@/components/ui/confirm-dialog";
 import Banner from "@/components/ui/banner";
+import EmptyState from "@/components/ui/empty-state";
 import { useOptionalToast } from "@/components/ui/toast";
 import PaginationBar, {
   DEFAULT_PAGE_SIZE,
@@ -937,7 +938,7 @@ function LiveTradingContent() {
     <div className="min-h-screen bg-bg-primary text-text-primary">
       <PageHeader
         title="Live Trading"
-        subtitle="Place real orders and monitor positions — separate capital from paper"
+        subtitle="Real money via Zerodha · separate from simulated paper book"
         mode="live"
         actions={
           <>
@@ -1195,7 +1196,7 @@ function LiveTradingContent() {
               <span
                 className={cn(
                   "absolute inline-flex h-full w-full rounded-full opacity-75",
-                  marketOpen ? "bg-green-400 animate-ping" : "bg-red-400"
+                  marketOpen ? "bg-profit animate-ping" : "bg-loss"
                 )}
               />
               <span
@@ -1205,7 +1206,7 @@ function LiveTradingContent() {
                 )}
               />
             </span>
-            <span className={cn("text-sm font-medium", marketOpen ? "text-emerald-700" : "text-red-400")}>
+            <span className={cn("text-sm font-medium", marketOpen ? "text-emerald-700" : "text-loss")}>
               NSE: {marketStatus}
             </span>
           </div>
@@ -1301,12 +1302,13 @@ function LiveTradingContent() {
             <div className="p-4">
 
               {/* Warning */}
-              <div className="mb-5 flex items-start gap-2 rounded-lg border border-red-500/35 bg-red-500/10 p-3">
-                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
+              <div className="mb-4 flex items-start gap-2 rounded-lg border border-loss/40 bg-loss-muted p-3">
+                <ShieldAlert className="h-4 w-4 shrink-0 mt-0.5 text-loss" />
                 <p className="text-xs leading-relaxed text-text-secondary">
-                  This will place{" "}
-                  <span className="font-semibold text-red-400">REAL</span> orders on
-                  Zerodha. Use with caution.
+                  Places{" "}
+                  <span className="font-semibold text-loss">real-money</span> Zerodha
+                  orders. Caps in Settings limit algo size — not a safety net for
+                  manual mistakes.
                 </p>
               </div>
 
@@ -1363,10 +1365,10 @@ function LiveTradingContent() {
                       </span>
                     ) : quote ? (
                       <div className="text-right">
-                        <span className={cn("text-sm font-bold", quote.changePercent >= 0 ? "text-emerald-700" : "text-red-400")}>
+                        <span className={cn("text-sm font-bold", quote.changePercent >= 0 ? "text-emerald-700" : "text-loss")}>
                           {formatCurrency(quote.lastPrice)}
                         </span>
-                        <span className={cn("text-xs ml-2", quote.changePercent >= 0 ? "text-emerald-700" : "text-red-400/80")}>
+                        <span className={cn("text-xs ml-2", quote.changePercent >= 0 ? "text-emerald-700" : "text-loss/80")}>
                           {quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)} ({formatPercent(quote.changePercent)})
                         </span>
                       </div>
@@ -1385,12 +1387,12 @@ function LiveTradingContent() {
                   <div className="bg-bg-primary border border-border rounded-md p-3 space-y-3">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-text-primary">{quote.symbol}</span>
-                      <span className={cn("text-lg font-bold", quote.changePercent >= 0 ? "text-emerald-700" : "text-red-400")}>
+                      <span className={cn("text-lg font-bold", quote.changePercent >= 0 ? "text-emerald-700" : "text-loss")}>
                         {formatCurrency(quote.lastPrice)}
                       </span>
                     </div>
                     <div className="flex items-center justify-between gap-2">
-                      <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", quote.changePercent >= 0 ? "bg-emerald-100 text-emerald-800" : "bg-red-900/50 text-red-400")}>
+                      <span className={cn("text-xs font-medium px-1.5 py-0.5 rounded", quote.changePercent >= 0 ? "bg-emerald-100 text-emerald-800" : "bg-loss-muted text-loss")}>
                         {quote.change >= 0 ? "+" : ""}{quote.change.toFixed(2)} ({formatPercent(quote.changePercent)})
                       </span>
                       {quote.priceNote && (
@@ -1405,7 +1407,7 @@ function LiveTradingContent() {
                     <div className="grid grid-cols-4 gap-2 text-xs">
                       <div><span className="text-text-tertiary">Open</span><p className="text-text-secondary">{formatCurrency(quote.open)}</p></div>
                       <div><span className="text-text-tertiary">High</span><p className="text-emerald-700">{formatCurrency(quote.high)}</p></div>
-                      <div><span className="text-text-tertiary">Low</span><p className="text-red-400">{formatCurrency(quote.low)}</p></div>
+                      <div><span className="text-text-tertiary">Low</span><p className="text-loss">{formatCurrency(quote.low)}</p></div>
                       <div><span className="text-text-tertiary">Close</span><p className="text-text-secondary">{formatCurrency(quote.close)}</p></div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-xs">
@@ -1435,13 +1437,13 @@ function LiveTradingContent() {
                               <span>Ask</span><span className="text-right">Qty</span><span className="text-right">Ord</span>
                             </div>
                             {quote.sellDepth.map((s, i) => (
-                              <div key={i} className="grid grid-cols-3 text-red-400/80 py-0.5">
+                              <div key={i} className="grid grid-cols-3 text-loss/80 py-0.5">
                                 <span>{s.price.toFixed(2)}</span>
                                 <span className="text-right">{s.quantity}</span>
                                 <span className="text-right">{s.orders}</span>
                               </div>
                             ))}
-                            <div className="mt-1 text-text-tertiary">Total: <span className="text-red-400">{(quote.totalSellQty || 0).toLocaleString("en-IN")}</span></div>
+                            <div className="mt-1 text-text-tertiary">Total: <span className="text-loss">{(quote.totalSellQty || 0).toLocaleString("en-IN")}</span></div>
                           </div>
                         </div>
                       </div>
@@ -1490,7 +1492,7 @@ function LiveTradingContent() {
                       className={cn(
                         "py-2 text-sm font-semibold rounded-md border transition-colors",
                         transactionType === "SELL"
-                          ? "bg-red-600/20 border-red-500 text-red-400"
+                          ? "bg-loss-muted border-loss text-loss"
                           : "bg-bg-primary border-border text-text-secondary hover:border-border-light"
                       )}
                     >
@@ -1632,20 +1634,23 @@ function LiveTradingContent() {
                 {activeTab === "positions" && (
                   <div className="card">
                     {positions.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-text-tertiary">
-                        <Inbox className="h-10 w-10 mb-3 text-text-tertiary" />
-                        <p className="text-sm">No open positions.</p>
-                        <p className="text-xs text-text-tertiary mt-1">
-                          {connected ? "Place an order to see positions here." : "Connect a Zerodha account to view positions."}
-                        </p>
-                      </div>
+                      <EmptyState
+                        compact
+                        icon={Inbox}
+                        title="No open positions"
+                        description={
+                          connected
+                            ? "Real-money positions from Zerodha will appear here."
+                            : "Connect Zerodha in Settings to view live positions."
+                        }
+                      />
                     ) : (
                       <>
                         <div className="flex items-center justify-end mb-3">
                           <button
                             onClick={handleSquareOffAll}
                             disabled={isSquaringOff}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-red-600/20 text-red-400 border border-red-700/50 rounded-md hover:bg-red-600/30 transition-colors disabled:opacity-50"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-loss-muted text-loss border border-loss/50 rounded-md hover:bg-loss-muted transition-colors disabled:opacity-50"
                           >
                             {isSquaringOff ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <LogOut className="h-3.5 w-3.5" />}
                             Square Off All
@@ -1668,12 +1673,12 @@ function LiveTradingContent() {
                               {sortedPositions.map((pos, i) => (
                                 <tr key={i} className="border-b border-border/50 hover:bg-bg-tertiary/30">
                                   <td className="py-2.5 px-3 font-medium">{pos.symbol}</td>
-                                  <td className={cn("text-right py-2.5 px-3", pos.qty > 0 ? "text-emerald-700" : "text-red-400")}>
+                                  <td className={cn("text-right py-2.5 px-3", pos.qty > 0 ? "text-emerald-700" : "text-loss")}>
                                     {pos.qty}
                                   </td>
                                   <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(pos.avgPrice)}</td>
                                   <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(pos.ltp)}</td>
-                                  <td className={cn("text-right py-2.5 px-3 font-medium", pos.pnl >= 0 ? "text-emerald-700" : "text-red-400")}>
+                                  <td className={cn("text-right py-2.5 px-3 font-medium", pos.pnl >= 0 ? "text-emerald-700" : "text-loss")}>
                                     {formatCurrency(pos.pnl)}
                                   </td>
                                   <td className="text-right py-2.5 px-3">
@@ -1694,7 +1699,7 @@ function LiveTradingContent() {
                         </div>
                         <div className="mt-4 pt-3 border-t border-border flex items-center justify-between">
                           <span className="text-sm text-text-secondary">Net P&L</span>
-                          <span className={cn("text-lg font-bold", netPnl >= 0 ? "text-emerald-700" : "text-red-400")}>
+                          <span className={cn("text-lg font-bold", netPnl >= 0 ? "text-emerald-700" : "text-loss")}>
                             {formatCurrency(netPnl)}
                           </span>
                         </div>
@@ -1707,10 +1712,12 @@ function LiveTradingContent() {
                 {activeTab === "trades" && (
                   <div className="card">
                     {orders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-text-tertiary">
-                        <Clock className="h-10 w-10 mb-3 text-text-tertiary" />
-                        <p className="text-sm">No orders placed today.</p>
-                      </div>
+                      <EmptyState
+                        compact
+                        icon={Clock}
+                        title="No live orders today"
+                        description="Real-money Zerodha orders for this session will list here."
+                      />
                     ) : (
                       <div>
                       <div className="overflow-x-auto">
@@ -1739,7 +1746,7 @@ function LiveTradingContent() {
                                 <td className="py-2.5 px-3 font-medium">{order.symbol}</td>
                                 <td className="py-2.5 px-3 text-text-secondary text-xs">{order.type}</td>
                                 <td className="py-2.5 px-3">
-                                  <span className={cn("text-xs font-semibold", order.side === "BUY" ? "text-emerald-700" : "text-red-400")}>
+                                  <span className={cn("text-xs font-semibold", order.side === "BUY" ? "text-emerald-700" : "text-loss")}>
                                     {order.side}
                                   </span>
                                 </td>
@@ -1750,8 +1757,8 @@ function LiveTradingContent() {
                                     className={cn(
                                       "text-xs px-2 py-0.5 rounded-full font-medium",
                                       order.status === "COMPLETE" && "bg-emerald-100 text-emerald-800",
-                                      order.status === "PENDING" && "bg-yellow-900/50 text-yellow-400",
-                                      order.status === "REJECTED" && "bg-red-900/50 text-red-400",
+                                      order.status === "PENDING" && "bg-amber-50 text-amber-800",
+                                      order.status === "REJECTED" && "bg-loss-muted text-loss",
                                       order.status === "CANCELLED" && "bg-bg-tertiary text-text-secondary",
                                       order.status === "OPEN" && "bg-accent-muted text-accent"
                                     )}
@@ -1764,7 +1771,7 @@ function LiveTradingContent() {
                                     <button
                                       onClick={() => handleCancelOrder(order)}
                                       disabled={isCancellingOrder === order.orderId}
-                                      className="flex items-center gap-1 text-xs font-semibold text-red-400 hover:text-red-300 bg-red-900/20 hover:bg-red-900/40 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                                      className="flex items-center gap-1 text-xs font-semibold text-loss hover:bg-loss-muted bg-loss-muted/60 px-2 py-1 rounded transition-colors disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-loss/40"
                                     >
                                       {isCancellingOrder === order.orderId ? (
                                         <Loader2 className="h-3 w-3 animate-spin" />
@@ -1795,13 +1802,16 @@ function LiveTradingContent() {
                 {activeTab === "holdings" && (
                   <div className="card">
                     {holdings.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-text-tertiary">
-                        <Link2 className="h-10 w-10 mb-3 text-text-tertiary" />
-                        <p className="text-sm">No holdings found.</p>
-                        <p className="text-xs text-text-tertiary mt-1">
-                          {connected ? "You don't have any holdings in this account." : "Connect a Zerodha account to view holdings."}
-                        </p>
-                      </div>
+                      <EmptyState
+                        compact
+                        icon={Link2}
+                        title="No holdings"
+                        description={
+                          connected
+                            ? "This Zerodha account has no delivery holdings."
+                            : "Connect Zerodha in Settings to view holdings."
+                        }
+                      />
                     ) : (
                       <>
                         <div className="overflow-x-auto">
@@ -1832,14 +1842,14 @@ function LiveTradingContent() {
                                   <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(holding.ltp)}</td>
                                   <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(holding.invested)}</td>
                                   <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(holding.currentValue)}</td>
-                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnl >= 0 ? "text-emerald-700" : "text-red-400")}>
+                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnl >= 0 ? "text-emerald-700" : "text-loss")}>
                                     {holding.pnl >= 0 ? "+" : ""}{formatCurrency(holding.pnl)}
                                   </td>
-                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnlPercent >= 0 ? "text-emerald-700" : "text-red-400")}>
+                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnlPercent >= 0 ? "text-emerald-700" : "text-loss")}>
                                     {formatPercent(holding.pnlPercent)}
                                   </td>
                                   <td className="text-right py-2.5 px-3">
-                                    <span className={cn("text-xs font-medium", holding.dayChange >= 0 ? "text-emerald-700" : "text-red-400")}>
+                                    <span className={cn("text-xs font-medium", holding.dayChange >= 0 ? "text-emerald-700" : "text-loss")}>
                                       {formatPercent(holding.dayChange)}
                                     </span>
                                   </td>
@@ -1877,13 +1887,13 @@ function LiveTradingContent() {
                           </div>
                           <div>
                             <p className="text-xs text-text-tertiary">Total P&L</p>
-                            <p className={cn("font-semibold", holdingsTotals.pnl >= 0 ? "text-emerald-700" : "text-red-400")}>
+                            <p className={cn("font-semibold", holdingsTotals.pnl >= 0 ? "text-emerald-700" : "text-loss")}>
                               {holdingsTotals.pnl >= 0 ? "+" : ""}{formatCurrency(holdingsTotals.pnl)}
                             </p>
                           </div>
                           <div>
                             <p className="text-xs text-text-tertiary">Overall P&L %</p>
-                            <p className={cn("font-semibold", holdingsPnlPercent >= 0 ? "text-emerald-700" : "text-red-400")}>
+                            <p className={cn("font-semibold", holdingsPnlPercent >= 0 ? "text-emerald-700" : "text-loss")}>
                               {formatPercent(holdingsPnlPercent)}
                             </p>
                           </div>
@@ -1914,9 +1924,12 @@ function LiveTradingContent() {
               </button>
             </div>
             {strategyPerfRows.length === 0 ? (
-              <div className="py-12 text-center text-text-tertiary text-sm">
-                No live orders yet today. Place an order or wait for algo fills.
-              </div>
+              <EmptyState
+                compact
+                icon={Inbox}
+                title="No live fills today"
+                description="Place a real order or wait for algo fills — this is the live book, not paper."
+              />
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">

@@ -1138,15 +1138,14 @@ export default function PaperTradingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-primary p-2.5 sm:p-4 md:p-6 pb-4">
-      {/* Header */}
-      <div className="mb-3">
+    <div className="min-h-screen bg-bg-primary p-2.5 sm:p-3 md:p-5 pb-4 space-y-2 sm:space-y-2.5">
+      <div>
         <PageHeader
           title="Paper Trading"
           subtitle={
             zerodhaConnected
-              ? "Virtual money · real market data"
-              : "Virtual money — connect Zerodha for live prices"
+              ? "Simulated money · live market data (no real orders)"
+              : "Simulated money — connect Zerodha in Settings for live prices"
           }
           mode="paper"
           padded={false}
