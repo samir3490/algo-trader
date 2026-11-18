@@ -22,6 +22,8 @@ export interface LiveBook {
   tradesToday: number;
   buyNotionalToday: number;
   kiteUserId?: string;
+  apiKey?: string;
+  accessToken?: string;
   kite?: InstanceType<typeof KiteConnect>;
 }
 
@@ -125,6 +127,8 @@ export async function loadLiveBook(
     tradesToday: quota.tradesToday,
     buyNotionalToday: quota.buyNotionalToday,
     kiteUserId: token.kiteUserId,
+    apiKey: token.apiKey,
+    accessToken: token.accessToken,
     kite,
   };
 }

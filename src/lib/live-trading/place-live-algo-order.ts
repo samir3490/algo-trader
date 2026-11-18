@@ -14,6 +14,11 @@ import {
 } from "@/lib/live-trading/live-book";
 import { isLiveTradingEnabled } from "@/lib/core/config";
 import { sendOrderEmail } from "@/lib/email";
+import {
+  extractProxyOrderId,
+  isZerodhaProxyConfigured,
+  placeOrderViaZerodhaProxy,
+} from "@/lib/zerodha/place-order-proxy";
 
 export interface LiveAlgoOrderResult {
   ok: boolean;
@@ -190,19 +195,36 @@ export async function placeLiveAlgoOrder(
     }
   }
 
-  try {
-    const result = await kite.placeOrder("regular", {
-      tradingsymbol: input.symbol.toUpperCase(),
-      exchange: input.exchange || "NSE",
-      transaction_type: input.side,
-      order_type: "MARKET",
-      quantity: qty,
-      product,
-      validity: "DAY",
-      market_protection: -1,
-    } as any);
+  const orderParams = {
+    tradingsymbol: input.symbol.toUpperCase(),
+    exchange: input.exchange || "NSE",
+    transaction_type: input.side,
+    order_type: "MARKET",
+    quantity: qty,
+    product,
+    validity: "DAY",
+    market_protection: -1,
+  };
 
-    const orderId = result.order_id;
+  try {
+    let orderId: string | undefined;
+    // Vercel IPs are blocked by Kite — always prefer the static-IP proxy when set.
+    if (isZerodhaProxyConfigured() && book.apiKey && book.accessToken) {
+      const proxyResult = await placeOrderViaZerodhaProxy(
+        book.apiKey,
+        book.accessToken,
+        orderParams
+      );
+      orderId = extractProxyOrderId(proxyResult);
+    } else {
+      const result = await kite.placeOrder("regular", orderParams as any);
+      orderId = result.order_id;
+    }
+
+    if (!orderId) {
+      return { ok: false, message: "Live order placed but no order_id returned" };
+    }
+
     await recordLiveAlgoFill(db, appUserId, {
       orderId,
       side: input.side,
