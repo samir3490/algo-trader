@@ -688,6 +688,45 @@ export async function runStrategiesForUser(
     for (const t of newRiskTrades) {
       await logTradeExecutionAudit(db, userId, t, "RiskExit");
     }
+
+    // Mirror risk exits to live Zerodha when auto-live is on.
+    if (isLiveRuleOn(userSettings, "liveAutoTradingEnabled")) {
+      for (const exit of riskResult.exits) {
+        const liveSell = await placeLiveAlgoOrder(db, userId, {
+          side: "SELL",
+          symbol: exit.symbol,
+          exchange: exit.exchange || "NSE",
+          price: exit.price ?? 0,
+          product: userSettings.defaultProduct || "CNC",
+          settings: {
+            liveOrderNotional: userSettings.liveOrderNotional,
+            liveCapitalLimit: userSettings.liveCapitalLimit,
+            liveAutoTradingEnabled: true,
+            liveRuleEnforceCapitalLimits: isLiveRuleOn(
+              userSettings,
+              "liveRuleEnforceCapitalLimits"
+            ),
+          },
+        });
+        if (liveSell.ok) {
+          diagnostics.liveSignals += 1;
+          addScanDetail(
+            diagnostics,
+            "liveExec",
+            exit.symbol,
+            `LIVE SELL (risk) · qty ${liveSell.qty ?? "?"} · ${liveSell.orderId ?? ""}`
+          );
+        } else if (liveSell.message) {
+          addScanDetail(
+            diagnostics,
+            "liveSkip",
+            exit.symbol,
+            liveSell.message
+          );
+        }
+      }
+    }
+
     const cooldownMs = (userSettings.rebuyCooldownMinutes ?? 0) * 60 * 1000;
     for (const exit of riskResult.exits) {
       const key = symKey(exit.symbol, exit.exchange);
@@ -1431,6 +1470,68 @@ export async function runStrategiesForUser(
         const strat = running.find((s) => s.id === baseDecision.ownerStrategyId);
         if (strat && resolveStrategyMode(strat) === "live") {
           diagnostics.liveSignals += 1;
+        }
+
+        // Mirror strategy SELL to live when auto-live is on.
+        if (isLiveRuleOn(userSettings, "liveAutoTradingEnabled")) {
+          const liveSell = await placeLiveAlgoOrder(db, userId, {
+            side: "SELL",
+            symbol: decision.symbol,
+            exchange,
+            price: decision.price,
+            product: userSettings.defaultProduct || "CNC",
+            settings: {
+              liveOrderNotional: userSettings.liveOrderNotional,
+              liveCapitalLimit: userSettings.liveCapitalLimit,
+              liveAutoTradingEnabled: true,
+              liveRuleEnforceCapitalLimits: isLiveRuleOn(
+                userSettings,
+                "liveRuleEnforceCapitalLimits"
+              ),
+            },
+          });
+          if (liveSell.ok) {
+            diagnostics.liveSignals += 1;
+            addScanDetail(
+              diagnostics,
+              "liveExec",
+              decision.symbol,
+              `LIVE SELL · qty ${liveSell.qty ?? "?"} · ${liveSell.orderId ?? ""}`
+            );
+            queueEmail(
+              "executed",
+              {
+                symbol: decision.symbol,
+                exchange,
+                side: "SELL",
+                quantity: liveSell.qty ?? tradeQty,
+                price: decision.price,
+                status: `LIVE EXECUTED · ${sellReason}`,
+                strategyName: decision.ownerStrategyName,
+                reason: sellReason,
+              },
+              {
+                mode: "LIVE",
+                symbol: decision.symbol,
+                exchange,
+                side: "SELL",
+                quantity: liveSell.qty ?? tradeQty,
+                price: decision.price,
+                orderType: "MARKET",
+                product: userSettings.defaultProduct || "CNC",
+                status: `LIVE EXECUTED · ${sellReason}`,
+                strategyName: decision.ownerStrategyName,
+                reason: sellReason,
+              }
+            );
+          } else if (liveSell.message) {
+            addScanDetail(
+              diagnostics,
+              "liveSkip",
+              decision.symbol,
+              liveSell.message
+            );
+          }
         }
       } else if (message) {
         bumpReason(diagnostics.skipReasons, message);

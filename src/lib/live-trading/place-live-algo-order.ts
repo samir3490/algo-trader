@@ -18,6 +18,44 @@ export interface LiveAlgoOrderResult {
   qty?: number;
 }
 
+async function resolveLiveSellQty(
+  kite: InstanceType<typeof KiteConnect>,
+  symbol: string,
+  product?: string
+): Promise<number> {
+  const sym = symbol.toUpperCase();
+  const prod = (product || "CNC").toUpperCase();
+  try {
+    const positions = await kite.getPositions();
+    const net = (positions as { net?: any[] })?.net ?? [];
+    for (const p of net) {
+      if (String(p.tradingsymbol || "").toUpperCase() !== sym) continue;
+      if (prod && String(p.product || "").toUpperCase() !== prod) continue;
+      const q = Number(p.quantity ?? 0);
+      if (q > 0) return Math.floor(q);
+    }
+    for (const p of net) {
+      if (String(p.tradingsymbol || "").toUpperCase() !== sym) continue;
+      const q = Number(p.quantity ?? 0);
+      if (q > 0) return Math.floor(q);
+    }
+  } catch {
+    /* try holdings */
+  }
+  try {
+    const holdings = await kite.getHoldings();
+    const list = Array.isArray(holdings) ? holdings : [];
+    for (const h of list) {
+      if (String(h.tradingsymbol || "").toUpperCase() !== sym) continue;
+      const q = Number(h.quantity ?? h.qty ?? 0);
+      if (q > 0) return Math.floor(q);
+    }
+  } catch {
+    /* ignore */
+  }
+  return 0;
+}
+
 /** Place a live MARKET order for the first stored Kite account (algo path). */
 export async function placeLiveAlgoOrder(
   db: Firestore,
@@ -32,7 +70,7 @@ export async function placeLiveAlgoOrder(
       liveAutoTradingEnabled?: boolean;
       liveRuleEnforceCapitalLimits?: boolean;
     };
-    /** For SELL, exact qty. For BUY, computed from live order notional unless provided. */
+    /** For SELL, exact qty (or omit to use open live position/holding qty). */
     qty?: number;
     positions?: { qty: number; avgPrice: number }[];
     holdings?: { qty: number; avgPrice: number; invested?: number }[];
@@ -56,13 +94,31 @@ export async function placeLiveAlgoOrder(
   }
 
   const price = Math.max(0, input.price);
+  const product = input.product || "CNC";
   const notional = resolveLiveOrderNotional(input.settings);
-  let qty =
-    input.qty != null && input.qty > 0
-      ? Math.floor(input.qty)
-      : qtyForLiveNotional(notional, price);
 
-  if (qty <= 0 || price <= 0) {
+  const kite = new KiteConnect({ api_key: token.apiKey });
+  kite.setAccessToken(token.accessToken);
+
+  let qty =
+    input.qty != null && input.qty > 0 ? Math.floor(input.qty) : 0;
+
+  if (input.side === "BUY") {
+    if (qty <= 0) {
+      qty = qtyForLiveNotional(notional, price);
+    }
+  } else if (qty <= 0) {
+    qty = await resolveLiveSellQty(kite, input.symbol, product);
+    if (qty <= 0) {
+      return {
+        ok: false,
+        skipped: true,
+        message: `No live position/holding to sell for ${input.symbol.toUpperCase()}`,
+      };
+    }
+  }
+
+  if (qty <= 0 || (input.side === "BUY" && price <= 0)) {
     return { ok: false, message: "Invalid live qty/price" };
   }
 
@@ -78,7 +134,6 @@ export async function placeLiveAlgoOrder(
     if (!gate.ok) {
       return { ok: false, skipped: true, message: gate.error };
     }
-    // Shrink qty if remaining capital is below full notional.
     if (gate.remainingCapital < qty * price) {
       qty = qtyForLiveNotional(Math.min(notional, gate.remainingCapital), price);
       if (qty <= 0) {
@@ -87,9 +142,6 @@ export async function placeLiveAlgoOrder(
     }
   }
 
-  const kite = new KiteConnect({ api_key: token.apiKey });
-  kite.setAccessToken(token.accessToken);
-
   try {
     const result = await kite.placeOrder("regular", {
       tradingsymbol: input.symbol.toUpperCase(),
@@ -97,7 +149,7 @@ export async function placeLiveAlgoOrder(
       transaction_type: input.side,
       order_type: "MARKET",
       quantity: qty,
-      product: input.product || "CNC",
+      product,
       validity: "DAY",
       market_protection: -1,
     } as any);

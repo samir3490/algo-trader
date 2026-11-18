@@ -11,7 +11,6 @@ import {
   Link2,
   Loader2,
   LogOut,
-  Power,
   Search,
   ShieldAlert,
   XCircle,
@@ -31,6 +30,7 @@ import LiveTabBar, {
   type LiveTradingTab,
 } from "@/components/live-trading/live-tab-bar";
 import LiveHealthPanel from "@/components/live-trading/live-health-panel";
+import LiveAutoSwitch from "@/components/live-trading/live-auto-switch";
 import {
   cn,
   formatCurrency,
@@ -927,20 +927,12 @@ function LiveTradingContent() {
             >
               Live Settings
             </Link>
-            <button
-              type="button"
-              disabled={savingKillSwitch}
-              onClick={() => void toggleLiveKillSwitch(!autoTradingEnabled)}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-60",
-                autoTradingEnabled
-                  ? "bg-red-600 text-white hover:bg-red-700"
-                  : "bg-emerald-200 text-emerald-950 hover:bg-emerald-300"
-              )}
-            >
-              <Power className="h-3.5 w-3.5" />
-              Auto {autoTradingEnabled ? "ON" : "OFF"}
-            </button>
+            <LiveAutoSwitch
+              compact
+              enabled={autoTradingEnabled}
+              saving={savingKillSwitch}
+              onToggle={(next) => void toggleLiveKillSwitch(next)}
+            />
             <button
               type="button"
               onClick={() => {
@@ -962,6 +954,14 @@ function LiveTradingContent() {
               <span className="hidden sm:inline">Place Order</span>
             </button>
           </div>
+        </div>
+
+        <div className="mb-4">
+          <LiveAutoSwitch
+            enabled={autoTradingEnabled}
+            saving={savingKillSwitch}
+            onToggle={(next) => void toggleLiveKillSwitch(next)}
+          />
         </div>
 
         <div className="mb-4 rounded-lg border border-emerald-200 bg-white/80 px-4 py-3 text-xs text-emerald-950">

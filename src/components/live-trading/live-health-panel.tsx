@@ -6,11 +6,11 @@ import {
   AlertTriangle,
   CheckCircle2,
   Loader2,
-  Power,
   ShieldAlert,
   Wallet,
 } from "lucide-react";
-import { cn, formatCurrency } from "@/lib/utils";
+import { formatCurrency } from "@/lib/utils";
+import LiveAutoSwitch from "@/components/live-trading/live-auto-switch";
 import { useAuth } from "@/lib/auth-context";
 import { getSettings, type AppSettings } from "@/lib/firebase";
 import {
@@ -108,40 +108,11 @@ export default function LiveHealthPanel({
 
   return (
     <div className="space-y-4">
-      <div className="card border-emerald-200 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div className="flex items-start gap-3">
-            <div className="rounded-lg bg-emerald-100 p-2">
-              <Power className="h-5 w-5 text-emerald-900" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-text-primary">
-                Live auto-trading
-              </h2>
-              <p className="text-xs text-text-secondary mt-0.5">
-                Same kill switch as Settings → Live. Server also needs{" "}
-                <code className="rounded bg-bg-tertiary px-1 text-[10px]">
-                  ENABLE_LIVE_TRADING=true
-                </code>
-                .
-              </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            disabled={savingAuto}
-            onClick={() => onToggleAuto(!autoOn)}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-xs font-semibold disabled:opacity-60",
-              autoOn
-                ? "bg-red-600 text-white hover:bg-red-700"
-                : "bg-bg-tertiary text-text-primary hover:bg-bg-hover"
-            )}
-          >
-            Auto {autoOn ? "ON" : "OFF"}
-          </button>
-        </div>
-      </div>
+      <LiveAutoSwitch
+        enabled={autoOn}
+        saving={savingAuto}
+        onToggle={onToggleAuto}
+      />
 
       <div className="grid gap-2 sm:grid-cols-2">
         <StatusRow

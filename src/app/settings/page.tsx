@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation";
 import {
   Settings as SettingsIcon,
   Link2,
-  Power,
   Wallet,
   RefreshCw,
   Bell,
@@ -49,6 +48,7 @@ import {
   saveSettingsToCache,
 } from "@/lib/settings/cache";
 import { effectivePositionSizingMode } from "@/lib/settings/normalize-settings";
+import LiveAutoSwitch from "@/components/live-trading/live-auto-switch";
 
 interface ServerAccount {
   kiteUserId: string;
@@ -1261,49 +1261,10 @@ function SettingsContent() {
           <ModeBanner mode="live" />
 
           {/* Kill switch — live-only */}
-          <section className="card border-emerald-300 bg-emerald-50/50">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-emerald-100 p-2">
-                  <Power className="h-5 w-5 text-emerald-900" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-text-primary">
-                    Live auto-trading kill switch
-                  </h2>
-                  <p className="text-xs text-text-secondary mt-0.5">
-                    Off by default. Turn on only after the matching Live Rules have
-                    been proven on paper. Requires{" "}
-                    <code className="rounded bg-emerald-100 px-1 text-[10px]">
-                      ENABLE_LIVE_TRADING=true
-                    </code>{" "}
-                    on the server.
-                  </p>
-                </div>
-              </div>
-              <label className="relative inline-flex shrink-0 cursor-pointer items-center gap-3 self-start sm:self-center">
-                <span
-                  className={cn(
-                    "text-xs font-semibold uppercase tracking-wide",
-                    settings.liveRules.autoTradingEnabled
-                      ? "text-loss"
-                      : "text-text-tertiary"
-                  )}
-                >
-                  {settings.liveRules.autoTradingEnabled ? "Live ON" : "Live OFF"}
-                </span>
-                <input
-                  type="checkbox"
-                  checked={settings.liveRules.autoTradingEnabled}
-                  onChange={(e) =>
-                    toggleLiveRule("autoTradingEnabled", e.target.checked)
-                  }
-                  className="peer sr-only"
-                />
-                <span className="relative h-7 w-12 rounded-full bg-border peer-checked:bg-loss transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-6 after:w-6 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
-              </label>
-            </div>
-          </section>
+          <LiveAutoSwitch
+            enabled={settings.liveRules.autoTradingEnabled}
+            onToggle={(next) => toggleLiveRule("autoTradingEnabled", next)}
+          />
 
           {/* ── Live Trading (mirrors Paper Trading card) ───────────────── */}
           <section className="card border-emerald-200">
