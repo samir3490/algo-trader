@@ -13,6 +13,7 @@ import {
   recordLiveAlgoFill,
 } from "@/lib/live-trading/live-book";
 import { isLiveTradingEnabled } from "@/lib/core/config";
+import { sendOrderEmail } from "@/lib/email";
 
 export interface LiveAlgoOrderResult {
   ok: boolean;
@@ -100,6 +101,8 @@ export async function placeLiveAlgoOrder(
       average_price?: number;
       invested?: number;
     }[];
+    strategyName?: string;
+    reason?: string;
   }
 ): Promise<LiveAlgoOrderResult> {
   if (!isLiveTradingEnabled()) {
@@ -208,6 +211,23 @@ export async function placeLiveAlgoOrder(
       price,
       kiteUserId: book.kiteUserId,
     });
+
+    // Always email live algo fills immediately (independent of paper digest).
+    void sendOrderEmail({
+      mode: "LIVE",
+      symbol: input.symbol.toUpperCase(),
+      exchange: input.exchange || "NSE",
+      side: input.side,
+      quantity: qty,
+      price,
+      orderType: "MARKET",
+      product,
+      orderId,
+      status: `LIVE ${input.side} EXECUTED`,
+      accountId: book.kiteUserId,
+      strategyName: input.strategyName,
+      reason: input.reason || `Algo live ${input.side}`,
+    }).catch(() => {});
 
     return { ok: true, orderId, qty };
   } catch (e) {

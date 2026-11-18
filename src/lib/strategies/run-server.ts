@@ -633,6 +633,10 @@ export async function runStrategiesForUser(
     emailDedupe.add(eKey);
     digestLines.push(line);
 
+    // LIVE fills always get an immediate email (also sent from placeLiveAlgoOrder).
+    // Skip duplicate individual send here when mode is LIVE — placeLiveAlgoOrder owns it.
+    if (individual?.mode === "LIVE") return;
+
     if (!digestMode && individual) {
       void sendOrderEmail(individual).catch(() => {});
     }
@@ -750,6 +754,8 @@ export async function runStrategiesForUser(
               "liveRuleEnforceCapitalLimits"
             ),
           },
+          strategyName: "Live risk exit",
+          reason: exit.message || "Risk exit",
         });
         if (liveSell.ok) {
           diagnostics.liveSignals += 1;
@@ -1295,6 +1301,9 @@ export async function runStrategiesForUser(
 
         const exchange = decision.exchange || "NSE";
         const capitalBook = algoCapitalBook(liveDeployed);
+        const liveBuyReason =
+          decision.signalReason ||
+          `${decision.buySignalCount ?? 1} signals`;
         const liveResult = await placeLiveAlgoOrder(db, userId, {
           side: "BUY",
           symbol: decision.symbol,
@@ -1312,6 +1321,8 @@ export async function runStrategiesForUser(
           },
           positions: capitalBook.positions,
           holdings: capitalBook.holdings,
+          strategyName: decision.ownerStrategyName,
+          reason: liveBuyReason,
         });
 
         if (liveResult.ok) {
@@ -1615,6 +1626,8 @@ export async function runStrategiesForUser(
                 "liveRuleEnforceCapitalLimits"
               ),
             },
+            strategyName: decision.ownerStrategyName,
+            reason: sellReason,
           });
           if (liveSell.ok) {
             diagnostics.liveSignals += 1;
