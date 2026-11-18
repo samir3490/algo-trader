@@ -16,10 +16,7 @@ const toneClass: Record<NonNullable<MetricItem["tone"]>, string> = {
   live: "text-mode-live-fg",
 };
 
-/**
- * Content-hugging KPI strip — metrics sit side-by-side with tight gaps.
- * Avoids full-width cards that leave empty space after short values.
- */
+/** Elegant KPI strip — readable labels, calm spacing. */
 export default function MetricStrip({
   items,
   className,
@@ -30,25 +27,23 @@ export default function MetricStrip({
   return (
     <div
       className={cn(
-        "flex flex-wrap items-start gap-x-5 gap-y-2",
+        "flex flex-wrap items-start gap-x-8 gap-y-4",
         className
       )}
     >
       {items.map((item) => (
         <div key={item.label} className="min-w-0 shrink-0">
-          <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">
-            {item.label}
-          </p>
+          <p className="type-label mb-1.5">{item.label}</p>
           <p
             className={cn(
-              "text-base sm:text-lg font-bold tabular-nums leading-tight",
+              "text-xl font-semibold tabular-nums tracking-tight leading-none",
               toneClass[item.tone ?? "default"]
             )}
           >
             {item.value}
           </p>
           {item.sub != null && item.sub !== false && (
-            <p className="text-xs text-text-tertiary mt-0.5 leading-snug">{item.sub}</p>
+            <p className="type-caption mt-1.5">{item.sub}</p>
           )}
         </div>
       ))}

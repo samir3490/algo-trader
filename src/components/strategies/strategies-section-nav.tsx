@@ -56,12 +56,9 @@ export default function StrategiesSectionNav({
   runningCount = 0,
 }: Props) {
   return (
-    <div className="sticky top-[53px] md:top-0 z-20 -mx-3 sm:-mx-4 md:-mx-6 px-3 sm:px-4 md:px-6 pt-1 pb-3 bg-bg-primary/95 backdrop-blur-md border-b border-border shadow-sm">
-      <p className="text-[10px] uppercase tracking-[0.2em] text-text-tertiary mb-2 hidden sm:block">
-        Jump to section
-      </p>
+    <div className="rounded-2xl border border-border bg-bg-secondary/90 p-2 shadow-[var(--shadow-panel)]">
       <nav
-        className="flex gap-2 overflow-x-auto pb-0.5 scrollbar-none"
+        className="flex gap-1.5 overflow-x-auto scrollbar-none"
         aria-label="Strategy page sections"
       >
         {SECTIONS.map((section) => {
@@ -81,10 +78,10 @@ export default function StrategiesSectionNav({
               onClick={() => onChange(section.id)}
               title={section.description}
               className={cn(
-                "flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition-all",
+                "flex shrink-0 items-center gap-2.5 rounded-xl px-3.5 py-2.5 text-left transition-all",
                 isActive
-                  ? "border-accent bg-accent-muted shadow-sm ring-1 ring-accent/30"
-                  : "border-border bg-bg-secondary hover:border-accent/40 hover:bg-bg-hover"
+                  ? "bg-brand text-white shadow-sm"
+                  : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"
               )}
             >
               <Icon
@@ -97,22 +94,27 @@ export default function StrategiesSectionNav({
                 <span
                   className={cn(
                     "text-xs font-semibold whitespace-nowrap",
-                    isActive ? "text-brand" : "text-text-primary"
+                    isActive ? "text-white" : "text-text-primary"
                   )}
                 >
                   <span className="sm:hidden">{section.shortLabel}</span>
                   <span className="hidden sm:inline">{section.label}</span>
                 </span>
-                <span className="text-[10px] text-text-tertiary hidden md:block truncate max-w-[140px]">
+                <span
+                  className={cn(
+                    "hidden md:block text-[10px] leading-tight",
+                    isActive ? "text-white/65" : "text-text-tertiary"
+                  )}
+                >
                   {section.description}
                 </span>
               </span>
               {badge && (
                 <span
                   className={cn(
-                    "ml-1 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                    "ml-1 rounded-full px-2 py-0.5 text-[10px] font-semibold",
                     isActive
-                      ? "bg-accent/30 text-brand"
+                      ? "bg-accent text-brand"
                       : "bg-bg-tertiary text-text-secondary"
                   )}
                 >
@@ -129,14 +131,9 @@ export default function StrategiesSectionNav({
 
 export function strategiesSectionFromParam(
   value: string | null
-): StrategiesSection | null {
-  if (
-    value === "configure" ||
-    value === "active" ||
-    value === "backtest" ||
-    value === "audit"
-  ) {
+): StrategiesSection {
+  if (value === "active" || value === "backtest" || value === "audit") {
     return value;
   }
-  return null;
+  return "configure";
 }

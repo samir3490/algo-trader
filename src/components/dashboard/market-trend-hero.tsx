@@ -76,12 +76,12 @@ export default function MarketTrendHero({ marketOpen }: { marketOpen: boolean })
 
   return (
     <div className="card h-full">
-      <div className="flex flex-col gap-3 sm:gap-4">
+      <div className="flex flex-col gap-5">
         <div className="min-w-0">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h2 className="text-sm font-semibold text-text-primary">Market trend</h2>
-              <p className="text-xs text-text-secondary">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <div className="space-y-1">
+              <h2 className="type-title text-text-primary">Market trend</h2>
+              <p className="type-caption">
                 {data?.indexName ?? "Nifty 50"} · regime for strategy weights
               </p>
             </div>

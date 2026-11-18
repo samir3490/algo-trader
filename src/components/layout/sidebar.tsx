@@ -143,7 +143,7 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
+                "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-150",
                 isActive
                   ? activeClass
                   : "text-text-secondary hover:bg-bg-hover hover:text-text-primary border-l-2 border-l-transparent"
@@ -151,13 +151,15 @@ export default function Sidebar() {
             >
               <Icon
                 className={cn(
-                  "h-5 w-5 shrink-0 transition-colors",
+                  "h-4.5 w-4.5 h-[18px] w-[18px] shrink-0 transition-colors",
                   isActive
                     ? activeIcon
                     : "text-text-tertiary group-hover:text-text-secondary"
                 )}
               />
-              {(isMobile || !collapsed) && <span>{item.label}</span>}
+              {(isMobile || !collapsed) && (
+                <span className="tracking-tight">{item.label}</span>
+              )}
               {isActive && (isMobile || !collapsed) && (
                 <div className={cn("ml-auto h-1.5 w-1.5 rounded-full", activeDot)} />
               )}

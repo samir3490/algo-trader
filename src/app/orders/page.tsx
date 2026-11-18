@@ -416,7 +416,8 @@ export default function OrdersPage() {
   }
 
   return (
-    <div className="space-y-2 sm:space-y-2.5 p-2.5 sm:p-3 md:p-5">
+    <div className="p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto w-full max-w-[1400px] space-y-6 sm:space-y-8">
       <PageHeader
         title="Orders"
         subtitle="Paper + live blotter"
@@ -776,6 +777,7 @@ export default function OrdersPage() {
               .reduce((sum, o) => sum + o.price * o.quantity, 0)
           )}
         </span>
+      </div>
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { getOrders, getPaperTradingState, getSettings } from "@/lib/firebase";
 import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
 import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import { computePaperPortfolioAnalytics } from "@/lib/analytics/paper-analytics";
+import Panel, { PanelHeader } from "@/components/ui/panel";
 
 export default function AttributionWidgets() {
   const { user } = useAuth();
@@ -80,20 +81,18 @@ export default function AttributionWidgets() {
   );
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 h-full">
-      <section className="rounded-lg border border-border bg-bg-secondary p-2.5 h-full">
-        <h3 className="text-sm font-semibold text-text-primary mb-1.5">
-          Strategy attribution
-        </h3>
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+      <Panel padding="sm">
+        <PanelHeader title="Strategy attribution" subtitle="Closed paper P&L" />
         {loading ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-text-tertiary" />
+          <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />
         ) : byStrategy.length === 0 ? (
-          <p className="text-xs text-text-tertiary">No closed strategy P&amp;L yet.</p>
+          <p className="text-sm text-text-tertiary">No closed strategy P&amp;L yet.</p>
         ) : (
-          <ul className="space-y-1.5">
+          <ul className="space-y-3">
             {byStrategy.map((s) => (
-              <li key={s.label} className="w-max max-w-full">
-                <div className="inline-flex items-center gap-3 text-sm">
+              <li key={s.label}>
+                <div className="inline-flex items-center gap-4 text-sm">
                   <span className="w-36 truncate font-medium text-text-primary">
                     {s.label}
                   </span>
@@ -106,7 +105,7 @@ export default function AttributionWidgets() {
                     {formatCurrency(s.pnl)}
                   </span>
                 </div>
-                <div className="h-1 w-52 max-w-full rounded-full bg-bg-tertiary mt-0.5 overflow-hidden">
+                <div className="h-1.5 w-full max-w-[13rem] rounded-full bg-bg-tertiary mt-1.5 overflow-hidden">
                   <div
                     className={cn(
                       "h-full rounded-full",
@@ -121,22 +120,20 @@ export default function AttributionWidgets() {
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
 
-      <section className="rounded-lg border border-border bg-bg-secondary p-2.5 h-full">
-        <h3 className="text-sm font-semibold text-text-primary mb-1.5">
-          Sector movers (1D)
-        </h3>
+      <Panel padding="sm">
+        <PanelHeader title="Sector movers" subtitle="1D change" />
         {loading ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-text-tertiary" />
+          <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />
         ) : sectors.length === 0 ? (
-          <p className="text-xs text-text-tertiary">Sector data unavailable.</p>
+          <p className="text-sm text-text-tertiary">Sector data unavailable.</p>
         ) : (
-          <ul className="space-y-1">
+          <ul className="space-y-2.5">
             {sectors.map((s) => (
               <li
                 key={s.name}
-                className="inline-flex items-center gap-3 text-sm py-0.5 w-max max-w-full"
+                className="inline-flex items-center gap-4 text-sm"
               >
                 <span className="w-28 truncate text-text-primary">{s.name}</span>
                 <span
@@ -151,7 +148,7 @@ export default function AttributionWidgets() {
             ))}
           </ul>
         )}
-      </section>
+      </Panel>
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { useOptionalToast } from "@/components/ui/toast";
 import Button from "@/components/ui/button";
 import EmptyState from "@/components/ui/empty-state";
+import Panel, { PanelHeader } from "@/components/ui/panel";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface QuoteRow extends WatchlistItem {
@@ -113,44 +114,43 @@ export default function WatchlistPanel() {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-bg-secondary p-2.5 sm:p-3 h-full w-full">
-      <div className="flex flex-wrap items-center gap-2 mb-2">
-        <div className="flex items-center gap-1.5">
-          <Star className="h-4 w-4 text-accent shrink-0" />
-          <h2 className="text-sm font-semibold text-text-primary">Watchlist</h2>
-        </div>
-        <form
-          className="flex items-center gap-1.5"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void addSymbol();
-          }}
-        >
-          <input
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-            placeholder="Add symbol"
-            className="w-28 h-8 rounded-md border border-border bg-bg-primary px-2 text-sm text-text-primary outline-none focus:border-accent"
-            inputMode="text"
-            autoCapitalize="characters"
-          />
-          <Button
-            type="submit"
-            size="sm"
-            loading={saving}
-            leftIcon={<Plus className="h-3.5 w-3.5" />}
-            className="!min-h-8 !px-2"
-            aria-label="Add to watchlist"
+    <Panel>
+      <PanelHeader
+        title="Watchlist"
+        subtitle="Symbols you track"
+        action={
+          <form
+            className="flex items-center gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void addSymbol();
+            }}
           >
-            Add
-          </Button>
-        </form>
-      </div>
+            <input
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+              placeholder="Add symbol"
+              className="w-28 h-9 rounded-xl border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none focus:border-accent"
+              inputMode="text"
+              autoCapitalize="characters"
+            />
+            <Button
+              type="submit"
+              size="sm"
+              loading={saving}
+              leftIcon={<Plus className="h-3.5 w-3.5" />}
+              aria-label="Add to watchlist"
+            >
+              Add
+            </Button>
+          </form>
+        }
+      />
 
       {loading ? (
-        <div className="space-y-1 w-72">
+        <div className="space-y-2 max-w-sm">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-8 w-full rounded-md" />
+            <Skeleton key={i} className="h-10 w-full rounded-xl" />
           ))}
         </div>
       ) : rows.length === 0 ? (
@@ -161,13 +161,12 @@ export default function WatchlistPanel() {
           description="Add NSE symbols to track."
         />
       ) : (
-        <ul className="divide-y divide-border">
+        <ul className="divide-y divide-border/80">
           {rows.map((row) => {
             const up = (row.changePercent ?? 0) >= 0;
             return (
               <li key={`${row.exchange}:${row.symbol}`}>
-                {/* Packed row — no stretch / no far-right delete */}
-                <div className="inline-flex items-center gap-3 py-1.5 min-h-9 max-w-full">
+                <div className="inline-flex items-center gap-4 py-2.5 min-h-11 max-w-full">
                   <Link
                     href={`/paper-trading?symbol=${encodeURIComponent(row.symbol)}`}
                     className="w-[5.5rem] shrink-0 touch-manipulation"
@@ -214,6 +213,6 @@ export default function WatchlistPanel() {
           })}
         </ul>
       )}
-    </section>
+    </Panel>
   );
 }

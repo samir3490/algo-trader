@@ -7,6 +7,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getSettings } from "@/lib/firebase";
 import MetricStrip from "@/components/ui/metric-strip";
+import Panel, { PanelHeader } from "@/components/ui/panel";
 
 interface LiveSnapshot {
   available: number;
@@ -33,7 +34,7 @@ const EMPTY: LiveSnapshot = {
   orderNotional: 5_000,
 };
 
-/** Compact live Zerodha numbers — content-width, no empty stretch. */
+/** Live book summary for the dashboard. */
 export default function LiveTradingDashboardStrip() {
   const { user } = useAuth();
   const [snap, setSnap] = useState<LiveSnapshot>(EMPTY);
@@ -112,39 +113,43 @@ export default function LiveTradingDashboardStrip() {
   }, [user]);
 
   return (
-    <section className="rounded-lg border border-mode-live-border bg-mode-live-muted/80 p-2.5 sm:p-3 h-full w-full">
-      <div className="flex flex-wrap items-center gap-2 mb-2">
-        <h2 className="text-sm font-semibold text-mode-live-fg">Live</h2>
-        <span className="text-xs uppercase tracking-wide text-mode-live">Real money · Zerodha</span>
-        <span
-          className={cn(
-            "rounded px-1.5 py-0.5 text-xs font-semibold uppercase",
-            snap.autoOn ? "bg-loss-muted text-loss" : "bg-mode-live-soft text-mode-live-fg"
-          )}
-        >
-          Auto {snap.autoOn ? "ON" : "OFF"}
-        </span>
-        <Link
-          href="/live-trading"
-          className="rounded-md bg-mode-live px-2 py-1 text-xs font-semibold text-white hover:bg-mode-live-hover"
-        >
-          Open →
-        </Link>
-      </div>
+    <Panel tone="live">
+      <PanelHeader
+        title="Live"
+        subtitle="Real money · Zerodha"
+        action={
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                snap.autoOn ? "bg-loss-muted text-loss" : "bg-mode-live-soft text-mode-live-fg"
+              )}
+            >
+              Auto {snap.autoOn ? "ON" : "OFF"}
+            </span>
+            <Link
+              href="/live-trading"
+              className="rounded-lg bg-mode-live px-3 py-1.5 text-xs font-semibold text-white hover:bg-mode-live-hover transition-colors"
+            >
+              Open
+            </Link>
+          </div>
+        }
+      />
 
       {loading ? (
-        <div className="flex items-center gap-2 py-1 text-sm text-text-tertiary">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+        <div className="flex items-center gap-2 py-2 text-sm text-text-tertiary">
+          <Loader2 className="h-4 w-4 animate-spin" />
           Loading…
         </div>
       ) : !snap.connected ? (
-        <p className="text-sm text-text-secondary leading-snug max-w-md">
+        <p className="text-sm text-text-secondary leading-relaxed max-w-md">
           Connect Zerodha in{" "}
-          <Link href="/settings?tab=live" className="text-mode-live font-medium underline">
+          <Link href="/settings?tab=live" className="text-mode-live font-medium underline underline-offset-2">
             Settings → Live
           </Link>
           . Cap ₹{snap.capitalLimit.toLocaleString("en-IN")} · order ₹
-          {snap.orderNotional.toLocaleString("en-IN")}
+          {snap.orderNotional.toLocaleString("en-IN")}.
         </p>
       ) : (
         <MetricStrip
@@ -163,6 +168,6 @@ export default function LiveTradingDashboardStrip() {
           ]}
         />
       )}
-    </section>
+    </Panel>
   );
 }

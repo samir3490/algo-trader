@@ -25,26 +25,35 @@ export default function EmptyState({
   return (
     <div
       className={cn(
-        "flex flex-col items-center justify-center text-center px-3",
-        compact ? "py-5" : "py-8 sm:py-10",
+        "flex flex-col items-center justify-center text-center px-4",
+        compact ? "py-8" : "py-12 sm:py-14",
         className
       )}
     >
-      <div className={cn("rounded-xl bg-bg-tertiary mb-2", compact ? "p-2" : "p-3")}>
+      <div
+        className={cn(
+          "rounded-2xl bg-bg-tertiary mb-3",
+          compact ? "p-2.5" : "p-3.5"
+        )}
+      >
         <Icon
           className={cn(
             "text-text-tertiary",
-            compact ? "h-5 w-5" : "h-7 w-7 sm:h-8 sm:w-8"
+            compact ? "h-5 w-5" : "h-7 w-7"
           )}
         />
       </div>
-      <p className="text-sm font-semibold text-text-primary">{title}</p>
+      <p className="text-sm font-semibold text-text-primary tracking-tight">
+        {title}
+      </p>
       {description && (
-        <p className="mt-1 max-w-sm text-xs text-text-secondary leading-snug">
+        <p className="mt-1.5 max-w-sm text-sm text-text-secondary leading-relaxed">
           {description}
         </p>
       )}
-      {action && <div className="mt-3 w-full sm:w-auto flex justify-center">{action}</div>}
+      {action && (
+        <div className="mt-4 w-full sm:w-auto flex justify-center">{action}</div>
+      )}
     </div>
   );
 }

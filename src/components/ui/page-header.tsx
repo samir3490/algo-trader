@@ -14,17 +14,17 @@ const modeChrome: Record<
   }
 > = {
   paper: {
-    wrap: "border-b border-mode-paper-border/80 bg-mode-paper-muted/80",
-    eyebrow: "text-mode-paper-fg",
+    wrap: "rounded-2xl border border-mode-paper-border/70 bg-mode-paper-muted/90 px-5 py-4 sm:px-6 sm:py-5",
+    eyebrow: "text-mode-paper",
     title: "text-mode-paper-fg",
-    subtitle: "text-mode-paper-fg/80",
+    subtitle: "text-mode-paper-fg/75",
     defaultEyebrow: "Simulated · paper book",
   },
   live: {
-    wrap: "border-b border-mode-live-border/80 bg-mode-live-muted/80",
-    eyebrow: "text-mode-live-fg",
+    wrap: "rounded-2xl border border-mode-live-border/70 bg-mode-live-muted/90 px-5 py-4 sm:px-6 sm:py-5",
+    eyebrow: "text-mode-live",
     title: "text-mode-live-fg",
-    subtitle: "text-mode-live-fg/80",
+    subtitle: "text-mode-live-fg/75",
     defaultEyebrow: "Real money · Zerodha",
   },
   neutral: {
@@ -47,7 +47,7 @@ export interface PageHeaderProps {
   padded?: boolean;
 }
 
-/** Compact page header — title row dense; optional mode strip. */
+/** Elegant page header — clear hierarchy, optional mode surface. */
 export default function PageHeader({
   title,
   subtitle,
@@ -59,39 +59,46 @@ export default function PageHeader({
   padded = true,
 }: PageHeaderProps) {
   const chrome = modeChrome[mode];
-  const showEyebrow = Boolean(eyebrow ?? (mode !== "neutral" ? chrome.defaultEyebrow : ""));
+  const showEyebrow = Boolean(
+    eyebrow ?? (mode !== "neutral" ? chrome.defaultEyebrow : "")
+  );
 
   return (
     <header
       className={cn(
         chrome.wrap,
-        padded && (mode === "neutral" ? "mb-3" : "px-3 sm:px-4 py-2.5 sm:py-3"),
+        padded && mode === "neutral" && "mb-1",
         className
       )}
     >
       <div
         className={cn(
-          "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2",
-          children && "mb-2.5"
+          "flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between",
+          children && "mb-5"
         )}
       >
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-1.5">
           {showEyebrow && (
-            <p className={cn("text-[10px] font-semibold uppercase tracking-wide mb-0.5", chrome.eyebrow)}>
+            <p className={cn("type-label", chrome.eyebrow)}>
               {eyebrow ?? chrome.defaultEyebrow}
             </p>
           )}
-          <h1 className={cn("text-xl sm:text-2xl font-bold leading-tight tracking-tight", chrome.title)}>
+          <h1
+            className={cn(
+              "type-display text-text-primary",
+              chrome.title
+            )}
+          >
             {title}
           </h1>
           {subtitle && (
-            <p className={cn("text-xs sm:text-sm mt-0.5 leading-snug", chrome.subtitle)}>
+            <p className={cn("type-subtitle max-w-2xl", chrome.subtitle)}>
               {subtitle}
             </p>
           )}
         </div>
         {actions && (
-          <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto shrink-0">
+          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto shrink-0">
             {actions}
           </div>
         )}

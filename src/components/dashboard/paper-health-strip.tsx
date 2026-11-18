@@ -85,7 +85,7 @@ export default function PaperHealthStrip() {
   return (
     <section
       className={cn(
-        "rounded-xl border bg-bg-secondary px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3",
+        "rounded-2xl border bg-bg-secondary px-5 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-[var(--shadow-panel)]",
         health ? styles.border : "border-border"
       )}
     >

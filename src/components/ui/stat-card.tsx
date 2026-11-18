@@ -20,12 +20,12 @@ const modeStyles: Record<
   { card: string; iconWell: string; icon: string }
 > = {
   paper: {
-    card: "border-mode-paper-border/70 bg-mode-paper-muted/40",
+    card: "border-mode-paper-border/50 bg-mode-paper-muted/50",
     iconWell: "bg-mode-paper-soft text-mode-paper",
     icon: "text-mode-paper",
   },
   live: {
-    card: "border-mode-live-border/70 bg-mode-live-muted/40",
+    card: "border-mode-live-border/50 bg-mode-live-muted/50",
     iconWell: "bg-mode-live-soft text-mode-live",
     icon: "text-mode-live",
   },
@@ -36,10 +36,7 @@ const modeStyles: Record<
   },
 };
 
-/**
- * Content-sized KPI tile — does not stretch empty width.
- * Parent should use flex-wrap, not equal-width full-bleed grids.
- */
+/** Polished KPI tile with calm padding. */
 export default function StatCard({
   label,
   primary,
@@ -49,46 +46,42 @@ export default function StatCard({
   colorClass = "text-text-primary",
   className,
   mode = "neutral",
-  dense = true,
+  dense = false,
 }: StatCardProps) {
   const chrome = modeStyles[mode];
 
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-bg-secondary inline-flex flex-col",
-        "w-max max-w-full min-w-[9.5rem]",
-        dense ? "px-2.5 py-2" : "px-3 py-2.5",
+        "rounded-2xl border border-border bg-bg-secondary inline-flex flex-col",
+        "w-max max-w-full min-w-[10.5rem] shadow-[var(--shadow-panel)]",
+        dense ? "px-3.5 py-3" : "px-4 py-3.5",
         chrome.card,
         className
       )}
     >
-      <div className="flex items-center gap-1.5 mb-0.5">
-        <div className={cn("rounded-md shrink-0 p-1", chrome.iconWell)}>
+      <div className="flex items-center gap-2 mb-2">
+        <div className={cn("rounded-lg shrink-0 p-1.5", chrome.iconWell)}>
           <Icon className={cn("w-3.5 h-3.5", chrome.icon)} />
         </div>
-        <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary leading-none">
-          {label}
-        </p>
+        <p className="type-label">{label}</p>
       </div>
       <p
         className={cn(
-          "font-bold tabular-nums leading-tight whitespace-nowrap",
-          "text-base sm:text-lg",
+          "font-semibold tabular-nums tracking-tight leading-tight whitespace-nowrap",
+          "text-lg sm:text-xl",
           colorClass
         )}
       >
         {primary}
         {secondary ? (
-          <span className={cn("ml-1.5 text-sm font-semibold", colorClass)}>
+          <span className={cn("ml-2 text-sm font-medium", colorClass)}>
             {secondary}
           </span>
         ) : null}
       </p>
       {hint && (
-        <p className="text-xs text-text-tertiary mt-0.5 leading-snug max-w-[14rem]">
-          {hint}
-        </p>
+        <p className="type-caption mt-1.5 max-w-[15rem]">{hint}</p>
       )}
     </div>
   );

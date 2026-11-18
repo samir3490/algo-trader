@@ -1138,7 +1138,8 @@ export default function PaperTradingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-primary p-2.5 sm:p-3 md:p-5 pb-4 space-y-2 sm:space-y-2.5">
+    <div className="min-h-screen bg-bg-primary p-4 sm:p-6 lg:p-8 pb-8">
+      <div className="mx-auto w-full max-w-[1400px] space-y-6 sm:space-y-8">
       <div>
         <PageHeader
           title="Paper Trading"
@@ -2286,6 +2287,7 @@ export default function PaperTradingPage() {
         appSettings={appSettings}
         onPlaceOrder={handlePlaceOrder}
       />
+      </div>
     </div>
   );
 }

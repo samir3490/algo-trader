@@ -24,7 +24,8 @@ export default function AnalyticsPage() {
   const [tab, setTab] = useState<Tab>("paper");
 
   return (
-    <div className="min-h-screen p-2.5 sm:p-3 md:p-5 space-y-2 sm:space-y-2.5">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto w-full max-w-[1400px] space-y-6 sm:space-y-8">
       <PageHeader
         title="Analytics"
         subtitle="Paper + live metrics, P&L, audit, exports"
@@ -33,17 +34,17 @@ export default function AnalyticsPage() {
         actions={<ExecutiveSummaryButton />}
       />
 
-      <div className="flex gap-1 overflow-x-auto rounded-lg border border-border bg-bg-secondary p-1">
+      <div className="flex gap-1.5 overflow-x-auto rounded-2xl border border-border bg-bg-secondary p-1.5 shadow-[var(--shadow-panel)]">
         {TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTab(t.id)}
             className={cn(
-              "px-3 py-2 rounded-md text-xs font-semibold whitespace-nowrap min-h-9 touch-manipulation",
+              "px-4 py-2.5 rounded-xl text-xs font-semibold whitespace-nowrap min-h-10 touch-manipulation transition-colors",
               tab === t.id
-                ? "bg-accent text-brand"
-                : "text-text-secondary hover:bg-bg-hover"
+                ? "bg-brand text-white"
+                : "text-text-secondary hover:bg-bg-hover hover:text-text-primary"
             )}
           >
             {t.label}
@@ -60,6 +61,7 @@ export default function AnalyticsPage() {
         </div>
       )}
       {tab === "tools" && <BacktestAdvancedPanel />}
+      </div>
     </div>
   );
 }

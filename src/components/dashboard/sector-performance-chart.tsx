@@ -78,12 +78,10 @@ export default function SectorPerformanceChart({
 
   return (
     <div className="card">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h2 className="text-sm font-semibold text-text-primary">Sector performance</h2>
-          <p className="text-xs text-text-secondary">
-            Nifty sectorals · best to worst today
-          </p>
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <div className="space-y-1">
+          <h2 className="type-title text-text-primary">Sector performance</h2>
+          <p className="type-caption">Nifty sectorals · best to worst today</p>
         </div>
         {loading && <Loader2 className="h-4 w-4 animate-spin text-text-tertiary" />}
       </div>

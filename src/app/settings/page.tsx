@@ -1022,7 +1022,8 @@ function SettingsContent() {
         : "neutral";
 
   return (
-    <div className="min-h-screen p-2.5 sm:p-3 md:p-5 space-y-2.5 sm:space-y-3">
+    <div className="min-h-screen p-4 sm:p-6 lg:p-8">
+      <div className="mx-auto w-full max-w-[1400px] space-y-6 sm:space-y-8">
       <PageHeader
         title="Settings"
         subtitle="Configure your trading preferences & connections"
@@ -2823,6 +2824,7 @@ function SettingsContent() {
         </>
       )}
 
+      </div>
     </div>
   );
 }

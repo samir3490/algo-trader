@@ -15,8 +15,6 @@ import {
   Zap,
   Shield,
   Loader2,
-  BarChart3,
-  ScrollText,
   CheckCircle2,
 } from "lucide-react";
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
@@ -52,6 +50,9 @@ import StrategiesSectionNav, {
   strategiesSectionFromParam,
   type StrategiesSection,
 } from "@/components/strategies/strategies-section-nav";
+import PageShell from "@/components/ui/page-shell";
+import PageHeader from "@/components/ui/page-header";
+import Button from "@/components/ui/button";
 import {
   NIFTY50_SYMBOLS,
   BANK_NIFTY_SYMBOLS,
@@ -733,64 +734,33 @@ function StrategiesPageContent() {
   }
 
   return (
-    <div className="min-h-screen p-2.5 sm:p-3 md:p-5 space-y-2.5 sm:space-y-3">
-      {/* Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary">Trading Strategies</h1>
-          <p className="mt-1 text-sm text-text-secondary">
-            Configure and manage your algorithmic trading strategies
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => setSection("backtest")}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors",
-              pageSection === "backtest"
-                ? "border-accent bg-accent-muted text-brand"
-                : "border-border bg-bg-secondary text-text-secondary hover:border-accent/40"
-            )}
-          >
-            <BarChart3 className="h-4 w-4" />
-            Backtest
-          </button>
-          <button
-            type="button"
-            onClick={() => setSection("audit")}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition-colors",
-              pageSection === "audit"
-                ? "border-accent bg-accent-muted text-brand"
-                : "border-border bg-bg-secondary text-text-secondary hover:border-accent/40"
-            )}
-          >
-            <ScrollText className="h-4 w-4" />
-            Audit logs
-          </button>
-          <button
-            type="button"
-            onClick={handleRunScanNow}
-            disabled={isScanning || runningCount === 0}
-            className="inline-flex items-center gap-2 rounded-xl border border-emerald-600/50 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-900 transition-colors hover:bg-emerald-100 disabled:opacity-50"
-          >
-            {isScanning ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Play className="h-4 w-4" />
-            )}
-            Run scan now
-          </button>
-          <button
-            onClick={openModal}
-            className="inline-flex items-center gap-2 rounded-xl bg-accent text-brand px-5 py-2.5 text-sm font-medium text-text-primary transition-colors hover:bg-accent-hover"
-          >
-            <Plus className="h-4 w-4" />
-            Create Strategy
-          </button>
-        </div>
-      </div>
+    <PageShell>
+      <PageHeader
+        title="Strategies"
+        subtitle="Configure algorithms, run scans, and review backtests — paper first, live when ready."
+        padded={false}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={handleRunScanNow}
+              disabled={isScanning || runningCount === 0}
+              loading={isScanning}
+              leftIcon={!isScanning ? <Play className="h-3.5 w-3.5" /> : undefined}
+            >
+              Run scan
+            </Button>
+            <Button
+              size="sm"
+              onClick={openModal}
+              leftIcon={<Plus className="h-3.5 w-3.5" />}
+            >
+              Create
+            </Button>
+          </>
+        }
+      />
 
       <StrategiesSectionNav
         active={pageSection}
@@ -800,13 +770,13 @@ function StrategiesPageContent() {
       />
 
       {pageSection === "backtest" && (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <BacktestPanel />
         </div>
       )}
 
       {pageSection === "audit" && (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <LastScanPanel summary={lastScanSummary ?? null} />
           <TradeAuditPanel />
           <AuditLogsPanel tall />
@@ -814,12 +784,14 @@ function StrategiesPageContent() {
       )}
 
       {pageSection === "active" && (
-        <div className="space-y-4">
-          {/* Active Strategies Table — dedicated tab */}
-          <div className="rounded-xl border border-border bg-bg-secondary">
-            <div className="flex items-center justify-between border-b border-border px-6 py-4">
-              <h2 className="text-lg font-semibold text-text-primary">Active Strategies</h2>
-              <span className="rounded-full bg-accent-muted px-3 py-1 text-xs font-medium text-accent">
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-border bg-bg-secondary shadow-[var(--shadow-panel)]">
+            <div className="flex items-center justify-between border-b border-border px-5 py-4 sm:px-6">
+              <div className="space-y-0.5">
+                <h2 className="type-title text-text-primary">Active strategies</h2>
+                <p className="type-caption">Currently configured for scanning</p>
+              </div>
+              <span className="rounded-full bg-accent-muted px-3 py-1 text-xs font-semibold text-brand">
                 {runningCount} running
               </span>
             </div>
@@ -848,14 +820,14 @@ function StrategiesPageContent() {
       )}
 
       {pageSection === "configure" && (
-        <>
-      <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 mb-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs text-text-secondary">
-            <CheckCircle2 className="inline h-3.5 w-3.5 text-emerald-400 mr-1 -mt-0.5" />
-            Auto scans every <strong className="text-text-primary">15 min</strong> (NSE hours).
+        <div className="space-y-5">
+      <div className="rounded-2xl border border-mode-live-border/50 bg-mode-live-muted/70 px-5 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-text-secondary leading-relaxed">
+            <CheckCircle2 className="inline h-4 w-4 text-mode-live mr-1.5 -mt-0.5" />
+            Auto scans every <strong className="text-text-primary">15 min</strong> during NSE hours.
             {lastCronAt && (
-              <span className="text-emerald-400/90 ml-2">
+              <span className="text-mode-live ml-2">
                 Last cron:{" "}
                 {new Date(lastCronAt).toLocaleString("en-IN", {
                   timeZone: "Asia/Kolkata",
@@ -871,43 +843,41 @@ function StrategiesPageContent() {
           </p>
           <span
             className={cn(
-              "shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-medium",
+              "shrink-0 rounded-full px-3 py-1 text-xs font-semibold",
               runningCount > 0
-                ? "bg-emerald-100 text-emerald-900"
-                : "bg-amber-100 text-amber-950"
+                ? "bg-mode-live-soft text-mode-live-fg"
+                : "bg-amber-50 text-amber-950"
             )}
           >
             {runningCount > 0
               ? `${runningCount} running`
-              : "Start a strategy to enable scans"}
+              : "Activate a strategy to enable scans"}
           </span>
         </div>
       </div>
-      <LastScanPanel summary={lastScanSummary ?? null} className="mb-2" />
+      <LastScanPanel summary={lastScanSummary ?? null} />
 
-      {/* Category filter */}
       <div className="flex flex-wrap items-center gap-2">
         {(["all", "basic", "advanced"] as const).map((cat) => (
           <button
             key={cat}
             onClick={() => setCategoryFilter(cat)}
             className={cn(
-              "rounded-lg px-4 py-2 text-xs font-medium transition-colors",
+              "rounded-xl px-4 py-2 text-xs font-semibold transition-colors",
               categoryFilter === cat
-                ? "bg-accent text-brand"
-                : "bg-bg-tertiary text-text-secondary hover:bg-bg-hover"
+                ? "bg-brand text-white"
+                : "bg-bg-secondary border border-border text-text-secondary hover:bg-bg-hover"
             )}
           >
             {cat === "all" ? "All strategies" : cat === "basic" ? "Basic (5)" : "Advanced (7)"}
           </button>
         ))}
-        <p className="text-[10px] text-text-tertiary ml-1 w-full sm:w-auto">
-          Win rates are historical backtest benchmarks — not guaranteed future performance.
+        <p className="type-caption ml-1 w-full sm:w-auto sm:ml-2">
+          Win rates are historical backtest benchmarks — not future guarantees.
         </p>
       </div>
 
-      {/* Strategy types — compact list */}
-      <div className="rounded-xl border border-border bg-bg-secondary divide-y divide-border">
+      <div className="rounded-2xl border border-border bg-bg-secondary shadow-[var(--shadow-panel)] divide-y divide-border">
         {filteredDefinitions.map((def) => {
           const state = cardState[def.id];
           const Icon = def.icon;
@@ -961,8 +931,8 @@ function StrategiesPageContent() {
                   className={cn(
                     "shrink-0 rounded-lg px-2 py-1 text-[10px] font-medium",
                     state.paperTrading
-                      ? "bg-amber-500/10 text-amber-400"
-                      : "bg-red-500/10 text-red-400"
+                      ? "bg-mode-paper-soft text-mode-paper-fg"
+                      : "bg-mode-live-soft text-mode-live-fg"
                   )}
                 >
                   {state.paperTrading ? "Paper" : "Live"}
@@ -980,7 +950,7 @@ function StrategiesPageContent() {
                   className={cn(
                     "shrink-0 rounded-lg px-3 py-1 text-[10px] font-semibold",
                     state.active
-                      ? "bg-emerald-100 text-emerald-900"
+                      ? "bg-mode-live-soft text-mode-live-fg"
                       : "bg-accent text-brand"
                   )}
                 >
@@ -1079,10 +1049,9 @@ function StrategiesPageContent() {
         })}
       </div>
 
-      {/* Active strategies — quick link */}
-      <div className="rounded-xl border border-border bg-bg-secondary px-4 py-3 flex flex-wrap items-center justify-between gap-2">
+      <div className="rounded-2xl border border-border bg-bg-secondary px-5 py-4 flex flex-wrap items-center justify-between gap-3 shadow-[var(--shadow-panel)]">
         <p className="text-sm text-text-secondary">
-          <span className="font-medium text-text-primary">Active:</span>{" "}
+          <span className="font-semibold text-text-primary">Active:</span>{" "}
           {activeStrategies.length === 0
             ? "none"
             : `${runningCount} running · ${activeStrategies.length} total`}
@@ -1096,13 +1065,12 @@ function StrategiesPageContent() {
         <button
           type="button"
           onClick={() => setSection("active")}
-          className="text-xs font-medium text-accent hover:underline"
+          className="text-xs font-semibold text-brand hover:underline underline-offset-2"
         >
           View all →
         </button>
       </div>
-
-        </>
+        </div>
       )}
 
       {/* Create Strategy Modal */}
@@ -1112,10 +1080,10 @@ function StrategiesPageContent() {
             className="absolute inset-0 bg-brand/25 backdrop-blur-sm"
             onClick={() => setModalOpen(false)}
           />
-          <div className="relative w-full max-w-md rounded-xl border border-border bg-bg-secondary p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="relative w-full max-w-md rounded-2xl border border-border bg-bg-secondary p-6 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-text-primary">
-                Create Strategy
+              <h2 className="type-title text-text-primary">
+                Create strategy
               </h2>
               <button
                 onClick={() => setModalOpen(false)}
@@ -1287,7 +1255,7 @@ function StrategiesPageContent() {
         </div>
       )}
 
-    </div>
+    </PageShell>
   );
 }
 

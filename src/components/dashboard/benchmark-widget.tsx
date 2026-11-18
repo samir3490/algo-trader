@@ -3,13 +3,14 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 import type { ReactNode } from "react";
-import { cn, formatPercent } from "@/lib/utils";
+import { formatPercent } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getOrders, getPaperTradingState, getSettings } from "@/lib/firebase";
 import { normalizePaperTrades, tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
 import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import { computePaperPortfolioAnalytics } from "@/lib/analytics/paper-analytics";
 import MetricStrip from "@/components/ui/metric-strip";
+import Panel, { PanelHeader } from "@/components/ui/panel";
 
 interface BenchResult {
   paperReturnPct: number;
@@ -17,7 +18,7 @@ interface BenchResult {
   alphaPct: number;
 }
 
-/** Default Nifty 50 comparison — packed metrics, no empty stretch. */
+/** Nifty 50 comparison for the paper book. */
 export default function BenchmarkWidget({
   actions,
   className,
@@ -96,20 +97,15 @@ export default function BenchmarkWidget({
   }, [user]);
 
   return (
-    <section
-      className={cn(
-        "rounded-lg border border-border bg-bg-secondary p-2.5 h-full w-full",
-        className
-      )}
-    >
-      <div className="flex flex-wrap items-center gap-2 mb-1.5">
-        <h3 className="text-sm font-semibold text-text-primary">vs Nifty 50</h3>
-        <span className="text-xs text-text-tertiary">Simulated paper book</span>
-        {actions ? <div className="ml-auto">{actions}</div> : null}
-      </div>
+    <Panel className={className}>
+      <PanelHeader
+        title="vs Nifty 50"
+        subtitle="Simulated paper book"
+        action={actions}
+      />
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-text-tertiary py-1">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Comparing…
+          <Loader2 className="h-4 w-4 animate-spin" /> Comparing…
         </div>
       ) : error || !data ? (
         <p className="text-sm text-text-tertiary">{error || "Unavailable"}</p>
@@ -130,6 +126,6 @@ export default function BenchmarkWidget({
           ]}
         />
       )}
-    </section>
+    </Panel>
   );
 }

@@ -1234,7 +1234,8 @@ function LiveTradingContent() {
         </div>
       )}
 
-      <div className="p-2.5 sm:p-4 md:p-6 space-y-2.5 sm:space-y-3">
+      <div className="p-4 sm:p-6 lg:p-8">
+        <div className="mx-auto w-full max-w-[1400px] space-y-6 sm:space-y-8">
         {/* No Account Warning */}
         {!isCheckingAuth && connectedAccounts.length === 0 && (
           <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5 inline-flex flex-wrap items-center gap-3 max-w-full">
@@ -1986,6 +1987,7 @@ function LiveTradingContent() {
             onToggleAuto={(next) => setPendingKillSwitch(next)}
           />
         )}
+        </div>
       </div>
 
       <ConfirmDialog

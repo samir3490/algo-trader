@@ -1,11 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import AppShell from "@/components/layout/app-shell";
 import "./globals.css";
 
-const inter = Inter({
+const sans = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-jakarta",
+  display: "swap",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  variable: "--font-jetbrains",
+  display: "swap",
 });
 
 export const viewport: Viewport = {
@@ -30,8 +37,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${inter.variable} antialiased`}>
-      <body className="min-h-screen bg-bg-primary">
+    <html lang="en" className={`${sans.variable} ${mono.variable} antialiased`}>
+      <body className="min-h-screen bg-bg-primary font-sans text-text-primary">
         <AppShell>{children}</AppShell>
       </body>
     </html>
