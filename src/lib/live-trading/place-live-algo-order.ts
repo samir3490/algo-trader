@@ -211,7 +211,30 @@ export async function placeLiveAlgoOrder(
 
     return { ok: true, orderId, qty };
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    return { ok: false, message };
+    return { ok: false, message: formatKiteError(e) };
   }
+}
+
+function formatKiteError(e: unknown): string {
+  if (e instanceof Error) return e.message || e.name;
+  if (typeof e === "string") return e;
+  if (e && typeof e === "object") {
+    const o = e as Record<string, unknown>;
+    const parts = [
+      o.message,
+      o.error_type,
+      o.status,
+      o.error_code,
+      o.error,
+    ]
+      .filter((v) => v != null && String(v).trim() !== "")
+      .map((v) => String(v));
+    if (parts.length) return parts.join(" · ").slice(0, 240);
+    try {
+      return JSON.stringify(e).slice(0, 240);
+    } catch {
+      /* ignore */
+    }
+  }
+  return String(e);
 }
