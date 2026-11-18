@@ -1209,9 +1209,21 @@ export async function runStrategiesForUser(
 
   // Live auto-buys: independent position slots + capital from Zerodha book.
   // Paper max-positions / paper fills must not block live quota.
-  if (isLiveRuleOn(userSettings, "liveAutoTradingEnabled")) {
+  if (!isLiveRuleOn(userSettings, "liveAutoTradingEnabled")) {
+    bumpReason(diagnostics.skipReasons, "Live auto trading switch is OFF");
+    addScanDetail(
+      diagnostics,
+      "liveSkip",
+      "—",
+      "Live auto trading switch is OFF"
+    );
+  } else {
     const liveBook = await loadLiveBook(db, userId);
     if (!liveBook.ok) {
+      bumpReason(
+        diagnostics.skipReasons,
+        liveBook.message || "Live book unavailable"
+      );
       addScanDetail(
         diagnostics,
         "liveSkip",
@@ -1248,19 +1260,26 @@ export async function runStrategiesForUser(
         requireStrongSector: livePreferStrong,
       });
 
-      addScanDetail(
-        diagnostics,
-        "liveExec",
-        "—",
-        `Live algo slots ${liveSelect.slotsToFill} · open ${liveBook.openCount}/${liveMaxPositions} · algo deployed ₹${Math.round(liveBook.deployed)} · trades today ${liveBook.tradesToday}`
-      );
+      const liveSummary = `Live algo slots ${liveSelect.slotsToFill} · open ${liveBook.openCount}/${liveMaxPositions} · algo deployed ₹${Math.round(liveBook.deployed)} · trades today ${liveBook.tradesToday}`;
+      addScanDetail(diagnostics, "liveExec", "—", liveSummary);
+      bumpReason(diagnostics.skipReasons, liveSummary);
 
       for (const skip of liveSelect.skippedQuality) {
+        bumpReason(diagnostics.skipReasons, `Live: ${skip.reason}`);
         addScanDetail(
           diagnostics,
           "liveSkip",
           skip.decision.symbol,
           skip.reason
+        );
+      }
+
+      if (liveSelect.toExecute.length === 0) {
+        bumpReason(
+          diagnostics.skipReasons,
+          liveSelect.slotsToFill <= 0
+            ? "Live: no free position slots"
+            : "Live: no buy candidates after live filters"
         );
       }
 
@@ -1338,6 +1357,10 @@ export async function runStrategiesForUser(
             }
           );
         } else if (liveResult.message) {
+          bumpReason(
+            diagnostics.skipReasons,
+            `Live order: ${liveResult.message.slice(0, 120)}`
+          );
           addScanDetail(
             diagnostics,
             "liveSkip",
@@ -1345,7 +1368,7 @@ export async function runStrategiesForUser(
             liveResult.message
           );
           if (
-            /capital limit|No live capital|per-trade limit/i.test(
+            /capital limit|No live capital|per-trade limit|No server Kite token|ENABLE_LIVE/i.test(
               liveResult.message
             )
           ) {
