@@ -32,6 +32,31 @@
   --color-warning: #d97706;
   --color-info: #0284c7;
 
+  /* Semantic trading modes — paper = simulated (sky), live = real money (emerald) */
+  --color-mode-paper: #0284c7;
+  --color-mode-paper-hover: #0369a1;
+  --color-mode-paper-muted: #f0f9ff;
+  --color-mode-paper-soft: #e0f2fe;
+  --color-mode-paper-border: #7dd3fc;
+  --color-mode-paper-fg: #0c4a6e;
+
+  --color-mode-live: #059669;
+  --color-mode-live-hover: #047857;
+  --color-mode-live-muted: #ecfdf5;
+  --color-mode-live-soft: #d1fae5;
+  --color-mode-live-border: #6ee7b7;
+  --color-mode-live-fg: #064e3b;
+
+  --color-mode-neutral: #595959;
+  --color-mode-neutral-muted: #f3f4f6;
+  --color-mode-neutral-border: #e5e7eb;
+  --color-mode-neutral-fg: #1a1a1a;
+
+  /* Recharts / SVG — keep charts on the same palette */
+  --color-chart-axis: #595959;
+  --color-chart-muted: #94a3b8;
+  --color-chart-grid: #e5e7eb;
+
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 }
@@ -136,6 +161,56 @@ body {
   height: 8px;
   border-radius: 50%;
   animation: pulse-ring 2s ease-in-out infinite;
+}
+
+/* Typography scale — use consistently across pages */
+@utility type-display {
+  font-size: 1.5rem;
+  line-height: 1.25;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  @media (min-width: 768px) {
+    font-size: 1.875rem;
+  }
+}
+
+@utility type-title {
+  font-size: 1.125rem;
+  line-height: 1.35;
+  font-weight: 600;
+}
+
+@utility type-subtitle {
+  font-size: 0.875rem;
+  line-height: 1.45;
+  font-weight: 400;
+  @media (min-width: 768px) {
+    font-size: 1rem;
+  }
+}
+
+@utility type-label {
+  font-size: 0.625rem;
+  line-height: 1.3;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+@utility type-caption {
+  font-size: 0.6875rem;
+  line-height: 1.4;
+  font-weight: 400;
+}
+
+@utility mode-surface-paper {
+  border-color: var(--color-mode-paper-border);
+  background-color: color-mix(in srgb, var(--color-mode-paper-muted) 70%, white);
+}
+
+@utility mode-surface-live {
+  border-color: var(--color-mode-live-border);
+  background-color: color-mix(in srgb, var(--color-mode-live-muted) 70%, white);
 }
 
 @keyframes pulse-ring {

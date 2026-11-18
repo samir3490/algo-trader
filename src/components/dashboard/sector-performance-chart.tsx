@@ -16,6 +16,7 @@ import type {
   SectorPerformancePayload,
   SectorPerformanceRow,
 } from "@/lib/market-data/sector-performance";
+import { chartTokens } from "@/lib/ui/chart-tokens";
 
 const REFRESH_MS = 5 * 60 * 1000;
 
@@ -101,7 +102,7 @@ export default function SectorPerformanceChart({
                 <XAxis
                   type="number"
                   tickFormatter={(v: number) => `${v.toFixed(1)}%`}
-                  tick={{ fill: "#595959", fontSize: 11 }}
+                  tick={{ fill: chartTokens.axis, fontSize: 11 }}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -109,7 +110,7 @@ export default function SectorPerformanceChart({
                   type="category"
                   dataKey="name"
                   width={96}
-                  tick={{ fill: "#595959", fontSize: 10 }}
+                  tick={{ fill: chartTokens.axis, fontSize: 10 }}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -118,7 +119,9 @@ export default function SectorPerformanceChart({
                   {chartData.map((entry) => (
                     <Cell
                       key={entry.id}
-                      fill={entry.changePercent >= 0 ? "#10b981" : "#ef4444"}
+                      fill={
+                        entry.changePercent >= 0 ? chartTokens.profit : chartTokens.loss
+                      }
                       fillOpacity={0.85}
                     />
                   ))}

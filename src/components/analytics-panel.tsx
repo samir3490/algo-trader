@@ -366,23 +366,31 @@ export default function AnalyticsPanel() {
               <AreaChart data={chartData}>
                 <defs>
                   <linearGradient id="eqFill" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="var(--accent)" stopOpacity={0.3} />
-                    <stop offset="100%" stopColor="var(--accent)" stopOpacity={0} />
+                    <stop offset="0%" stopColor="var(--color-accent)" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="var(--color-accent)" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <XAxis dataKey="label" tick={{ fontSize: 10 }} stroke="var(--text-tertiary)" />
-                <YAxis tick={{ fontSize: 10 }} stroke="var(--text-tertiary)" width={70} />
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 10 }}
+                  stroke="var(--color-chart-axis)"
+                />
+                <YAxis
+                  tick={{ fontSize: 10 }}
+                  stroke="var(--color-chart-axis)"
+                  width={70}
+                />
                 <Tooltip
                   contentStyle={{
-                    background: "var(--bg-elevated)",
-                    border: "1px solid var(--border)",
+                    background: "var(--color-bg-elevated)",
+                    border: "1px solid var(--color-border)",
                     fontSize: 12,
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="equity"
-                  stroke="var(--accent)"
+                  stroke="var(--color-accent)"
                   fill="url(#eqFill)"
                   strokeWidth={2}
                 />
@@ -472,8 +480,8 @@ export default function AnalyticsPanel() {
                       type="monotone"
                       dataKey="paper"
                       name="Paper"
-                      stroke="var(--accent)"
-                      fill="var(--accent)"
+                      stroke="var(--color-mode-paper)"
+                      fill="var(--color-mode-paper)"
                       fillOpacity={0.1}
                       strokeWidth={2}
                     />
@@ -481,8 +489,8 @@ export default function AnalyticsPanel() {
                       type="monotone"
                       dataKey="nifty"
                       name="Nifty 50"
-                      stroke="#94a3b8"
-                      fill="#94a3b8"
+                      stroke="var(--color-chart-muted)"
+                      fill="var(--color-chart-muted)"
                       fillOpacity={0.05}
                       strokeWidth={2}
                     />

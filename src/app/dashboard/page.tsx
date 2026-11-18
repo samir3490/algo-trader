@@ -48,6 +48,8 @@ import MarketTrendHero from "@/components/dashboard/market-trend-hero";
 import SectorPerformanceChart from "@/components/dashboard/sector-performance-chart";
 import PaperHealthStrip from "@/components/dashboard/paper-health-strip";
 import LiveTradingDashboardStrip from "@/components/dashboard/live-trading-strip";
+import PageHeader from "@/components/ui/page-header";
+import { chartTokens } from "@/lib/ui/chart-tokens";
 
 interface Holding {
   symbol: string;
@@ -254,58 +256,58 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary">Dashboard</h1>
-          <p className="text-sm text-text-secondary mt-0.5">
-            Market context &amp; portfolio overview
-          </p>
-        </div>
-        <div className="flex items-center gap-3 text-sm text-text-secondary">
-          <span
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
-              marketOpen
-                ? "bg-profit/15 text-profit"
-                : "bg-bg-tertiary text-text-tertiary"
-            )}
-          >
-            <span className={cn("pulse-dot", marketOpen ? "bg-profit" : "bg-text-tertiary")} />
-            {marketStatus}
-          </span>
-          <span className="flex items-center gap-2">
-            <Clock className="h-4 w-4" />
-            {new Date().toLocaleDateString("en-IN", {
-              weekday: "short",
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            })}
-          </span>
-        </div>
-      </div>
+      <PageHeader
+        title="Dashboard"
+        subtitle="Market context & portfolio overview"
+        mode="neutral"
+        padded={false}
+        actions={
+          <div className="flex items-center gap-3 text-sm text-text-secondary">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
+                marketOpen
+                  ? "bg-profit/15 text-profit"
+                  : "bg-bg-tertiary text-text-tertiary"
+              )}
+            >
+              <span className={cn("pulse-dot", marketOpen ? "bg-profit" : "bg-text-tertiary")} />
+              {marketStatus}
+            </span>
+            <span className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              {new Date().toLocaleDateString("en-IN", {
+                weekday: "short",
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })}
+            </span>
+          </div>
+        }
+      />
 
-      <section className="rounded-xl border-2 border-sky-300 bg-sky-50/70 p-4 sm:p-5 space-y-3">
+      <section className="rounded-xl border-2 border-mode-paper-border bg-mode-paper-muted/70 p-4 sm:p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
           <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-700">
+            <p className="type-label text-mode-paper">
               Simulated
             </p>
-            <h2 className="text-base font-bold text-sky-950">Paper trading</h2>
+            <h2 className="type-title text-mode-paper-fg">Paper trading</h2>
           </div>
           <Link
             href="/paper-trading"
-            className="rounded-md bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-700"
+            className="rounded-md bg-mode-paper px-2.5 py-1 text-xs font-semibold text-white hover:bg-mode-paper-hover"
           >
             Open paper →
           </Link>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-lg border border-sky-200 bg-white/80 p-4">
+          <div className="rounded-lg border border-mode-paper-border bg-white/80 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-text-secondary">Cash remaining</span>
-              <div className="rounded-lg bg-sky-100 p-1.5">
-                <IndianRupee className="h-4 w-4 text-sky-700" />
+              <div className="rounded-lg bg-mode-paper-soft p-1.5">
+                <IndianRupee className="h-4 w-4 text-mode-paper" />
               </div>
             </div>
             <p className="text-xl font-bold text-text-primary tabular-nums break-words">
@@ -314,11 +316,11 @@ export default function DashboardPage() {
             <p className="text-xs text-text-tertiary mt-1">Simulated · available to buy</p>
           </div>
 
-          <div className="rounded-lg border border-sky-200 bg-white/80 p-4">
+          <div className="rounded-lg border border-mode-paper-border bg-white/80 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-text-secondary">Invested</span>
-              <div className="rounded-lg bg-sky-100 p-1.5">
-                <Wallet className="h-4 w-4 text-sky-700" />
+              <div className="rounded-lg bg-mode-paper-soft p-1.5">
+                <Wallet className="h-4 w-4 text-mode-paper" />
               </div>
             </div>
             <p className="text-xl font-bold text-text-primary tabular-nums break-words">
@@ -335,10 +337,10 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="rounded-lg border border-sky-200 bg-white/80 p-4">
+          <div className="rounded-lg border border-mode-paper-border bg-white/80 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-text-secondary">Realized P&amp;L</span>
-              <div className="rounded-lg bg-sky-100 p-1.5">
+              <div className="rounded-lg bg-mode-paper-soft p-1.5">
                 {realizedPnl >= 0 ? (
                   <TrendingUp className="h-4 w-4 text-profit" />
                 ) : (
@@ -465,21 +467,29 @@ export default function DashboardPage() {
               <AreaChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>
                 <defs>
                   <linearGradient id="portfolioGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={isProfit ? "#10b981" : "#ef4444"} stopOpacity={0.3} />
-                    <stop offset="95%" stopColor={isProfit ? "#10b981" : "#ef4444"} stopOpacity={0} />
+                    <stop
+                      offset="0%"
+                      stopColor={isProfit ? chartTokens.profit : chartTokens.loss}
+                      stopOpacity={0.3}
+                    />
+                    <stop
+                      offset="95%"
+                      stopColor={isProfit ? chartTokens.profit : chartTokens.loss}
+                      stopOpacity={0}
+                    />
                   </linearGradient>
                 </defs>
                 <XAxis
                   dataKey="date"
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#595959", fontSize: 11 }}
+                  tick={{ fill: chartTokens.axis, fontSize: 11 }}
                   interval="preserveStartEnd"
                 />
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fill: "#595959", fontSize: 11 }}
+                  tick={{ fill: chartTokens.axis, fontSize: 11 }}
                   tickFormatter={(v: number) => `₹${(v / 100000).toFixed(1)}L`}
                   domain={[chartMin, chartMax]}
                   width={60}
@@ -488,7 +498,7 @@ export default function DashboardPage() {
                 <Area
                   type="monotone"
                   dataKey="value"
-                  stroke={isProfit ? "#10b981" : "#ef4444"}
+                  stroke={isProfit ? chartTokens.profit : chartTokens.loss}
                   strokeWidth={2}
                   fill="url(#portfolioGradient)"
                 />

@@ -113,6 +113,30 @@ export default function Sidebar() {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
+          const navMode =
+            item.href === "/paper-trading"
+              ? "paper"
+              : item.href === "/live-trading"
+                ? "live"
+                : "neutral";
+          const activeClass =
+            navMode === "paper"
+              ? "bg-mode-paper-soft text-mode-paper-fg border-l-2 border-l-mode-paper"
+              : navMode === "live"
+                ? "bg-mode-live-soft text-mode-live-fg border-l-2 border-l-mode-live"
+                : "bg-accent/15 text-accent border-l-2 border-l-accent";
+          const activeIcon =
+            navMode === "paper"
+              ? "text-mode-paper"
+              : navMode === "live"
+                ? "text-mode-live"
+                : "text-accent";
+          const activeDot =
+            navMode === "paper"
+              ? "bg-mode-paper"
+              : navMode === "live"
+                ? "bg-mode-live"
+                : "bg-accent";
 
           return (
             <Link
@@ -121,7 +145,7 @@ export default function Sidebar() {
               className={cn(
                 "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150",
                 isActive
-                  ? "bg-accent/15 text-accent border-l-2 border-l-accent"
+                  ? activeClass
                   : "text-text-secondary hover:bg-bg-hover hover:text-text-primary border-l-2 border-l-transparent"
               )}
             >
@@ -129,13 +153,13 @@ export default function Sidebar() {
                 className={cn(
                   "h-5 w-5 shrink-0 transition-colors",
                   isActive
-                    ? "text-accent"
+                    ? activeIcon
                     : "text-text-tertiary group-hover:text-text-secondary"
                 )}
               />
               {(isMobile || !collapsed) && <span>{item.label}</span>}
               {isActive && (isMobile || !collapsed) && (
-                <div className="ml-auto h-1.5 w-1.5 rounded-full bg-accent" />
+                <div className={cn("ml-auto h-1.5 w-1.5 rounded-full", activeDot)} />
               )}
             </Link>
           );

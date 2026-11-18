@@ -26,6 +26,7 @@ import {
   X,
 } from "lucide-react";
 import StatCard from "@/components/ui/stat-card";
+import PageHeader from "@/components/ui/page-header";
 import PaginationBar, {
   DEFAULT_PAGE_SIZE,
   paginateItems,
@@ -918,30 +919,21 @@ function LiveTradingContent() {
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary">
-      {/* Page header — mirrors Paper Trading layout (green = live) */}
-      <div className="border-b border-emerald-200/80 bg-emerald-50/60 px-3 sm:px-6 py-4 sm:py-5">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-800">
-              Real money · Zerodha
-            </p>
-            <h1 className="text-2xl md:text-3xl font-bold text-emerald-950">
-              Live Trading
-            </h1>
-            <p className="text-sm text-emerald-900/80 mt-1">
-              Place real orders and monitor positions — separate capital from paper
-            </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
+      <PageHeader
+        title="Live Trading"
+        subtitle="Place real orders and monitor positions — separate capital from paper"
+        mode="live"
+        actions={
+          <>
             <Link
               href="/settings?tab=live-rules"
-              className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-100"
+              className="rounded-lg border border-mode-live-border bg-white px-3 py-1.5 text-xs font-semibold text-mode-live-fg hover:bg-mode-live-soft"
             >
               Live Rules
             </Link>
             <Link
               href="/settings?tab=live"
-              className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-950 hover:bg-emerald-100"
+              className="rounded-lg border border-mode-live-border bg-white px-3 py-1.5 text-xs font-semibold text-mode-live-fg hover:bg-mode-live-soft"
             >
               Live Settings
             </Link>
@@ -964,16 +956,16 @@ function LiveTradingContent() {
                   50
                 );
               }}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 shrink-0"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-mode-live px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-mode-live-hover shrink-0"
             >
               <PlusIcon className="h-3.5 w-3.5" />
               <span className="sm:hidden">Order</span>
               <span className="hidden sm:inline">Place Order</span>
             </button>
-          </div>
-        </div>
-
-        <div className="mb-4 rounded-lg border border-emerald-200 bg-white/80 px-4 py-3 text-xs text-emerald-950">
+          </>
+        }
+      >
+        <div className="mb-4 rounded-lg border border-mode-live-border bg-white/80 px-4 py-3 text-xs text-mode-live-fg">
           <span className="font-medium">Algo sizing: </span>
           ₹{liveOrderNotional.toLocaleString("en-IN")} / trade · ₹
           {liveCapitalLimit.toLocaleString("en-IN")} algo cap · algo deployed ₹
@@ -994,7 +986,8 @@ function LiveTradingContent() {
             hint={connected ? selectedAccountId || "Zerodha" : "Connect account"}
             icon={IndianRupee}
             colorClass="text-text-primary"
-            className="border-emerald-200 bg-white"
+            mode="live"
+            className="bg-white"
           />
           <StatCard
             label="Margin used"
@@ -1002,15 +995,17 @@ function LiveTradingContent() {
             hint={`Net ${formatCurrency(selectedFunds?.net ?? 0)}`}
             icon={Wallet}
             colorClass="text-text-primary"
-            className="border-emerald-200 bg-white"
+            mode="live"
+            className="bg-white"
           />
           <StatCard
             label="Day P&L (positions)"
             primary={formatCurrency(netPnl)}
             hint={`${positions.length} open position${positions.length === 1 ? "" : "s"}`}
             icon={netPnl >= 0 ? TrendingUp : TrendingDown}
-            colorClass={netPnl >= 0 ? "text-emerald-700" : "text-red-700"}
-            className="border-emerald-200 bg-white"
+            colorClass={netPnl >= 0 ? "text-profit" : "text-loss"}
+            mode="live"
+            className="bg-white"
           />
           <StatCard
             label="Holdings P&L"
@@ -1019,12 +1014,13 @@ function LiveTradingContent() {
             hint={`Invested ${formatCurrency(holdingsTotals.invested)}`}
             icon={Wallet}
             colorClass={
-              holdingsTotals.pnl >= 0 ? "text-emerald-700" : "text-red-700"
+              holdingsTotals.pnl >= 0 ? "text-profit" : "text-loss"
             }
-            className="border-emerald-200 bg-white"
+            mode="live"
+            className="bg-white"
           />
         </div>
-      </div>
+      </PageHeader>
 
       {/* Account Selector Banner */}
       <div className="bg-bg-secondary border-b border-emerald-200/50 px-3 sm:px-6 py-2.5">

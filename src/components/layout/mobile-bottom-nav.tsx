@@ -33,6 +33,11 @@ export default function MobileBottomNav() {
           const isActive =
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
+          const activeTone =
+            item.href === "/paper-trading"
+              ? "text-mode-paper"
+              : "text-accent";
+
           return (
             <Link
               key={item.href}
@@ -40,11 +45,11 @@ export default function MobileBottomNav() {
               className={cn(
                 "flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 min-h-[52px] text-[10px] font-medium transition-colors",
                 isActive
-                  ? "text-accent"
+                  ? activeTone
                   : "text-text-tertiary hover:text-text-secondary"
               )}
             >
-              <Icon className={cn("h-5 w-5", isActive && "text-accent")} />
+              <Icon className={cn("h-5 w-5", isActive && activeTone)} />
               <span>{item.label}</span>
             </Link>
           );

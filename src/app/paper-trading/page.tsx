@@ -85,6 +85,7 @@ import PaperExportMenu from "@/components/paper-export-menu";
 import PaperHealthPanel from "@/components/paper-health-panel";
 import PaperTabBar, { type PaperTradingTab } from "@/components/paper-trading/paper-tab-bar";
 import StatCard from "@/components/ui/stat-card";
+import PageHeader from "@/components/ui/page-header";
 import PaginationBar, {
   DEFAULT_PAGE_SIZE,
   paginateItems,
@@ -1140,27 +1141,28 @@ export default function PaperTradingPage() {
     <div className="min-h-screen bg-bg-primary p-3 sm:p-4 md:p-6 lg:p-8 pb-6">
       {/* Header */}
       <div className="mb-6">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold text-text-primary">
-              Paper Trading
-            </h1>
-            <p className="text-text-secondary mt-1 text-sm md:text-base">
-              Practice trading with virtual money
-              {zerodhaConnected ? " using real market data" : " — connect Zerodha for live prices"}
-            </p>
-          </div>
-          <div className="flex items-center gap-3 self-start sm:self-auto">
+        <PageHeader
+          title="Paper Trading"
+          subtitle={
+            zerodhaConnected
+              ? "Practice trading with virtual money using real market data"
+              : "Practice trading with virtual money — connect Zerodha for live prices"
+          }
+          mode="paper"
+          padded={false}
+          className="mb-6"
+          actions={
+            <>
             {!isCheckingAuth && (
               <div className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border",
                 zerodhaConnected
-                  ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                  ? "bg-mode-live-muted border-mode-live-border text-mode-live-fg"
                   : "bg-amber-50 border-amber-300 text-amber-950"
               )}>
                 <span className={cn(
                   "w-2 h-2 rounded-full",
-                  zerodhaConnected ? "bg-emerald-600" : "bg-amber-500"
+                  zerodhaConnected ? "bg-mode-live" : "bg-amber-500"
                 )} />
                 {zerodhaConnected ? "Live Prices" : "Manual Prices"}
               </div>
@@ -1175,17 +1177,17 @@ export default function PaperTradingPage() {
               <span className="sm:hidden">Order</span>
               <span className="hidden sm:inline">Place Order</span>
             </button>
-          </div>
-        </div>
-
+            </>
+          }
+        >
         {appSettings && (
-          <div className="mb-4 rounded-lg border border-border bg-bg-secondary px-4 py-3 text-xs text-text-secondary">
-            <span className="font-medium text-text-primary">Position sizing: </span>
+          <div className="mb-4 rounded-lg border border-mode-paper-border bg-white/80 px-4 py-3 text-xs text-mode-paper-fg">
+            <span className="font-medium">Position sizing: </span>
             {formatPaperSizingSummary(appSettings)}
             {" · "}
-            <span className="text-text-tertiary">product {appSettings.paperDefaultProduct}</span>
+            <span className="opacity-75">product {appSettings.paperDefaultProduct}</span>
             {" "}
-            <a href="/settings" className="text-accent hover:underline">Settings</a>
+            <a href="/settings" className="text-mode-paper underline font-medium">Settings</a>
           </div>
         )}
 
@@ -1233,9 +1235,11 @@ export default function PaperTradingPage() {
               hint={item.hint}
               icon={item.icon}
               colorClass={item.colorClass}
+              mode="paper"
             />
           ))}
         </div>
+        </PageHeader>
 
         <PaperTabBar
           active={activeTab}

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn, formatPercent } from "@/lib/utils";
 import type { MarketRegimePayload } from "@/lib/market-data/market-regime";
+import { chartTokens } from "@/lib/ui/chart-tokens";
 
 const REFRESH_MS = 5 * 60 * 1000;
 
@@ -167,12 +168,12 @@ export default function MarketTrendHero({ marketOpen }: { marketOpen: boolean })
                   <linearGradient id="niftySparkGradient" x1="0" y1="0" x2="0" y2="1">
                     <stop
                       offset="0%"
-                      stopColor={isUp ? "#10b981" : "#ef4444"}
+                      stopColor={isUp ? chartTokens.profit : chartTokens.loss}
                       stopOpacity={0.35}
                     />
                     <stop
                       offset="95%"
-                      stopColor={isUp ? "#10b981" : "#ef4444"}
+                      stopColor={isUp ? chartTokens.profit : chartTokens.loss}
                       stopOpacity={0}
                     />
                   </linearGradient>
@@ -183,7 +184,7 @@ export default function MarketTrendHero({ marketOpen }: { marketOpen: boolean })
                 <Area
                   type="monotone"
                   dataKey="close"
-                  stroke={isUp ? "#10b981" : "#ef4444"}
+                  stroke={isUp ? chartTokens.profit : chartTokens.loss}
                   strokeWidth={2}
                   fill="url(#niftySparkGradient)"
                 />
