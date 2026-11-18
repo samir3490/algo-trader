@@ -33,10 +33,22 @@ import {
   tableDateTimeTdClass,
 } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
-import { getZerodhaAccounts, type ZerodhaAccount } from "@/lib/firebase";
+import {
+  getSettings,
+  getZerodhaAccounts,
+  type AppSettings,
+  type ZerodhaAccount,
+} from "@/lib/firebase";
 import { fetchMarketQuote, fetchZerodhaQuoteDepth } from "@/lib/market-data/fetch-quote-client";
 import { useTableSort } from "@/hooks/use-table-sort";
 import SortableTh from "@/components/ui/sortable-th";
+import {
+  evaluateLiveBuyLimits,
+  qtyForLiveNotional,
+  resolveLiveCapitalLimit,
+  resolveLiveOrderNotional,
+} from "@/lib/live-trading/capital-limits";
+import { loadSettingsFromCache, saveSettingsToCache } from "@/lib/settings/cache";
 
 type TransactionType = "BUY" | "SELL";
 type ProductType = "MIS" | "CNC" | "NRML";
@@ -174,6 +186,9 @@ function LiveTradingContent() {
   const [marketOpen, setMarketOpen] = useState(false);
   const [marketStatus, setMarketStatus] = useState("");
 
+  const [appSettings, setAppSettings] = useState<AppSettings>(() =>
+    loadSettingsFromCache()
+  );
   const [symbol, setSymbol] = useState("");
   const [exchange, setExchange] = useState<Exchange>("NSE");
   const [transactionType, setTransactionType] = useState<TransactionType>("BUY");
@@ -241,7 +256,32 @@ function LiveTradingContent() {
   useEffect(() => {
     if (!user) return;
     loadAccounts();
+    void getSettings()
+      .then((s) => {
+        setAppSettings(s);
+        saveSettingsToCache(s);
+        setExchange((s.defaultExchange as Exchange) || "NSE");
+        setProductType((s.defaultProduct as ProductType) || "MIS");
+        setOrderType((s.defaultOrderType as OrderType) || "MARKET");
+      })
+      .catch(() => {});
   }, [user]);
+
+  const liveOrderNotional = resolveLiveOrderNotional(appSettings);
+  const liveCapitalLimit = resolveLiveCapitalLimit(appSettings);
+  const liveDeployed = useMemo(
+    () =>
+      evaluateLiveBuyLimits({
+        side: "BUY",
+        qty: 0,
+        price: 0,
+        settings: appSettings,
+        positions,
+        holdings,
+      }).deployed,
+    [appSettings, positions, holdings]
+  );
+  const liveRemaining = Math.max(0, liveCapitalLimit - liveDeployed);
 
   async function loadAccounts() {
     setLoadingAccounts(true);
@@ -599,11 +639,53 @@ function LiveTradingContent() {
     [holdings, holdingsSort.sortRows]
   );
 
+  useEffect(() => {
+    if (transactionType !== "BUY") return;
+    const px =
+      orderType === "LIMIT" || orderType === "SL"
+        ? parseFloat(price)
+        : quote?.lastPrice ?? 0;
+    if (!(px > 0)) return;
+    if (quantity.trim() !== "") return;
+    const qty = qtyForLiveNotional(
+      Math.min(liveOrderNotional, liveRemaining || liveOrderNotional),
+      px
+    );
+    if (qty > 0) setQuantity(String(qty));
+  }, [
+    transactionType,
+    orderType,
+    price,
+    quote?.lastPrice,
+    liveOrderNotional,
+    liveRemaining,
+    quantity,
+    symbol,
+  ]);
+
   const handlePlaceOrder = async () => {
     if (!symbol.trim() || !quantity) return;
 
     if (!connected) {
       setErrorMessage("Please connect to Zerodha first before placing live orders.");
+      return;
+    }
+
+    const qtyNum = parseInt(quantity, 10);
+    const refPrice =
+      orderType === "LIMIT" || orderType === "SL"
+        ? parseFloat(price)
+        : quote?.lastPrice || parseFloat(price) || 0;
+    const limitCheck = evaluateLiveBuyLimits({
+      side: transactionType,
+      qty: qtyNum,
+      price: refPrice > 0 ? refPrice : 0,
+      settings: appSettings,
+      positions,
+      holdings,
+    });
+    if (!limitCheck.ok) {
+      setErrorMessage(limitCheck.error || "Live capital limit blocked this order.");
       return;
     }
 
@@ -617,9 +699,10 @@ function LiveTradingContent() {
         exchange,
         side: transactionType,
         orderType: orderType,
-        quantity: parseInt(quantity),
+        quantity: qtyNum,
         product: productType,
         accountId: selectedAccountId,
+        estimatedPrice: refPrice > 0 ? refPrice : undefined,
       };
 
       if (orderType === "LIMIT" || orderType === "SL") {
@@ -1238,6 +1321,24 @@ function LiveTradingContent() {
                     placeholder="Enter quantity"
                     className="w-full bg-bg-primary border border-border rounded-md py-2 px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-colors"
                   />
+                  <p className="mt-1 text-[10px] text-text-tertiary leading-snug">
+                    Per trade ≤ {formatCurrency(liveOrderNotional)} · Capital{" "}
+                    {formatCurrency(liveDeployed)} / {formatCurrency(liveCapitalLimit)} · Left{" "}
+                    {formatCurrency(liveRemaining)}
+                  </p>
+                  {transactionType === "BUY" && quote?.lastPrice ? (
+                    <button
+                      type="button"
+                      className="mt-1 text-[11px] text-accent hover:underline"
+                      onClick={() => {
+                        const budget = Math.min(liveOrderNotional, liveRemaining);
+                        const qty = qtyForLiveNotional(budget, quote.lastPrice);
+                        setQuantity(qty > 0 ? String(qty) : "");
+                      }}
+                    >
+                      Use default size (~{formatCurrency(Math.min(liveOrderNotional, liveRemaining))})
+                    </button>
+                  ) : null}
                 </div>
 
                 {/* Price (for LIMIT/SL) */}

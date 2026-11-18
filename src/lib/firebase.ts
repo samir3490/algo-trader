@@ -368,6 +368,10 @@ export interface AppSettings {
   paperDefaultProduct: "CNC" | "MIS";
   maxOrderValue: number;
   maxDailyLoss: number;
+  /** Max ₹ notional for a single live BUY (default ₹5,000). */
+  liveOrderNotional: number;
+  /** Max ₹ total deployed in live positions/holdings for algo buys (default ₹50,000). */
+  liveCapitalLimit: number;
   paperStartingBalance: number;
   simulateBrokerage: boolean;
   stopLossPercent: number;
@@ -476,8 +480,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   paperMaxOrderValue: 500_000,
   paperMinOrderValue: 25_000,
   paperDefaultProduct: "CNC",
-  maxOrderValue: 100_000,
+  maxOrderValue: 5_000,
   maxDailyLoss: 0,
+  liveOrderNotional: 5_000,
+  liveCapitalLimit: 50_000,
   paperStartingBalance: 1000000,
   simulateBrokerage: false,
   stopLossPercent: 2,

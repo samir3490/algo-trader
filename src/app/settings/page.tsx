@@ -147,6 +147,10 @@ interface AppSettings {
     autoTrailingStop: boolean;
     trailingStopPercent: number;
     minHoldMinutesBeforeSell: number;
+    /** Max ₹ for one live BUY. */
+    orderNotional: number;
+    /** Max ₹ total the live algo may deploy. */
+    capitalLimit: number;
   };
 }
 
@@ -247,7 +251,7 @@ const defaultSettings: AppSettings = {
     defaultExchange: "NSE",
     defaultProductType: "CNC",
     defaultOrderType: "MARKET",
-    maxOrderValue: 500_000,
+    maxOrderValue: 5_000,
     maxDailyLoss: 50000,
   },
   notifications: {
@@ -316,6 +320,8 @@ const defaultSettings: AppSettings = {
     autoTrailingStop: false,
     trailingStopPercent: 2,
     minHoldMinutesBeforeSell: 60,
+    orderNotional: 5_000,
+    capitalLimit: 50_000,
   },
 };
 
@@ -346,7 +352,7 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       defaultExchange: fs.defaultExchange as "NSE" | "BSE",
       defaultProductType: fs.defaultProduct as "MIS" | "CNC" | "NRML",
       defaultOrderType: fs.defaultOrderType as "MARKET" | "LIMIT",
-      maxOrderValue: fs.maxOrderValue,
+      maxOrderValue: fs.liveOrderNotional ?? fs.maxOrderValue ?? 5_000,
       maxDailyLoss: fs.maxDailyLoss,
     },
     notifications: {
@@ -424,6 +430,8 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
         fs.liveTrailingStopPercent ?? fs.trailingStopPercent ?? 2,
       minHoldMinutesBeforeSell:
         fs.liveMinHoldMinutesBeforeSell ?? fs.minHoldMinutesBeforeSell ?? 60,
+      orderNotional: fs.liveOrderNotional ?? fs.maxOrderValue ?? 5_000,
+      capitalLimit: fs.liveCapitalLimit ?? 50_000,
     },
   };
 }
@@ -433,7 +441,9 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     defaultExchange: s.tradingPreferences.defaultExchange,
     defaultProduct: s.tradingPreferences.defaultProductType,
     defaultOrderType: s.tradingPreferences.defaultOrderType,
-    maxOrderValue: s.tradingPreferences.maxOrderValue,
+    maxOrderValue: s.liveTrading.orderNotional,
+    liveOrderNotional: s.liveTrading.orderNotional,
+    liveCapitalLimit: s.liveTrading.capitalLimit,
     maxDailyLoss: s.tradingPreferences.maxDailyLoss,
     paperStartingBalance: s.paperTrading.startingBalance,
     simulateBrokerage: s.paperTrading.simulateBrokerage,
@@ -1009,8 +1019,8 @@ function SettingsContent() {
       {activeTab === "live" && (
         <>
           <ModeBanner mode="live" />
-      <section className="card border-amber-200">
-        <div className="flex items-center justify-between mb-5">
+      <section className="card border-amber-200 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="rounded-lg bg-accent-muted p-2">
               <Users className="h-5 w-5 text-accent" />
@@ -1020,282 +1030,174 @@ function SettingsContent() {
                 Zerodha Accounts
               </h2>
               <p className="text-xs text-text-secondary">
-                Manage multiple Kite accounts for live trading
+                {connectedCount}/{accounts.length || 0} connected · tokens expire daily
               </p>
             </div>
           </div>
-          {availableApps.length <= 1 ? (
-            <a
-              href="/api/zerodha/login"
-              className="flex items-center gap-2 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-brand transition-colors hover:bg-accent-hover cursor-pointer"
-            >
-              <Plus className="h-4 w-4" />
-              Add Account
-            </a>
-          ) : (
-            <div className="flex items-center gap-2">
-              {availableApps.map((app) => (
+          <div className="flex flex-wrap items-center gap-2">
+            {availableApps.length <= 1 ? (
+              <a
+                href="/api/zerodha/login"
+                className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-brand hover:bg-accent-hover"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Connect
+              </a>
+            ) : (
+              availableApps.map((app) => (
                 <a
                   key={app.index}
                   href={`/api/zerodha/login?credIndex=${app.index}`}
-                  className="flex items-center gap-2 rounded-lg bg-accent px-3 py-2 text-xs font-medium text-brand transition-colors hover:bg-accent-hover cursor-pointer"
+                  className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-brand hover:bg-accent-hover"
                   title={`API Key: ${app.apiKeyPrefix}`}
                 >
                   <Plus className="h-3.5 w-3.5" />
                   {app.label}
                 </a>
-              ))}
-            </div>
-          )}
-        </div>
-
-        <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 mb-4">
-          <p className="text-xs text-amber-950">
-            <strong>Add funds:</strong> Zerodha does not allow adding money through third-party apps.
-            Deposit via{" "}
-            <a
-              href="https://kite.zerodha.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-amber-800 underline font-medium hover:text-amber-950"
-            >
-              Kite web
-            </a>{" "}
-            or the Zerodha mobile app (Funds → Add funds). Available balance shown here updates after you connect.
-          </p>
-        </div>
-
-        <div className="rounded-lg bg-blue-50 border border-blue-200 px-4 py-3 mb-4">
-          <p className="text-xs text-blue-950">
-            <strong>Adding a new account?</strong>
-            {availableApps.length > 1
-              ? " Select the Kite Connect app that matches the account you want to add. Each account needs its own app."
-              : " You\u2019ll be redirected to Zerodha\u2019s login page."
-            }
-            {" "}Log in with the Zerodha credentials of the account you want to add.
-            If it keeps connecting the same account, first log out at{" "}
-            <a href="https://kite.zerodha.com" target="_blank" rel="noopener noreferrer" className="underline">
-              kite.zerodha.com
-            </a>{" "}
-            and then try again.
-          </p>
-        </div>
-
-        {loadingAccounts ? (
-          <div className="flex items-center gap-2 text-text-tertiary text-sm py-8 justify-center">
-            <RefreshCw className="h-4 w-4 animate-spin" />
-            Loading accounts...
-          </div>
-        ) : accounts.length === 0 ? (
-          <div className="text-center py-10">
-            <Users className="h-10 w-10 text-text-tertiary mx-auto mb-3" />
-            <p className="text-sm text-text-secondary mb-1">No Zerodha accounts connected</p>
-            <p className="text-xs text-text-tertiary mb-4">
-              Connect your Zerodha accounts to start live trading
-            </p>
-            {availableApps.length <= 1 ? (
-              <a
-                href="/api/zerodha/login"
-                className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-brand transition-colors hover:bg-accent-hover cursor-pointer"
-              >
-                <Plus className="h-4 w-4" />
-                Connect Zerodha Account
-              </a>
-            ) : (
-              <div className="flex flex-wrap justify-center gap-2">
-                {availableApps.map((app) => (
-                  <a
-                    key={app.index}
-                    href={`/api/zerodha/login?credIndex=${app.index}`}
-                    className="inline-flex items-center gap-2 rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-brand transition-colors hover:bg-accent-hover cursor-pointer"
-                  >
-                    <Plus className="h-4 w-4" />
-                    {app.label}
-                  </a>
-                ))}
-              </div>
+              ))
             )}
           </div>
-        ) : (
-          <div className="space-y-3">
-            {/* Summary */}
-            <div className="flex items-center gap-3 rounded-lg bg-bg-tertiary px-4 py-3 mb-4">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-text-primary">
-                  {accounts.length} account{accounts.length !== 1 ? "s" : ""}
-                </span>
-                <span className="text-text-tertiary">·</span>
-                <span className="flex items-center gap-1.5 text-sm">
-                  <span className={cn("h-2 w-2 rounded-full", connectedCount > 0 ? "bg-profit" : "bg-text-tertiary")} />
-                  <span className={cn("font-medium", connectedCount > 0 ? "text-profit" : "text-text-tertiary")}>
-                    {connectedCount} active
-                  </span>
-                </span>
-              </div>
-              <p className="ml-auto text-xs text-text-tertiary">
-                Tokens expire daily — reconnect each morning
-              </p>
-            </div>
+        </div>
 
-            {/* Account Cards */}
+        <p className="text-[11px] text-text-tertiary leading-snug">
+          Add funds on{" "}
+          <a
+            href="https://kite.zerodha.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline"
+          >
+            Kite
+          </a>
+          . To link another ID, log out there first, then Connect here.
+        </p>
+
+        {loadingAccounts ? (
+          <div className="flex items-center gap-2 text-text-tertiary text-xs py-4">
+            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+            Loading accounts…
+          </div>
+        ) : accounts.length === 0 ? (
+          <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
+            <p className="text-sm text-text-secondary">No accounts connected</p>
+            <p className="text-xs text-text-tertiary mt-1">Connect LX2075 to use live prices and orders</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {accounts.map((account) => (
               <div
                 key={account.kiteUserId}
                 className={cn(
-                  "rounded-lg border p-4 transition-colors",
+                  "rounded-lg border p-3 flex flex-col gap-2 min-h-[7.5rem]",
                   account.connected
                     ? "border-profit/30 bg-profit-muted/10"
-                    : "border-border bg-bg-tertiary"
+                    : "border-border bg-bg-tertiary/60"
                 )}
               >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div
-                      className={cn(
-                        "h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold",
-                        account.connected
-                          ? "bg-profit/20 text-profit"
-                          : "bg-bg-hover text-text-tertiary"
-                      )}
-                    >
-                      {account.userName?.[0]?.toUpperCase() || account.kiteUserId[0]}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        {editingLabel === account.kiteUserId ? (
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="text"
-                              value={labelInput}
-                              onChange={(e) => setLabelInput(e.target.value)}
-                              placeholder="e.g. Personal, Family, Client"
-                              className="rounded border border-border bg-bg-primary px-2 py-1 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none w-40"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") handleSaveLabel(account.kiteUserId);
-                                if (e.key === "Escape") { setEditingLabel(null); setLabelInput(""); }
-                              }}
-                            />
-                            <button
-                              onClick={() => handleSaveLabel(account.kiteUserId)}
-                              className="text-profit hover:text-profit/80"
-                            >
-                              <Check className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => { setEditingLabel(null); setLabelInput(""); }}
-                              className="text-text-tertiary hover:text-text-secondary"
-                            >
-                              <X className="h-4 w-4" />
-                            </button>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="text-sm font-semibold text-text-primary">
-                              {account.label || account.userName || account.kiteUserId}
-                            </p>
-                            <button
-                              onClick={() => {
-                                setEditingLabel(account.kiteUserId);
-                                setLabelInput(account.label || "");
-                              }}
-                              className="text-text-tertiary hover:text-text-secondary"
-                              title="Edit label"
-                            >
-                              <Edit2 className="h-3 w-3" />
-                            </button>
-                          </>
-                        )}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    {editingLabel === account.kiteUserId ? (
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="text"
+                          value={labelInput}
+                          onChange={(e) => setLabelInput(e.target.value)}
+                          className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveLabel(account.kiteUserId);
+                            if (e.key === "Escape") {
+                              setEditingLabel(null);
+                              setLabelInput("");
+                            }
+                          }}
+                        />
+                        <button type="button" onClick={() => handleSaveLabel(account.kiteUserId)} className="text-profit">
+                          <Check className="h-3.5 w-3.5" />
+                        </button>
                       </div>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-xs text-text-tertiary font-mono">
-                          {account.kiteUserId}
-                        </span>
-                        {account.email && (
-                          <>
-                            <span className="text-text-tertiary">·</span>
-                            <span className="text-xs text-text-tertiary">
-                              {account.email}
-                            </span>
-                          </>
-                        )}
-                      </div>
-                      {account.connected && accountFunds[account.kiteUserId] && (
-                        <div className="mt-2 flex items-center gap-3 text-xs">
-                          <span className="flex items-center gap-1 text-profit">
-                            <Wallet className="h-3 w-3" />
-                            Available {formatCurrency(accountFunds[account.kiteUserId].available)}
-                          </span>
-                          {accountFunds[account.kiteUserId].used > 0 && (
-                            <span className="text-text-tertiary">
-                              Used {formatCurrency(accountFunds[account.kiteUserId].used)}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {account.connected ? (
-                      <span className="flex items-center gap-1.5 rounded-full bg-profit-muted px-2.5 py-1 text-xs font-medium text-profit">
-                        <CheckCircle2 className="h-3 w-3" />
-                        Connected
-                      </span>
                     ) : (
-                      <span className="flex items-center gap-1.5 rounded-full bg-loss-muted px-2.5 py-1 text-xs font-medium text-loss">
-                        <XCircle className="h-3 w-3" />
-                        Expired
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <p className="text-sm font-semibold text-text-primary truncate">
+                          {account.label || account.userName || account.kiteUserId}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingLabel(account.kiteUserId);
+                            setLabelInput(account.label || "");
+                          }}
+                          className="text-text-tertiary hover:text-text-secondary shrink-0"
+                        >
+                          <Edit2 className="h-3 w-3" />
+                        </button>
+                      </div>
                     )}
+                    <p className="text-[11px] font-mono text-text-tertiary truncate">
+                      {account.kiteUserId}
+                    </p>
                   </div>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                      account.connected
+                        ? "bg-profit/15 text-profit"
+                        : "bg-loss/15 text-loss"
+                    )}
+                  >
+                    {account.connected ? "Live" : "Expired"}
+                  </span>
                 </div>
 
-                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border/50">
+                {account.connected && accountFunds[account.kiteUserId] ? (
+                  <p className="text-[11px] text-text-secondary tabular-nums">
+                    Avail {formatCurrency(accountFunds[account.kiteUserId].available)}
+                    {accountFunds[account.kiteUserId].used > 0
+                      ? ` · Used ${formatCurrency(accountFunds[account.kiteUserId].used)}`
+                      : ""}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-text-tertiary truncate">
+                    {account.email || "Reconnect for live margins"}
+                  </p>
+                )}
+
+                <div className="mt-auto flex items-center gap-1.5 pt-1">
                   {account.connected ? (
                     <button
+                      type="button"
                       onClick={() => handleDisconnect(account.kiteUserId)}
                       disabled={disconnectingAccount === account.kiteUserId}
-                      className="flex items-center gap-1.5 rounded-md bg-loss-muted px-3 py-1.5 text-xs font-medium text-loss transition-colors hover:bg-loss/20 disabled:opacity-50"
+                      className="rounded-md px-2 py-1 text-[11px] font-medium text-loss hover:bg-loss/10 disabled:opacity-50"
                     >
-                      <Power className="h-3.5 w-3.5" />
-                      {disconnectingAccount === account.kiteUserId ? "Disconnecting..." : "Disconnect"}
+                      {disconnectingAccount === account.kiteUserId ? "…" : "Disconnect"}
                     </button>
                   ) : (
                     <button
+                      type="button"
                       onClick={() => handleReconnect(account.kiteUserId)}
-                      className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-brand transition-colors hover:bg-accent-hover"
+                      className="rounded-md bg-accent px-2 py-1 text-[11px] font-semibold text-brand hover:bg-accent-hover"
                     >
-                      <RefreshCw className="h-3.5 w-3.5" />
                       Reconnect
                     </button>
                   )}
                   <button
+                    type="button"
                     onClick={() => handleRemoveAccount(account.kiteUserId)}
-                    className="flex items-center gap-1.5 rounded-md bg-bg-hover px-3 py-1.5 text-xs font-medium text-text-tertiary transition-colors hover:bg-loss-muted hover:text-loss"
-                    title="Remove account"
+                    className="rounded-md px-2 py-1 text-[11px] font-medium text-text-tertiary hover:bg-loss/10 hover:text-loss"
                   >
-                    <Trash2 className="h-3.5 w-3.5" />
                     Remove
                   </button>
                 </div>
               </div>
             ))}
-
-            <div className="flex items-center gap-2 rounded-lg bg-bg-tertiary/50 p-3 mt-2">
-              <ShieldCheck className="h-4 w-4 text-text-tertiary shrink-0" />
-              <p className="text-xs text-text-tertiary">
-                Access tokens are stored as secure httpOnly cookies and expire every 24 hours.
-                Account metadata is saved to your profile for persistence.
-              </p>
-            </div>
           </div>
         )}
       </section>
 
       {/* ── Live order defaults ─────────────────────────────────────────── */}
       <section className="card border-amber-200">
-        <div className="flex items-center gap-3 mb-5">
+        <div className="flex items-center gap-3 mb-4">
           <div className="rounded-lg bg-amber-100 p-2">
             <TrendingUp className="h-5 w-5 text-amber-800" />
           </div>
@@ -1304,15 +1206,74 @@ function SettingsContent() {
               Live Order Limits
             </h2>
             <p className="text-xs text-text-secondary">
-              Caps for manual and future auto orders on the Live Trading page (Zerodha)
+              Hard caps for Live Trading buys — algo stops when capital is used up
             </p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Default Exchange
+              Total capital limit (₹)
+            </label>
+            <input
+              type="number"
+              min={1000}
+              step={1000}
+              value={settings.liveTrading.capitalLimit}
+              onChange={(e) =>
+                updateSettings("liveTrading", {
+                  capitalLimit: Math.max(1000, Number(e.target.value) || 50_000),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="mt-1 text-[10px] text-text-tertiary">
+              Max deployed in live holdings/positions. Default ₹50,000.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Order size per trade (₹)
+            </label>
+            <input
+              type="number"
+              min={500}
+              step={500}
+              value={settings.liveTrading.orderNotional}
+              onChange={(e) => {
+                const orderNotional = Math.max(500, Number(e.target.value) || 5_000);
+                updateSettings("liveTrading", { orderNotional });
+                updateSettings("tradingPreferences", { maxOrderValue: orderNotional });
+              }}
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="mt-1 text-[10px] text-text-tertiary">
+              Default and max ₹ per live BUY. Default ₹5,000.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Max daily loss (₹)
+            </label>
+            <input
+              type="number"
+              value={settings.tradingPreferences.maxDailyLoss}
+              onChange={(e) =>
+                updateSettings("tradingPreferences", {
+                  maxDailyLoss: Number(e.target.value),
+                })
+              }
+              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+            <p className="mt-1 text-[10px] text-text-tertiary">0 = no daily loss halt</p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-text-secondary mb-1.5">
+              Default exchange
             </label>
             <select
               value={settings.tradingPreferences.defaultExchange}
@@ -1330,7 +1291,7 @@ function SettingsContent() {
 
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Default Product Type
+              Default product
             </label>
             <select
               value={settings.tradingPreferences.defaultProductType}
@@ -1349,7 +1310,7 @@ function SettingsContent() {
 
           <div>
             <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Default Order Type
+              Default order type
             </label>
             <select
               value={settings.tradingPreferences.defaultOrderType}
@@ -1363,38 +1324,6 @@ function SettingsContent() {
               <option value="MARKET">Market</option>
               <option value="LIMIT">Limit</option>
             </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Max Order Value (₹)
-            </label>
-            <input
-              type="number"
-              value={settings.tradingPreferences.maxOrderValue}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  maxOrderValue: Number(e.target.value),
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Max Daily Loss (₹)
-            </label>
-            <input
-              type="number"
-              value={settings.tradingPreferences.maxDailyLoss}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  maxDailyLoss: Number(e.target.value),
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
           </div>
         </div>
       </section>

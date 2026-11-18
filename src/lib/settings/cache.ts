@@ -18,6 +18,7 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
   const tp = parsed.tradingPreferences as Record<string, unknown> | undefined;
   const n = parsed.notifications as Record<string, unknown> | undefined;
   const rm = parsed.riskManagement as Record<string, unknown> | undefined;
+  const lt = parsed.liveTrading as Record<string, unknown> | undefined;
 
   return {
     paperStartingBalance: pt?.startingBalance as number | undefined,
@@ -30,7 +31,9 @@ function nestedCacheToFlat(parsed: Record<string, unknown>): Partial<AppSettings
     defaultExchange: tp?.defaultExchange as string | undefined,
     defaultProduct: tp?.defaultProductType as string | undefined,
     defaultOrderType: tp?.defaultOrderType as string | undefined,
-    maxOrderValue: tp?.maxOrderValue as number | undefined,
+    maxOrderValue: (lt?.orderNotional ?? tp?.maxOrderValue) as number | undefined,
+    liveOrderNotional: lt?.orderNotional as number | undefined,
+    liveCapitalLimit: lt?.capitalLimit as number | undefined,
     maxDailyLoss: tp?.maxDailyLoss as number | undefined,
     notifyOrders: n?.orderExecution as boolean | undefined,
     notifyEmailDigest: n?.emailDigest as boolean | undefined,

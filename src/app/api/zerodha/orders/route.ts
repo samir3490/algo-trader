@@ -6,6 +6,8 @@ import {
   assertLiveTradingEnabled,
   LiveTradingDisabledError,
 } from "@/lib/core/live-trading-guard";
+import { getAdminFirestore, isFirebaseAdminConfigured } from "@/lib/firebase-admin";
+import { assertLiveBuyWithinLimits } from "@/lib/live-trading/enforce-live-buy";
 
 export async function GET(request: NextRequest) {
   const accountId = request.nextUrl.searchParams.get("accountId");
@@ -93,15 +95,38 @@ export async function POST(request: NextRequest) {
 
   try {
     const orderType = body.orderType || "MARKET";
+    const side = (body.side || "BUY") as "BUY" | "SELL";
+    const qty = Number(body.quantity) || 0;
+    const estimatedPrice =
+      Number(body.price) ||
+      Number(body.estimatedPrice) ||
+      Number(body.triggerPrice) ||
+      0;
     const shouldSetMarketProtection = orderType === "MARKET" || orderType === "SL-M";
     // Kite rejects MARKET (and SL-M) orders if market_protection is 0/absent.
     // -1 enables automatic market protection as per Kite guidelines.
     const marketProtection = shouldSetMarketProtection ? -1 : undefined;
 
+    const kite = new KiteConnect({ api_key: apiKey });
+    kite.setAccessToken(accessToken);
+
+    if (side === "BUY" && isFirebaseAdminConfigured()) {
+      const gate = await assertLiveBuyWithinLimits({
+        db: getAdminFirestore(),
+        kite,
+        side,
+        qty,
+        estimatedPrice,
+      });
+      if (!gate.ok) {
+        return NextResponse.json({ error: gate.error }, { status: 400 });
+      }
+    }
+
     const orderParams = {
       tradingsymbol: body.symbol,
       exchange: body.exchange || "NSE",
-      transaction_type: body.side,
+      transaction_type: side,
       order_type: orderType,
       quantity: body.quantity,
       price: body.price,
@@ -117,8 +142,6 @@ export async function POST(request: NextRequest) {
       const result = await placeOrderViaProxy(apiKey, accessToken, orderParams);
       orderId = result?.data?.order_id;
     } else {
-      const kite = new KiteConnect({ api_key: apiKey });
-      kite.setAccessToken(accessToken);
       const result = await kite.placeOrder("regular", orderParams as any);
       orderId = result.order_id;
     }
