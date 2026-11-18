@@ -5,18 +5,18 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   FlaskConical,
-  BrainCircuit,
-  BarChart3,
+  Radio,
   ClipboardList,
+  Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const items = [
-  { href: "/dashboard", label: "Home", icon: LayoutDashboard },
-  { href: "/paper-trading", label: "Paper", icon: FlaskConical },
-  { href: "/strategies", label: "Strategies", icon: BrainCircuit },
-  { href: "/analytics", label: "Analytics", icon: BarChart3 },
-  { href: "/orders", label: "Orders", icon: ClipboardList },
+  { href: "/dashboard", label: "Home", icon: LayoutDashboard, mode: "neutral" as const },
+  { href: "/paper-trading", label: "Paper", icon: FlaskConical, mode: "paper" as const },
+  { href: "/live-trading", label: "Live", icon: Radio, mode: "live" as const },
+  { href: "/orders", label: "Orders", icon: ClipboardList, mode: "neutral" as const },
+  { href: "/settings", label: "Settings", icon: Settings, mode: "neutral" as const },
 ];
 
 export default function MobileBottomNav() {
@@ -34,16 +34,18 @@ export default function MobileBottomNav() {
             pathname === item.href || pathname.startsWith(item.href + "/");
           const Icon = item.icon;
           const activeTone =
-            item.href === "/paper-trading"
+            item.mode === "paper"
               ? "text-mode-paper"
-              : "text-accent";
+              : item.mode === "live"
+                ? "text-mode-live"
+                : "text-accent";
 
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 min-h-[52px] text-[10px] font-medium transition-colors",
+                "flex flex-1 flex-col items-center justify-center gap-0.5 py-2 min-h-[56px] text-[10px] font-medium transition-colors touch-manipulation",
                 isActive
                   ? activeTone
                   : "text-text-tertiary hover:text-text-secondary"

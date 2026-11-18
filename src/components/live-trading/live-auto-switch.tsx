@@ -23,9 +23,9 @@ export default function LiveAutoSwitch({
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5",
+        "inline-flex items-center gap-2 rounded-lg border px-2.5 py-1.5 min-h-11",
         enabled
-          ? "border-emerald-300 bg-emerald-50"
+          ? "border-mode-live-border bg-mode-live-muted"
           : "border-border bg-bg-secondary",
         className
       )}
@@ -36,7 +36,7 @@ export default function LiveAutoSwitch({
       <span
         className={cn(
           "text-[10px] font-bold uppercase tracking-wide min-w-[1.75rem] text-center",
-          enabled ? "text-emerald-800" : "text-text-tertiary"
+          enabled ? "text-mode-live-fg" : "text-text-tertiary"
         )}
       >
         {enabled ? "ON" : "OFF"}
@@ -49,14 +49,14 @@ export default function LiveAutoSwitch({
         disabled={saving}
         onClick={() => onToggle(!enabled)}
         className={cn(
-          "relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-60",
-          enabled ? "bg-emerald-600" : "bg-border"
+          "relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-60 touch-manipulation",
+          enabled ? "bg-mode-live" : "bg-border"
         )}
       >
         <span
           className={cn(
-            "absolute top-0.5 left-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-white shadow-sm transition-transform",
-            enabled && "translate-x-4"
+            "absolute top-0.5 left-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow-sm transition-transform",
+            enabled && "translate-x-5"
           )}
         >
           {saving ? (

@@ -48,7 +48,10 @@ import MarketTrendHero from "@/components/dashboard/market-trend-hero";
 import SectorPerformanceChart from "@/components/dashboard/sector-performance-chart";
 import PaperHealthStrip from "@/components/dashboard/paper-health-strip";
 import LiveTradingDashboardStrip from "@/components/dashboard/live-trading-strip";
+import OnboardingChecklist from "@/components/dashboard/onboarding-checklist";
+import WatchlistPanel from "@/components/dashboard/watchlist-panel";
 import PageHeader from "@/components/ui/page-header";
+import { SkeletonChart } from "@/components/ui/skeleton";
 import { chartTokens } from "@/lib/ui/chart-tokens";
 
 interface Holding {
@@ -248,8 +251,9 @@ export default function DashboardPage() {
 
   if (!mounted) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-text-tertiary" />
+      <div className="min-h-screen p-3 sm:p-4 md:p-6 lg:p-8 space-y-4">
+        <SkeletonChart />
+        <SkeletonChart />
       </div>
     );
   }
@@ -262,7 +266,7 @@ export default function DashboardPage() {
         mode="neutral"
         padded={false}
         actions={
-          <div className="flex items-center gap-3 text-sm text-text-secondary">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-sm text-text-secondary">
             <span
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium",
@@ -274,7 +278,7 @@ export default function DashboardPage() {
               <span className={cn("pulse-dot", marketOpen ? "bg-profit" : "bg-text-tertiary")} />
               {marketStatus}
             </span>
-            <span className="flex items-center gap-2">
+            <span className="hidden sm:flex items-center gap-2">
               <Clock className="h-4 w-4" />
               {new Date().toLocaleDateString("en-IN", {
                 weekday: "short",
@@ -286,6 +290,10 @@ export default function DashboardPage() {
           </div>
         }
       />
+
+      <OnboardingChecklist />
+
+      <WatchlistPanel />
 
       <section className="rounded-xl border-2 border-mode-paper-border bg-mode-paper-muted/70 p-4 sm:p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">

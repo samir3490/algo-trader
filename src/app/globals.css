@@ -67,6 +67,26 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Avoid iOS zoom on focused inputs under 16px */
+  -webkit-text-size-adjust: 100%;
+}
+
+@layer base {
+  input,
+  select,
+  textarea,
+  button {
+    font-size: 16px;
+  }
+
+  @media (min-width: 640px) {
+    input,
+    select,
+    textarea,
+    button {
+      font-size: inherit;
+    }
+  }
 }
 
 * {

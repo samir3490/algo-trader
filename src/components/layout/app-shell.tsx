@@ -7,6 +7,7 @@ import Sidebar from "@/components/layout/sidebar";
 import MainContent from "@/components/layout/main-content";
 import MobileBottomNav from "@/components/layout/mobile-bottom-nav";
 import StrategyRunner from "@/components/strategy-runner";
+import { ToastProvider } from "@/components/ui/toast";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -14,18 +15,20 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthProvider>
-      <AuthGuard>
-        {isLoginPage ? (
-          children
-        ) : (
-          <>
-            <StrategyRunner />
-            <Sidebar />
-            <MainContent>{children}</MainContent>
-            <MobileBottomNav />
-          </>
-        )}
-      </AuthGuard>
+      <ToastProvider>
+        <AuthGuard>
+          {isLoginPage ? (
+            children
+          ) : (
+            <>
+              <StrategyRunner />
+              <Sidebar />
+              <MainContent>{children}</MainContent>
+              <MobileBottomNav />
+            </>
+          )}
+        </AuthGuard>
+      </ToastProvider>
     </AuthProvider>
   );
 }

@@ -50,6 +50,7 @@ import {
 import { effectivePositionSizingMode } from "@/lib/settings/normalize-settings";
 import LiveAutoSwitch from "@/components/live-trading/live-auto-switch";
 import PageHeader from "@/components/ui/page-header";
+import { useOptionalToast } from "@/components/ui/toast";
 
 interface ServerAccount {
   kiteUserId: string;
@@ -606,10 +607,9 @@ function SettingsContent() {
               : "rules";
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const { user } = useAuth();
+  const toastApi = useOptionalToast();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [saving, setSaving] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [toastError, setToastError] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetMessage, setResetMessage] = useState<{
@@ -667,12 +667,6 @@ function SettingsContent() {
     }
   }, [searchParams]);
 
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 6000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
 
   async function handleNewAccountAdded(kiteUserId: string) {
     try {
@@ -692,18 +686,18 @@ function SettingsContent() {
         });
 
         if (isExisting) {
-          setToast(`Account ${data.userName || kiteUserId} reconnected! To add a different account, log out of kite.zerodha.com first.`);
+          toastApi.success(`Account ${data.userName || kiteUserId} reconnected! To add a different account, log out of kite.zerodha.com first.`);
         } else {
-          setToast(`New account ${data.userName || kiteUserId} added successfully!`);
+          toastApi.success(`New account ${data.userName || kiteUserId} added successfully!`);
         }
         await persistServerToken(data.userId || kiteUserId);
         await loadAccounts();
       } else {
-        setToast("Connection failed. Please try again.");
+        toastApi.error("Connection failed. Please try again.");
       }
     } catch (e) {
       console.error("Error saving new account:", e);
-      setToast("Account connected but failed to save metadata.");
+      toastApi.error("Account connected but failed to save metadata.");
     }
   }
 
@@ -794,9 +788,9 @@ function SettingsContent() {
       setAccounts((prev) =>
         prev.map((a) => (a.kiteUserId === kiteUserId ? { ...a, connected: false } : a))
       );
-      setToast(`Account ${kiteUserId} disconnected.`);
+      toastApi.success(`Account ${kiteUserId} disconnected.`);
     } catch {
-      setToast("Failed to disconnect account.");
+      toastApi.error("Failed to disconnect account.");
     } finally {
       setDisconnectingAccount(null);
     }
@@ -812,9 +806,9 @@ function SettingsContent() {
       });
       await removeZerodhaAccount(kiteUserId);
       setAccounts((prev) => prev.filter((a) => a.kiteUserId !== kiteUserId));
-      setToast(`Account ${kiteUserId} removed.`);
+      toastApi.success(`Account ${kiteUserId} removed.`);
     } catch {
-      setToast("Failed to remove account.");
+      toastApi.error("Failed to remove account.");
     }
   }
 
@@ -827,7 +821,7 @@ function SettingsContent() {
       setEditingLabel(null);
       setLabelInput("");
     } catch {
-      setToast("Failed to update label.");
+      toastApi.error("Failed to update label.");
     }
   }
 
@@ -837,37 +831,34 @@ function SettingsContent() {
 
   async function handleSave() {
     if (!user) {
-      setToastError(true);
-      setToast("Sign in to save settings to the cloud.");
+      toastApi.error("Sign in to save settings to the cloud.");
       return;
     }
 
     setSaving(true);
-    setToastError(false);
-    const flat = { ...DEFAULT_SETTINGS, ...localToFirestore(settings) };
+        const flat = { ...DEFAULT_SETTINGS, ...localToFirestore(settings) };
 
     try {
       saveSettingsToCache(flat);
       await saveFirestoreSettings(localToFirestore(settings));
       const balanceResult = await applyPaperStartingBalanceIfFlat();
       if (balanceResult === "applied") {
-        setToast(
+        toastApi.success(
           "Settings saved. Paper cash balance updated to your new starting amount (no open positions)."
         );
         window.dispatchEvent(new CustomEvent("paper-trading-updated"));
       } else if (balanceResult === "skipped_has_positions") {
-        setToast(
+        toastApi.success(
           "Settings saved. Reset paper portfolio to apply a new starting balance while you have holdings."
         );
       } else {
-        setToast("Settings saved successfully!");
+        toastApi.success("Settings saved successfully!");
       }
     } catch (e) {
       console.error("Failed to save settings to Firestore:", e);
-      setToastError(true);
       const msg =
         e instanceof Error ? e.message : "Could not sync to cloud";
-      setToast(
+      toastApi.error(
         `Saved on this device only. Cloud sync failed: ${msg}`
       );
     } finally {
@@ -878,8 +869,7 @@ function SettingsContent() {
   async function resetPaperPortfolio() {
     setResetLoading(true);
     setResetMessage(null);
-    setToastError(false);
-    try {
+        try {
       await resetPaperTrading();
       localStorage.removeItem("paper_trading_state");
       localStorage.removeItem("paperTrades");
@@ -887,7 +877,7 @@ function SettingsContent() {
       const starting = settings.paperTrading.startingBalance;
       const msg = `Paper portfolio reset — balance ${formatCurrency(starting)}, orders cleared, scan locks cleared.`;
       setResetMessage({ ok: true, text: msg });
-      setToast(msg);
+      toastApi.success(msg);
       window.dispatchEvent(new CustomEvent("paper-trading-updated"));
       window.dispatchEvent(new CustomEvent("strategies-updated"));
     } catch (e) {
@@ -896,8 +886,7 @@ function SettingsContent() {
           ? `Reset failed: ${e.message}`
           : "Reset failed — please try again.";
       setResetMessage({ ok: false, text: msg });
-      setToastError(true);
-      setToast(msg);
+      toastApi.error(msg);
     } finally {
       setResetLoading(false);
     }
@@ -2828,25 +2817,6 @@ function SettingsContent() {
         </>
       )}
 
-      {/* Toast Notification */}
-      {toast && (
-        <div
-          role="status"
-          className={cn(
-            "fixed bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md z-[100] flex items-center gap-2 rounded-lg border px-4 py-3 shadow-xl",
-            toastError
-              ? "border-loss/40 bg-loss-muted"
-              : "border-border bg-bg-elevated"
-          )}
-        >
-          {toastError ? (
-            <AlertTriangle className="h-4 w-4 text-loss shrink-0" />
-          ) : (
-            <CheckCircle2 className="h-4 w-4 text-profit shrink-0" />
-          )}
-          <span className="text-sm text-text-primary">{toast}</span>
-        </div>
-      )}
     </div>
   );
 }

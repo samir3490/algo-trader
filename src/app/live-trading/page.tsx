@@ -27,6 +27,9 @@ import {
 } from "lucide-react";
 import StatCard from "@/components/ui/stat-card";
 import PageHeader from "@/components/ui/page-header";
+import ConfirmDialog from "@/components/ui/confirm-dialog";
+import Banner from "@/components/ui/banner";
+import { useOptionalToast } from "@/components/ui/toast";
 import PaginationBar, {
   DEFAULT_PAGE_SIZE,
   paginateItems,
@@ -170,6 +173,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 function LiveTradingContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const toast = useOptionalToast();
   const orderFormRef = useRef<HTMLDivElement>(null);
 
   // Multi-account state
@@ -183,6 +187,8 @@ function LiveTradingContent() {
 
   const [errorMessage, setErrorMessage] = useState("");
   const [statusMessage, setStatusMessage] = useState("");
+  const [pendingKillSwitch, setPendingKillSwitch] = useState<boolean | null>(null);
+  const [confirmPlaceOrder, setConfirmPlaceOrder] = useState(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [isCancellingOrder, setIsCancellingOrder] = useState<string | null>(null);
@@ -286,16 +292,19 @@ function LiveTradingContent() {
       const merged = { ...appSettings, liveAutoTradingEnabled: next };
       setAppSettings(merged);
       saveSettingsToCache(merged);
-      setStatusMessage(
-        next
-          ? "Live auto-trading ON — cron may place real orders (also needs ENABLE_LIVE_TRADING)."
-          : "Live auto-trading OFF — paper continues; no algo live orders."
-      );
+      const msg = next
+        ? "Live auto-trading ON — cron may place real orders (also needs ENABLE_LIVE_TRADING)."
+        : "Live auto-trading OFF — paper continues; no algo live orders.";
+      setStatusMessage(msg);
+      toast.success(msg);
     } catch {
       setAutoTradingEnabled(!next);
-      setErrorMessage("Could not save live kill switch. Try Settings → Live.");
+      const msg = "Could not save live kill switch. Try Settings → Live.";
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
       setSavingKillSwitch(false);
+      setPendingKillSwitch(null);
     }
   }
 
@@ -798,18 +807,23 @@ function LiveTradingContent() {
       const data = await res.json();
 
       if (!res.ok) {
-        setErrorMessage(data.error || "Failed to place order. Please try again.");
+        const msg = data.error || "Failed to place order. Please try again.";
+        setErrorMessage(msg);
+        toast.error(msg);
         return;
       }
 
       const accountLabel = selectedAccount?.label || selectedAccount?.userName || selectedAccountId;
-      setStatusMessage(`Order placed on ${accountLabel}! Order ID: ${data.orderId}`);
+      const okMsg = `Order placed on ${accountLabel}! Order ID: ${data.orderId}`;
+      setStatusMessage(okMsg);
+      toast.success(okMsg);
       setSymbol("");
       setQuantity("");
       setPrice("");
       setTriggerPrice("");
       setSearchInput("");
       setOrderPanelOpen(false);
+      setConfirmPlaceOrder(false);
 
       setTimeout(() => {
         fetchOrders();
@@ -817,7 +831,9 @@ function LiveTradingContent() {
         fetchHoldings();
       }, 2000);
     } catch (err: any) {
-      setErrorMessage(err.message || "Network error. Please check your connection.");
+      const msg = err.message || "Network error. Please check your connection.";
+      setErrorMessage(msg);
+      toast.error(msg);
     } finally {
       setIsPlacingOrder(false);
     }
@@ -940,7 +956,7 @@ function LiveTradingContent() {
             <LiveAutoSwitch
               enabled={autoTradingEnabled}
               saving={savingKillSwitch}
-              onToggle={(next) => void toggleLiveKillSwitch(next)}
+              onToggle={(next) => setPendingKillSwitch(next)}
             />
             <button
               type="button"
@@ -1204,31 +1220,18 @@ function LiveTradingContent() {
         </div>
       </div>
 
-      {/* Error/Success Banners */}
-      {errorMessage && (
-        <div className="bg-red-900/40 border-b border-red-700/50 px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="h-5 w-5 text-red-400 shrink-0" />
-            <span className="text-red-200 text-sm font-medium">{errorMessage}</span>
-          </div>
-          <button onClick={() => setErrorMessage("")} className="text-red-400 hover:text-red-300 text-sm">
-            Dismiss
-          </button>
-        </div>
-      )}
-
-      {statusMessage && (
-        <div className="bg-emerald-50 border-b border-emerald-200 px-3 sm:px-6 py-3 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-3">
-            <CheckCircle2 className="h-5 w-5 text-emerald-700 shrink-0" />
-            <span className="text-emerald-950 text-sm font-medium">{statusMessage}</span>
-          </div>
-          <button
-            onClick={() => setStatusMessage("")}
-            className="text-emerald-800 hover:text-emerald-950 text-sm font-medium"
-          >
-            Dismiss
-          </button>
+      {(errorMessage || statusMessage) && (
+        <div className="px-3 sm:px-6 py-3 space-y-2 border-b border-border bg-bg-primary">
+          {errorMessage && (
+            <Banner tone="danger" onDismiss={() => setErrorMessage("")}>
+              {errorMessage}
+            </Banner>
+          )}
+          {statusMessage && (
+            <Banner tone="success" onDismiss={() => setStatusMessage("")}>
+              {statusMessage}
+            </Banner>
+          )}
         </div>
       )}
 
@@ -1600,16 +1603,16 @@ function LiveTradingContent() {
                   </div>
                 )}
 
-                {/* Place Order */}
+                {/* Place Order — confirm before real money */}
                 <button
-                  onClick={handlePlaceOrder}
+                  onClick={() => setConfirmPlaceOrder(true)}
                   disabled={isPlacingOrder || !symbol.trim() || !quantity || !connected}
                   className={cn(
-                    "w-full py-2.5 rounded-md font-semibold text-sm transition-colors mt-2 flex items-center justify-center gap-2 text-white",
+                    "w-full min-h-12 py-3 rounded-lg font-semibold text-sm transition-colors mt-2 flex items-center justify-center gap-2 text-white touch-manipulation",
                     "disabled:opacity-50 disabled:cursor-not-allowed",
                     transactionType === "BUY"
-                      ? "bg-emerald-700 hover:bg-emerald-800"
-                      : "bg-red-600 hover:bg-red-700"
+                      ? "bg-mode-live hover:bg-mode-live-hover"
+                      : "bg-loss hover:bg-loss/90"
                   )}
                 >
                   {isPlacingOrder ? (
@@ -1969,10 +1972,62 @@ function LiveTradingContent() {
             available={selectedFunds?.available ?? 0}
             autoOn={autoTradingEnabled}
             savingAuto={savingKillSwitch}
-            onToggleAuto={(next) => void toggleLiveKillSwitch(next)}
+            onToggleAuto={(next) => setPendingKillSwitch(next)}
           />
         )}
       </div>
+
+      <ConfirmDialog
+        open={pendingKillSwitch !== null}
+        onClose={() => setPendingKillSwitch(null)}
+        onConfirm={() => {
+          if (pendingKillSwitch !== null) void toggleLiveKillSwitch(pendingKillSwitch);
+        }}
+        title={
+          pendingKillSwitch
+            ? "Turn live auto-trading ON?"
+            : "Turn live auto-trading OFF?"
+        }
+        description={
+          pendingKillSwitch
+            ? "Cron may place real Zerodha orders when market is open (also needs ENABLE_LIVE_TRADING). Paper trading is unchanged."
+            : "Stops algo live orders immediately. Paper trading continues."
+        }
+        confirmLabel={pendingKillSwitch ? "Enable live auto" : "Disable live auto"}
+        tone={pendingKillSwitch ? "live" : "danger"}
+        loading={savingKillSwitch}
+      />
+
+      <ConfirmDialog
+        open={confirmPlaceOrder}
+        onClose={() => setConfirmPlaceOrder(false)}
+        onConfirm={() => void handlePlaceOrder()}
+        title={`Confirm live ${transactionType}`}
+        description="This sends a real order to Zerodha with real money."
+        confirmLabel={`Confirm ${transactionType}`}
+        tone={transactionType === "SELL" ? "danger" : "live"}
+        loading={isPlacingOrder}
+      >
+        <div className="rounded-lg border border-mode-live-border bg-mode-live-muted/50 px-3 py-3 text-sm space-y-1.5">
+          <p>
+            <span className="text-text-tertiary">Symbol </span>
+            <span className="font-semibold text-text-primary">
+              {symbol.toUpperCase()} · {exchange}
+            </span>
+          </p>
+          <p>
+            <span className="text-text-tertiary">Qty </span>
+            <span className="font-semibold tabular-nums">{quantity}</span>
+            <span className="text-text-tertiary"> · </span>
+            <span className="font-semibold">{orderType}</span>
+            <span className="text-text-tertiary"> · </span>
+            <span className="font-semibold">{productType}</span>
+          </p>
+          <p className="text-xs text-text-secondary">
+            Account: {selectedAccount?.label || selectedAccount?.userName || selectedAccountId || "—"}
+          </p>
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }
