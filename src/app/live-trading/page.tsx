@@ -48,6 +48,7 @@ import {
   getSettings,
   saveSettings,
   getZerodhaAccounts,
+  getLiveAlgoQuota,
   type AppSettings,
   type ZerodhaAccount,
 } from "@/lib/firebase";
@@ -294,19 +295,21 @@ function LiveTradingContent() {
 
   const liveOrderNotional = resolveLiveOrderNotional(appSettings);
   const liveCapitalLimit = resolveLiveCapitalLimit(appSettings);
-  const liveDeployed = useMemo(
-    () =>
-      evaluateLiveBuyLimits({
-        side: "BUY",
-        qty: 0,
-        price: 0,
-        settings: appSettings,
-        positions,
-        holdings,
-      }).deployed,
-    [appSettings, positions, holdings]
-  );
+  /** Algo-only deployed ₹ — existing Zerodha holdings do not count toward the ₹50k cap. */
+  const [algoDeployed, setAlgoDeployed] = useState(0);
+  const liveDeployed = algoDeployed;
   const liveRemaining = Math.max(0, liveCapitalLimit - liveDeployed);
+  const algoCapitalPositions = useMemo(
+    () => (algoDeployed > 0 ? [{ qty: 1, avgPrice: algoDeployed }] : []),
+    [algoDeployed]
+  );
+
+  useEffect(() => {
+    if (!user) return;
+    void getLiveAlgoQuota()
+      .then((q) => setAlgoDeployed(q.deployed))
+      .catch(() => setAlgoDeployed(0));
+  }, [user, orders.length]);
 
   async function loadAccounts() {
     setLoadingAccounts(true);
@@ -739,8 +742,8 @@ function LiveTradingContent() {
       qty: qtyNum,
       price: refPrice > 0 ? refPrice : 0,
       settings: appSettings,
-      positions,
-      holdings,
+      positions: algoCapitalPositions,
+      holdings: [],
     });
     if (!limitCheck.ok) {
       setErrorMessage(limitCheck.error || "Live capital limit blocked this order.");
@@ -958,9 +961,11 @@ function LiveTradingContent() {
         <div className="mb-4 rounded-lg border border-emerald-200 bg-white/80 px-4 py-3 text-xs text-emerald-950">
           <span className="font-medium">Algo sizing: </span>
           ₹{liveOrderNotional.toLocaleString("en-IN")} / trade · ₹
-          {liveCapitalLimit.toLocaleString("en-IN")} capital cap · deployed ₹
+          {liveCapitalLimit.toLocaleString("en-IN")} algo cap · algo deployed ₹
           {Math.round(liveDeployed).toLocaleString("en-IN")} · remaining ₹
           {Math.round(liveRemaining).toLocaleString("en-IN")}
+          {" "}
+          (existing holdings do not count)
           {" · "}
           <Link href="/settings?tab=live" className="underline font-medium">
             Edit limits

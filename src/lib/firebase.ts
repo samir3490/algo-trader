@@ -594,6 +594,35 @@ export async function saveSettings(settings: Partial<AppSettings>): Promise<void
   await setDoc(ref, { ...settings, updatedAt: serverTimestamp() }, { merge: true });
 }
 
+/** Algo-only live capital counters (independent of full Zerodha holdings). */
+export async function getLiveAlgoQuota(): Promise<{
+  deployed: number;
+  openCount: number;
+  tradesToday: number;
+  buyNotionalToday: number;
+}> {
+  try {
+    const ref = doc(db, "users", getUserId(), "data", "liveTrading");
+    const snap = await getDoc(ref);
+    if (!snap.exists()) {
+      return { deployed: 0, openCount: 0, tradesToday: 0, buyNotionalToday: 0 };
+    }
+    const d = snap.data();
+    return {
+      deployed: Math.max(0, Number(d.algoDeployedCapital ?? 0) || 0),
+      openCount: Math.max(
+        0,
+        Number(d.algoOpenCount ?? (Array.isArray(d.algoOpenSymbols) ? d.algoOpenSymbols.length : 0)) ||
+          0
+      ),
+      tradesToday: Math.max(0, Number(d.algoTradesToday ?? 0) || 0),
+      buyNotionalToday: Math.max(0, Number(d.algoBuyNotionalToday ?? 0) || 0),
+    };
+  } catch {
+    return { deployed: 0, openCount: 0, tradesToday: 0, buyNotionalToday: 0 };
+  }
+}
+
 // ==================== STRATEGIES ====================
 
 export interface ActiveStrategy {

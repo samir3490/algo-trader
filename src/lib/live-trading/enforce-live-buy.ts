@@ -1,12 +1,10 @@
 import type { Firestore } from "firebase-admin/firestore";
-import { KiteConnect } from "kiteconnect";
 import {
   evaluateLiveBuyLimits,
   type LiveCapitalSettings,
 } from "@/lib/live-trading/capital-limits";
+import { algoCapitalBook } from "@/lib/live-trading/live-book";
 import { loadUserSettingsAdmin, listStrategyUserIds } from "@/lib/compliance/admin-data";
-
-type KiteInstance = InstanceType<typeof KiteConnect>;
 
 async function loadLiveSettings(db: Firestore): Promise<LiveCapitalSettings> {
   const userIds = await listStrategyUserIds(db);
@@ -20,52 +18,45 @@ async function loadLiveSettings(db: Firestore): Promise<LiveCapitalSettings> {
   };
 }
 
-/** Server-side gate for live BUY orders using Kite book + Firestore settings. */
+async function loadAlgoDeployed(
+  db: Firestore,
+  appUserId?: string
+): Promise<number> {
+  const userId =
+    appUserId ||
+    (await listStrategyUserIds(db))[0];
+  if (!userId) return 0;
+  const snap = await db.doc(`users/${userId}/data/liveTrading`).get();
+  if (!snap.exists) return 0;
+  return Math.max(0, Number(snap.data()?.algoDeployedCapital ?? 0) || 0);
+}
+
+/**
+ * Server-side gate for live BUY orders.
+ * Uses algo-only deployed ₹ (not the full Zerodha holdings book).
+ */
 export async function assertLiveBuyWithinLimits(input: {
   db: Firestore;
-  kite: KiteInstance;
+  /** Kept for callers; capital gate is algo-only and does not read the broker book. */
+  kite?: unknown;
   side: "BUY" | "SELL";
   qty: number;
   estimatedPrice: number;
+  appUserId?: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   if (input.side !== "BUY") return { ok: true };
 
   const settings = await loadLiveSettings(input.db);
-  let positions: { qty: number; avgPrice: number }[] = [];
-  let holdings: { qty: number; avgPrice: number; invested?: number }[] = [];
-
-  try {
-    const posPayload = await input.kite.getPositions();
-    const net = (posPayload as { net?: any[] })?.net ?? [];
-    positions = net.map((p) => ({
-      qty: Number(p.quantity) || 0,
-      avgPrice: Number(p.average_price) || 0,
-    }));
-  } catch {
-    /* best-effort */
-  }
-
-  try {
-    const holds = (await input.kite.getHoldings()) as any[];
-    holdings = (holds || []).map((h) => ({
-      qty: Number(h.quantity) || 0,
-      avgPrice: Number(h.average_price) || 0,
-      invested:
-        typeof h.average_price === "number" && typeof h.quantity === "number"
-          ? Number(h.average_price) * Number(h.quantity)
-          : undefined,
-    }));
-  } catch {
-    /* best-effort */
-  }
+  const deployed = await loadAlgoDeployed(input.db, input.appUserId);
+  const book = algoCapitalBook(deployed);
 
   const result = evaluateLiveBuyLimits({
     side: "BUY",
     qty: input.qty,
     price: input.estimatedPrice,
     settings,
-    positions,
-    holdings,
+    positions: book.positions,
+    holdings: book.holdings,
   });
 
   if (!result.ok) {
