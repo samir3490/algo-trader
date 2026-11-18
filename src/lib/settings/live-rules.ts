@@ -129,7 +129,7 @@ export const LIVE_RULE_CATALOG: LiveRuleDefinition[] = [
     category: "Ranking",
     label: "Require 3+ strategy signals to buy",
     description:
-      "Live BUY needs agreement from at least three strategies. Same default as paper.",
+      "When on, live BUY needs agreement from at least three strategies. Off by default (same as paper) so fewer signals can still buy.",
     defaultOn: paperDefault("ruleMinBuySignals2"),
     paperKey: "ruleMinBuySignals2",
   },

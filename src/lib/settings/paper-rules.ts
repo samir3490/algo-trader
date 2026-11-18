@@ -79,8 +79,8 @@ export const PAPER_RULE_CATALOG: PaperRuleDefinition[] = [
     category: "Ranking",
     label: "Require 3+ strategy signals to buy",
     description:
-      "A paper BUY needs agreement from at least three strategies on the same symbol. Turn off to allow single-strategy entries.",
-    defaultOn: true,
+      "When on, a paper BUY needs agreement from at least three strategies on the same symbol. Off by default so single- and two-strategy entries are allowed.",
+    defaultOn: false,
   },
   {
     key: "ruleAutoSeedUniverse",

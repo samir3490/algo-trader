@@ -15,7 +15,7 @@ describe("paper-rules", () => {
 
   it("defaults missing flags from catalog", () => {
     assert.equal(isPaperRuleOn({}, "rulePreferStrongSectors"), true);
-    assert.equal(isPaperRuleOn({}, "ruleMinBuySignals2"), true);
+    assert.equal(isPaperRuleOn({}, "ruleMinBuySignals2"), false);
     assert.equal(isPaperRuleOn({}, "ruleClearRebuyLocks"), false);
     assert.equal(
       isPaperRuleOn({ rulePreferStrongSectors: false }, "rulePreferStrongSectors"),
@@ -27,7 +27,7 @@ describe("paper-rules", () => {
     const snap = paperRulesSnapshot(DEFAULT_SETTINGS);
     assert.equal(snap.ruleFixedNotional1L, true);
     assert.equal(snap.rulePreferStrongSectors, true);
-    assert.equal(snap.ruleMinBuySignals2, true);
+    assert.equal(snap.ruleMinBuySignals2, false);
     assert.equal(snap.ruleClearRebuyLocks, false);
     assert.equal(snap.ruleMaxPositions25, true);
   });

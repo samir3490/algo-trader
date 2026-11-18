@@ -330,10 +330,25 @@ async function loadUserSettings(
       bootstrapPatch.liveAutoTradingEnabled ?? after.liveAutoTradingEnabled;
   }
 
+  // One-shot: allow buys with fewer than 3 strategy signals (paper + live).
+  const relaxMinSignals =
+    raw.minBuySignalsRelaxedV1 !== true
+      ? {
+          ruleMinBuySignals2: false,
+          liveRuleMinBuySignals3: false,
+          minBuySignalsRelaxedV1: true,
+        }
+      : null;
+  if (relaxMinSignals) {
+    after.ruleMinBuySignals2 = false;
+    after.liveRuleMinBuySignals3 = false;
+  }
+
   const antiChurn = antiChurnSettingsPersistPatch(before, after);
   const patch: Record<string, unknown> = {
     ...(antiChurn ?? {}),
     ...(bootstrapPatch ?? {}),
+    ...(relaxMinSignals ?? {}),
   };
   if (Object.keys(patch).length > 0) {
     try {

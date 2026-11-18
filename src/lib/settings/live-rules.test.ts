@@ -38,7 +38,7 @@ describe("live rules parity / regression", () => {
 
   it("defaults enable capital limits and quality gates", () => {
     assert.equal(isLiveRuleOn(DEFAULT_SETTINGS, "liveRuleEnforceCapitalLimits"), true);
-    assert.equal(isLiveRuleOn(DEFAULT_SETTINGS, "liveRuleMinBuySignals3"), true);
+    assert.equal(isLiveRuleOn(DEFAULT_SETTINGS, "liveRuleMinBuySignals3"), false);
     assert.equal(isLiveRuleOn(DEFAULT_SETTINGS, "liveRulePreferStrongSectors"), true);
     assert.equal(isLiveRuleOn(DEFAULT_SETTINGS, "liveRuleMaxPositions10"), true);
     assert.equal(isLiveRuleOn(DEFAULT_SETTINGS, "liveRuleBasicExits2and5"), true);

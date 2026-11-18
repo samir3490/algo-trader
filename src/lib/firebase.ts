@@ -507,7 +507,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   liveRuleStrategySellsOff: true,
   liveRuleClearRebuyLocks: false,
   liveRulePreferStrongSectors: true,
-  liveRuleMinBuySignals3: true,
+  liveRuleMinBuySignals3: false,
   liveRuleAutoSeedUniverse: true,
   liveRuleEnforceCapitalLimits: true,
   liveRuleRegimeWeighting: true,
@@ -537,7 +537,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   ruleStrategySellsOff: true,
   ruleClearRebuyLocks: false,
   rulePreferStrongSectors: true,
-  ruleMinBuySignals2: true,
+  ruleMinBuySignals2: false,
   ruleAutoSeedUniverse: true,
   rebuyCooldownMinutes: 240,
   maxRoundTripsPerSymbolPerDay: 1,
@@ -572,13 +572,24 @@ export async function getSettings(): Promise<AppSettings> {
     const ref = doc(db, "users", getUserId(), "data", "settings");
     const snap = await getDoc(ref);
     if (snap.exists()) {
+      const raw = snap.data() as Record<string, unknown>;
       const before = {
         ...DEFAULT_SETTINGS,
-        ...snap.data(),
+        ...raw,
       } as AppSettings;
       const after = normalizeAppSettings(before);
-      const patch = antiChurnSettingsPersistPatch(before, after);
-      if (patch) {
+      const patch: Partial<AppSettings> & Record<string, unknown> = {
+        ...(antiChurnSettingsPersistPatch(before, after) ?? {}),
+      };
+      // One-shot: allow buys with fewer than 3 strategy signals.
+      if (raw.minBuySignalsRelaxedV1 !== true) {
+        after.ruleMinBuySignals2 = false;
+        after.liveRuleMinBuySignals3 = false;
+        patch.ruleMinBuySignals2 = false;
+        patch.liveRuleMinBuySignals3 = false;
+        patch.minBuySignalsRelaxedV1 = true;
+      }
+      if (Object.keys(patch).length > 0) {
         void saveSettings(patch).catch(() => {});
       }
       return after;
