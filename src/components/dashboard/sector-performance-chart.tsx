@@ -143,9 +143,9 @@ export default function SectorPerformanceChart({
                     <button
                       type="button"
                       onClick={() => setExpandedId(open ? null : row.id)}
-                      className="w-full flex items-center justify-between px-3 py-2.5 text-left hover:bg-bg-hover/50 transition-colors"
+                      className="w-full flex items-center gap-3 px-3 py-2 text-left hover:bg-bg-hover/50 transition-colors"
                     >
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-2 w-36 shrink-0 min-w-0">
                         {hasDrivers ? (
                           open ? (
                             <ChevronDown className="h-4 w-4 text-text-tertiary shrink-0" />
@@ -161,7 +161,7 @@ export default function SectorPerformanceChart({
                       </div>
                       <span
                         className={cn(
-                          "text-sm font-semibold tabular-nums shrink-0 ml-2",
+                          "text-sm font-semibold tabular-nums shrink-0",
                           row.changePercent >= 0 ? "text-profit" : "text-loss"
                         )}
                       >
@@ -220,9 +220,9 @@ function DriverList({
         {stocks.map((s) => (
           <li
             key={s.symbol}
-            className="flex items-center justify-between text-xs rounded-md bg-bg-tertiary/50 px-2 py-1.5"
+            className="inline-flex items-center gap-3 text-sm rounded-md bg-bg-tertiary/50 px-2 py-1"
           >
-            <span className="font-medium text-text-primary">{s.symbol}</span>
+            <span className="font-medium text-text-primary w-20 truncate">{s.symbol}</span>
             <span
               className={cn(
                 "font-semibold tabular-nums",

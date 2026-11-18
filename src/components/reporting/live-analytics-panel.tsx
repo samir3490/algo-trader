@@ -116,18 +116,18 @@ export default function LiveAnalyticsPanel() {
   ];
 
   return (
-    <section className="rounded-lg border border-mode-live-border/60 bg-bg-secondary p-2.5 sm:p-3">
+    <section className="rounded-lg border border-mode-live-border/60 bg-bg-secondary p-2.5 sm:p-3 w-fit max-w-full">
       <div className="flex items-center justify-between gap-2 mb-2">
         <h2 className="text-sm font-semibold text-text-primary">Live analytics</h2>
         <span className="text-[10px] text-mode-live font-medium">{snap.accountId}</span>
       </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
         {items.map((item) => (
-          <div key={item.label} className="rounded-md border border-border bg-bg-primary/50 px-2 py-1.5">
-            <p className="text-[10px] text-text-tertiary">{item.label}</p>
+          <div key={item.label} className="min-w-0 shrink-0">
+            <p className="text-xs text-text-tertiary">{item.label}</p>
             <p
               className={cn(
-                "text-sm font-bold tabular-nums leading-tight",
+                "text-base font-bold tabular-nums leading-tight whitespace-nowrap",
                 item.tone === "profit" && "text-profit",
                 item.tone === "loss" && "text-loss"
               )}

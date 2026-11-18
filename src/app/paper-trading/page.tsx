@@ -1225,7 +1225,7 @@ export default function PaperTradingPage() {
         )}
 
         {/* Portfolio Summary */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-2">
+        <div className="flex flex-wrap gap-2">
           {summaryItems.map((item) => (
             <StatCard
               key={item.label}
@@ -1990,57 +1990,57 @@ export default function PaperTradingPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Trades</p>
-                <p className="text-sm font-semibold tabular-nums text-text-primary">
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              <div className="min-w-0 shrink-0">
+                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Trades</p>
+                <p className="text-base font-bold tabular-nums text-text-primary leading-tight">
                   {periodTotals.tradeCount}
                 </p>
-                <p className="text-[11px] text-text-tertiary">
-                  {periodTotals.buyCount} buy · {periodTotals.sellCount} sell
+                <p className="text-xs text-text-tertiary mt-0.5">
+                  {periodTotals.buyCount}B · {periodTotals.sellCount}S
                 </p>
               </div>
-              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Buy amount</p>
-                <p className="text-sm font-semibold tabular-nums text-text-primary">
+              <div className="min-w-0 shrink-0">
+                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Buy</p>
+                <p className="text-base font-bold tabular-nums text-text-primary leading-tight whitespace-nowrap">
                   {formatCurrency(periodTotals.buyTurnover)}
                 </p>
               </div>
-              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Sell amount</p>
-                <p className="text-sm font-semibold tabular-nums text-text-primary">
+              <div className="min-w-0 shrink-0">
+                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Sell</p>
+                <p className="text-base font-bold tabular-nums text-text-primary leading-tight whitespace-nowrap">
                   {formatCurrency(periodTotals.sellTurnover)}
                 </p>
               </div>
-              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Total traded</p>
-                <p className="text-sm font-semibold tabular-nums text-text-primary">
+              <div className="min-w-0 shrink-0">
+                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Traded</p>
+                <p className="text-base font-bold tabular-nums text-text-primary leading-tight whitespace-nowrap">
                   {formatCurrency(periodTotals.totalTurnover)}
                 </p>
               </div>
-              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Realized P&amp;L</p>
+              <div className="min-w-0 shrink-0">
+                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Realized</p>
                 <p
                   className={cn(
-                    "text-sm font-semibold tabular-nums",
+                    "text-base font-bold tabular-nums leading-tight whitespace-nowrap",
                     periodTotals.realizedPnl >= 0 ? "text-profit" : "text-loss"
                   )}
                 >
                   {periodTotals.realizedPnl >= 0 ? "+" : ""}
                   {formatCurrency(periodTotals.realizedPnl)}
                 </p>
-                <p className="text-[11px] text-text-tertiary">
-                  {periodTotals.wins}W / {periodTotals.losses}L
+                <p className="text-xs text-text-tertiary mt-0.5">
+                  {periodTotals.wins}W/{periodTotals.losses}L
                   {periodTotals.winRate > 0 ? ` · ${periodTotals.winRate}%` : ""}
                 </p>
               </div>
-              <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
-                <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Fees</p>
-                <p className="text-sm font-semibold tabular-nums text-text-primary">
+              <div className="min-w-0 shrink-0">
+                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Fees</p>
+                <p className="text-base font-bold tabular-nums text-text-primary leading-tight whitespace-nowrap">
                   {formatCurrency(periodTotals.fees)}
                 </p>
                 {periodTotals.feesEstimated && (
-                  <p className="text-[11px] text-text-tertiary">est. Zerodha schedule</p>
+                  <p className="text-xs text-text-tertiary mt-0.5">est.</p>
                 )}
               </div>
             </div>
@@ -2332,7 +2332,7 @@ function SymbolEventsTable({ events }: { events: StrategyTradeEvent[] }) {
                   {ev.side}
                 </span>
               </div>
-              <div className="flex justify-between tabular-nums">
+              <div className="inline-flex items-center gap-3 tabular-nums">
                 <span className="text-text-secondary">
                   {formatNumber(ev.qty)} @ {formatCurrency(ev.price)}
                 </span>

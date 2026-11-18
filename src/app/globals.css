@@ -123,6 +123,12 @@ body {
   padding: 0.5rem 0.625rem;
 }
 
+/* Prefer content-width panels over full-bleed empty stretch */
+@utility pack {
+  width: fit-content;
+  max-width: 100%;
+}
+
 @utility card-hover {
   background-color: var(--color-bg-secondary);
   border: 1px solid var(--color-border);

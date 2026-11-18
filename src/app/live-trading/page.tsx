@@ -993,7 +993,7 @@ function LiveTradingContent() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-2">
+        <div className="flex flex-wrap gap-2">
           <StatCard
             label="Available cash"
             primary={formatCurrency(selectedFunds?.available ?? 0)}
@@ -1236,18 +1236,18 @@ function LiveTradingContent() {
       <div className="p-2.5 sm:p-4 md:p-6 space-y-2.5 sm:space-y-3">
         {/* No Account Warning */}
         {!isCheckingAuth && connectedAccounts.length === 0 && (
-          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <AlertTriangle className="h-5 w-5 text-emerald-800" />
+          <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2.5 inline-flex flex-wrap items-center gap-3 max-w-full">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertTriangle className="h-4 w-4 text-emerald-800 shrink-0" />
               <span className="text-emerald-950 text-sm font-medium">
-                No Zerodha accounts connected. Connect an account to start live trading.
+                No Zerodha accounts connected.
               </span>
             </div>
             <a
               href="/api/zerodha/login"
-              className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded transition-colors"
+              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm rounded transition-colors"
             >
-              Connect to Zerodha
+              Connect Zerodha
             </a>
           </div>
         )}

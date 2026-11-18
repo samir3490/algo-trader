@@ -68,21 +68,13 @@ function MetricsGrid({
     },
   ];
   return (
-    <div
-      className={cn(
-        "grid gap-2",
-        compact ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
-      )}
-    >
+    <div className="flex flex-wrap gap-x-5 gap-y-2">
       {items.map((item) => (
-        <div
-          key={item.label}
-          className="rounded-lg border border-border bg-bg-primary/50 px-3 py-2"
-        >
-          <p className="text-[10px] text-text-tertiary uppercase">{item.label}</p>
+        <div key={item.label} className="min-w-0 shrink-0">
+          <p className="text-xs text-text-tertiary uppercase">{item.label}</p>
           <p
             className={cn(
-              "text-sm font-semibold tabular-nums break-words leading-snug",
+              "text-base font-semibold tabular-nums leading-tight whitespace-nowrap",
               item.positive === true && "text-profit",
               item.positive === false && "text-loss"
             )}
@@ -128,16 +120,16 @@ function GroupTable({ title, rows }: { title: string; rows: GroupedAnalytics[] }
       </div>
       <div className="md:hidden divide-y divide-border/50 max-h-64 overflow-y-auto">
         {sorted.map((r) => (
-          <div key={r.key} className="px-4 py-3 flex justify-between gap-2">
-            <div>
-              <p className="text-sm font-medium text-text-primary">{r.label}</p>
-              <p className="text-[10px] text-text-tertiary">
+          <div key={r.key} className="px-3 py-2 inline-flex items-start gap-3 max-w-full">
+            <div className="w-40 min-w-0">
+              <p className="text-sm font-medium text-text-primary truncate">{r.label}</p>
+              <p className="text-xs text-text-tertiary">
                 {r.roundTrips} trips · WR {r.metrics.winRate.toFixed(0)}%
               </p>
             </div>
             <p
               className={cn(
-                "text-sm font-semibold tabular-nums",
+                "text-sm font-semibold tabular-nums whitespace-nowrap",
                 r.metrics.netPnl >= 0 ? "text-profit" : "text-loss"
               )}
             >
@@ -438,29 +430,29 @@ export default function AnalyticsPanel() {
         )}
         {benchmark && (
           <>
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div className="rounded-lg bg-bg-tertiary/50 p-3">
-                <p className="text-[10px] text-text-tertiary">Paper</p>
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              <div className="min-w-0 shrink-0">
+                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Paper</p>
                 <p
                   className={cn(
-                    "text-lg font-semibold",
+                    "text-base sm:text-lg font-bold tabular-nums leading-tight",
                     benchmark.paperReturnPct >= 0 ? "text-profit" : "text-loss"
                   )}
                 >
                   {formatPercent(benchmark.paperReturnPct)}
                 </p>
               </div>
-              <div className="rounded-lg bg-bg-tertiary/50 p-3">
-                <p className="text-[10px] text-text-tertiary">Nifty 50</p>
-                <p className="text-lg font-semibold text-text-primary">
+              <div className="min-w-0 shrink-0">
+                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Nifty 50</p>
+                <p className="text-base sm:text-lg font-bold tabular-nums text-text-primary leading-tight">
                   {formatPercent(benchmark.benchmarkReturnPct)}
                 </p>
               </div>
-              <div className="rounded-lg bg-bg-tertiary/50 p-3">
-                <p className="text-[10px] text-text-tertiary">Alpha</p>
+              <div className="min-w-0 shrink-0">
+                <p className="text-xs font-medium text-text-tertiary leading-none mb-0.5">Alpha</p>
                 <p
                   className={cn(
-                    "text-lg font-semibold",
+                    "text-base sm:text-lg font-bold tabular-nums leading-tight",
                     benchmark.alphaPct >= 0 ? "text-profit" : "text-loss"
                   )}
                 >

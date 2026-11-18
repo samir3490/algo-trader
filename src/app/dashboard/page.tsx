@@ -46,6 +46,7 @@ import PageHeader from "@/components/ui/page-header";
 import { SkeletonChart } from "@/components/ui/skeleton";
 import { chartTokens } from "@/lib/ui/chart-tokens";
 import ExecutiveSummaryButton from "@/components/reporting/executive-summary-button";
+import MetricStrip from "@/components/ui/metric-strip";
 
 interface Holding {
   symbol: string;
@@ -288,52 +289,36 @@ export default function DashboardPage() {
 
       <WatchlistPanel />
 
-      <section className="rounded-lg border border-mode-paper-border bg-mode-paper-muted/70 p-2.5 sm:p-3 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-baseline gap-2 min-w-0">
-            <h2 className="text-sm font-semibold text-mode-paper-fg">Paper</h2>
-            <span className="text-[10px] uppercase tracking-wide text-mode-paper">Simulated</span>
-          </div>
+      <section className="rounded-lg border border-mode-paper-border bg-mode-paper-muted/70 p-2.5 sm:p-3 w-fit max-w-full">
+        <div className="flex flex-wrap items-center gap-2 mb-2">
+          <h2 className="text-sm font-semibold text-mode-paper-fg">Paper</h2>
+          <span className="text-xs uppercase tracking-wide text-mode-paper">Simulated</span>
           <Link
             href="/paper-trading"
-            className="rounded-md bg-mode-paper px-2 py-1 text-[11px] font-semibold text-white hover:bg-mode-paper-hover"
+            className="rounded-md bg-mode-paper px-2 py-1 text-xs font-semibold text-white hover:bg-mode-paper-hover"
           >
             Open →
           </Link>
         </div>
-        <div className="grid grid-cols-3 gap-1.5">
-          <div className="rounded-md border border-mode-paper-border bg-white/80 px-2 py-1.5">
-            <p className="text-[10px] text-text-tertiary">Cash</p>
-            <p className="text-sm font-bold text-text-primary tabular-nums leading-tight break-words">
-              {formatCurrency(portfolio.balance)}
-            </p>
-          </div>
-          <div className="rounded-md border border-mode-paper-border bg-white/80 px-2 py-1.5">
-            <p className="text-[10px] text-text-tertiary">Invested</p>
-            <p className="text-sm font-bold text-text-primary tabular-nums leading-tight break-words">
-              {formatCurrency(invested)}
-            </p>
-            {invested > 0 && (
-              <p className="text-[10px] text-text-tertiary truncate">
-                Mkt {formatCurrency(portfolio.currentValue)}
-              </p>
-            )}
-          </div>
-          <div className="rounded-md border border-mode-paper-border bg-white/80 px-2 py-1.5">
-            <p className="text-[10px] text-text-tertiary">Realized</p>
-            <p
-              className={cn(
-                "text-sm font-bold tabular-nums leading-tight break-words",
-                realizedPnl >= 0 ? "text-profit" : "text-loss"
-              )}
-            >
-              {formatCurrency(realizedPnl)}
-            </p>
-            <p className={cn("text-[10px] font-medium", isProfit ? "text-profit" : "text-loss")}>
-              {formatPercent(allTimePnlPercent)} vs start
-            </p>
-          </div>
-        </div>
+        <MetricStrip
+          items={[
+            { label: "Cash", value: formatCurrency(portfolio.balance) },
+            {
+              label: "Invested",
+              value: formatCurrency(invested),
+              sub:
+                invested > 0
+                  ? `Mkt ${formatCurrency(portfolio.currentValue)}`
+                  : undefined,
+            },
+            {
+              label: "Realized",
+              value: formatCurrency(realizedPnl),
+              sub: `${formatPercent(allTimePnlPercent)} vs start`,
+              tone: realizedPnl >= 0 ? "profit" : "loss",
+            },
+          ]}
+        />
       </section>
 
       <LiveTradingDashboardStrip />
@@ -389,43 +374,30 @@ export default function DashboardPage() {
           </div>
         </div>
         {chartHasData && (
-          <div className="mb-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-            <div className="rounded-md border border-border/60 bg-bg-secondary/40 px-2 py-1.5">
-              <p className="text-[10px] text-text-tertiary">Trades</p>
-              <p className="text-sm font-semibold tabular-nums leading-tight">
-                {chartPeriodTotals.tradeCount}
-              </p>
-              <p className="text-[10px] text-text-tertiary">
-                {chartPeriodTotals.buyCount}B · {chartPeriodTotals.sellCount}S
-              </p>
-            </div>
-            <div className="rounded-md border border-border/60 bg-bg-secondary/40 px-2 py-1.5">
-              <p className="text-[10px] text-text-tertiary">Traded</p>
-              <p className="text-sm font-semibold tabular-nums leading-tight">
-                {formatCurrency(chartPeriodTotals.totalTurnover)}
-              </p>
-            </div>
-            <div className="rounded-md border border-border/60 bg-bg-secondary/40 px-2 py-1.5">
-              <p className="text-[10px] text-text-tertiary">Realized</p>
-              <p
-                className={cn(
-                  "text-sm font-semibold tabular-nums leading-tight",
-                  chartPeriodTotals.realizedPnl >= 0 ? "text-profit" : "text-loss"
-                )}
-              >
-                {formatCurrency(chartPeriodTotals.realizedPnl)}
-              </p>
-              <p className="text-[10px] text-text-tertiary">
-                {chartPeriodTotals.wins}W/{chartPeriodTotals.losses}L
-              </p>
-            </div>
-            <div className="rounded-md border border-border/60 bg-bg-secondary/40 px-2 py-1.5">
-              <p className="text-[10px] text-text-tertiary">Fees</p>
-              <p className="text-sm font-semibold tabular-nums leading-tight">
-                {formatCurrency(chartPeriodTotals.fees)}
-              </p>
-            </div>
-          </div>
+          <MetricStrip
+            className="mb-2"
+            items={[
+              {
+                label: "Trades",
+                value: String(chartPeriodTotals.tradeCount),
+                sub: `${chartPeriodTotals.buyCount}B · ${chartPeriodTotals.sellCount}S`,
+              },
+              {
+                label: "Traded",
+                value: formatCurrency(chartPeriodTotals.totalTurnover),
+              },
+              {
+                label: "Realized",
+                value: formatCurrency(chartPeriodTotals.realizedPnl),
+                sub: `${chartPeriodTotals.wins}W/${chartPeriodTotals.losses}L`,
+                tone: chartPeriodTotals.realizedPnl >= 0 ? "profit" : "loss",
+              },
+              {
+                label: "Fees",
+                value: formatCurrency(chartPeriodTotals.fees),
+              },
+            ]}
+          />
         )}
         <div className="h-52 sm:h-64">
           {chartHasData ? (

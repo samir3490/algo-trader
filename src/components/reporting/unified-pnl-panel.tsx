@@ -135,7 +135,7 @@ export default function UnifiedPnlPanel() {
   }, [book, paper, live]);
 
   return (
-    <section className="rounded-lg border border-border bg-bg-secondary p-2.5 sm:p-3">
+    <section className="rounded-lg border border-border bg-bg-secondary p-2.5 sm:p-3 w-fit max-w-full">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
         <h2 className="text-sm font-semibold text-text-primary">Unified P&amp;L</h2>
         <div className="flex items-center gap-1">
@@ -188,13 +188,13 @@ export default function UnifiedPnlPanel() {
           {book === "live" ? "Connect Zerodha to see live P&L." : "No paper data yet."}
         </p>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+        <div className="flex flex-wrap gap-x-5 gap-y-2">
           {rows.map((r) => (
-            <div key={r.label} className="rounded-md border border-border bg-bg-primary/60 px-2 py-1.5">
-              <p className="text-[10px] text-text-tertiary">{r.label}</p>
+            <div key={r.label} className="min-w-0 shrink-0">
+              <p className="text-xs text-text-tertiary">{r.label}</p>
               <p
                 className={cn(
-                  "text-sm font-bold tabular-nums leading-tight",
+                  "text-base font-bold tabular-nums leading-tight whitespace-nowrap",
                   "plain" in r && r.plain
                     ? "text-text-primary"
                     : r.value >= 0

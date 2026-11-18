@@ -113,10 +113,10 @@ export default function WatchlistPanel() {
   }
 
   return (
-    <section className="rounded-lg border border-border bg-bg-secondary p-2.5 sm:p-3">
-      <div className="flex items-center justify-between gap-2 mb-2">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <Star className="h-3.5 w-3.5 text-accent shrink-0" />
+    <section className="rounded-lg border border-border bg-bg-secondary p-2.5 sm:p-3 w-fit max-w-full">
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <div className="flex items-center gap-1.5">
+          <Star className="h-4 w-4 text-accent shrink-0" />
           <h2 className="text-sm font-semibold text-text-primary">Watchlist</h2>
         </div>
         <form
@@ -129,8 +129,8 @@ export default function WatchlistPanel() {
           <input
             value={symbol}
             onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-            placeholder="Add"
-            className="w-24 sm:w-28 h-8 rounded-md border border-border bg-bg-primary px-2 text-xs text-text-primary outline-none focus:border-accent"
+            placeholder="Add symbol"
+            className="w-28 h-8 rounded-md border border-border bg-bg-primary px-2 text-sm text-text-primary outline-none focus:border-accent"
             inputMode="text"
             autoCapitalize="characters"
           />
@@ -142,13 +142,13 @@ export default function WatchlistPanel() {
             className="!min-h-8 !px-2"
             aria-label="Add to watchlist"
           >
-            <span className="sr-only sm:not-sr-only sm:inline">Add</span>
+            Add
           </Button>
         </form>
       </div>
 
       {loading ? (
-        <div className="space-y-1">
+        <div className="space-y-1 w-72">
           {Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={i} className="h-8 w-full rounded-md" />
           ))}
@@ -166,19 +166,20 @@ export default function WatchlistPanel() {
             const up = (row.changePercent ?? 0) >= 0;
             return (
               <li key={`${row.exchange}:${row.symbol}`}>
-                <div className="flex items-center gap-2.5 py-1.5 min-h-8">
+                {/* Packed row — no stretch / no far-right delete */}
+                <div className="inline-flex items-center gap-3 py-1.5 min-h-9 max-w-full">
                   <Link
                     href={`/paper-trading?symbol=${encodeURIComponent(row.symbol)}`}
-                    className="w-[5.25rem] shrink-0 touch-manipulation"
+                    className="w-[5.5rem] shrink-0 touch-manipulation"
                   >
-                    <span className="block text-xs font-semibold text-text-primary truncate leading-tight">
+                    <span className="block text-sm font-semibold text-text-primary truncate leading-tight">
                       {row.symbol}
                     </span>
-                    <span className="block text-[10px] text-text-tertiary leading-none">
+                    <span className="block text-xs text-text-tertiary leading-none">
                       {row.exchange}
                     </span>
                   </Link>
-                  <span className="w-[5.75rem] shrink-0 text-right tabular-nums text-xs font-semibold text-text-primary">
+                  <span className="tabular-nums text-sm font-semibold text-text-primary whitespace-nowrap">
                     {row.lastPrice != null ? (
                       formatCurrency(row.lastPrice)
                     ) : (
@@ -187,7 +188,7 @@ export default function WatchlistPanel() {
                   </span>
                   <span
                     className={cn(
-                      "w-12 shrink-0 text-right tabular-nums text-[11px] font-medium",
+                      "tabular-nums text-sm font-medium whitespace-nowrap min-w-[3.25rem]",
                       row.changePercent == null
                         ? "text-text-tertiary"
                         : up
@@ -202,7 +203,7 @@ export default function WatchlistPanel() {
                   <button
                     type="button"
                     onClick={() => void removeSymbol(row.symbol)}
-                    className="ml-auto p-1 rounded-md text-text-tertiary hover:text-loss hover:bg-loss-muted touch-manipulation"
+                    className="p-1 rounded-md text-text-tertiary hover:text-loss hover:bg-loss-muted touch-manipulation"
                     aria-label={`Remove ${row.symbol}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />

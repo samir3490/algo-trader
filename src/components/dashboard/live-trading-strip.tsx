@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import { getSettings } from "@/lib/firebase";
+import MetricStrip from "@/components/ui/metric-strip";
 
 interface LiveSnapshot {
   available: number;
@@ -32,7 +33,7 @@ const EMPTY: LiveSnapshot = {
   orderNotional: 5_000,
 };
 
-/** Compact live Zerodha numbers — separate from paper KPIs on the dashboard. */
+/** Compact live Zerodha numbers — content-width, no empty stretch. */
 export default function LiveTradingDashboardStrip() {
   const { user } = useAuth();
   const [snap, setSnap] = useState<LiveSnapshot>(EMPTY);
@@ -111,35 +112,33 @@ export default function LiveTradingDashboardStrip() {
   }, [user]);
 
   return (
-    <section className="rounded-lg border border-mode-live-border bg-mode-live-muted/80 p-2.5 sm:p-3 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 min-w-0">
-          <h2 className="text-sm font-semibold text-mode-live-fg">Live</h2>
-          <span className="text-[10px] uppercase tracking-wide text-mode-live">Real money</span>
-          <span
-            className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase",
-              snap.autoOn ? "bg-red-100 text-red-800" : "bg-mode-live-soft text-mode-live-fg"
-            )}
-          >
-            Auto {snap.autoOn ? "ON" : "OFF"}
-          </span>
-        </div>
+    <section className="rounded-lg border border-mode-live-border bg-mode-live-muted/80 p-2.5 sm:p-3 w-fit max-w-full">
+      <div className="flex flex-wrap items-center gap-2 mb-2">
+        <h2 className="text-sm font-semibold text-mode-live-fg">Live</h2>
+        <span className="text-xs uppercase tracking-wide text-mode-live">Real money</span>
+        <span
+          className={cn(
+            "rounded px-1.5 py-0.5 text-xs font-semibold uppercase",
+            snap.autoOn ? "bg-red-100 text-red-800" : "bg-mode-live-soft text-mode-live-fg"
+          )}
+        >
+          Auto {snap.autoOn ? "ON" : "OFF"}
+        </span>
         <Link
           href="/live-trading"
-          className="rounded-md bg-mode-live px-2 py-1 text-[11px] font-semibold text-white hover:bg-mode-live-hover"
+          className="rounded-md bg-mode-live px-2 py-1 text-xs font-semibold text-white hover:bg-mode-live-hover"
         >
           Open →
         </Link>
       </div>
 
       {loading ? (
-        <div className="flex items-center gap-2 py-2 text-xs text-text-tertiary">
+        <div className="flex items-center gap-2 py-1 text-sm text-text-tertiary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
           Loading…
         </div>
       ) : !snap.connected ? (
-        <p className="text-xs text-text-secondary leading-snug">
+        <p className="text-sm text-text-secondary leading-snug max-w-md">
           Connect Zerodha in{" "}
           <Link href="/settings?tab=live" className="text-mode-live font-medium underline">
             Settings → Live
@@ -148,34 +147,21 @@ export default function LiveTradingDashboardStrip() {
           {snap.orderNotional.toLocaleString("en-IN")}
         </p>
       ) : (
-        <div className="grid grid-cols-3 gap-1.5">
-          <div className="rounded-md border border-mode-live-border bg-white/80 px-2 py-1.5">
-            <p className="text-[10px] text-text-tertiary">Cash</p>
-            <p className="text-sm font-bold text-mode-live-fg tabular-nums leading-tight break-words">
-              {formatCurrency(snap.available)}
-            </p>
-          </div>
-          <div className="rounded-md border border-mode-live-border bg-white/80 px-2 py-1.5">
-            <p className="text-[10px] text-text-tertiary">Margin</p>
-            <p className="text-sm font-bold text-text-primary tabular-nums leading-tight break-words">
-              {formatCurrency(snap.used)}
-            </p>
-            <p className="text-[10px] text-text-tertiary truncate">
-              {snap.openQty} open
-            </p>
-          </div>
-          <div className="rounded-md border border-mode-live-border bg-white/80 px-2 py-1.5">
-            <p className="text-[10px] text-text-tertiary">Day P&amp;L</p>
-            <p
-              className={cn(
-                "text-sm font-bold tabular-nums leading-tight break-words",
-                snap.dayPnl >= 0 ? "text-profit" : "text-loss"
-              )}
-            >
-              {formatCurrency(snap.dayPnl)}
-            </p>
-          </div>
-        </div>
+        <MetricStrip
+          items={[
+            { label: "Cash", value: formatCurrency(snap.available), tone: "live" },
+            {
+              label: "Margin",
+              value: formatCurrency(snap.used),
+              sub: `${snap.openQty} open`,
+            },
+            {
+              label: "Day P&L",
+              value: formatCurrency(snap.dayPnl),
+              tone: snap.dayPnl >= 0 ? "profit" : "loss",
+            },
+          ]}
+        />
       )}
     </section>
   );

@@ -624,11 +624,11 @@ export default function OrdersPage() {
                   </span>
                   <span className="text-text-secondary">{order.type}</span>
                 </div>
-                <div className="flex justify-between text-xs text-text-secondary">
+                <div className="inline-flex items-center gap-3 text-xs text-text-secondary">
                   <span>
                     {order.quantity} @ {formatCurrency(order.price)}
                   </span>
-                  <span className="font-medium text-text-primary">
+                  <span className="font-medium text-text-primary tabular-nums">
                     {formatCurrency(order.price * order.quantity)}
                   </span>
                 </div>

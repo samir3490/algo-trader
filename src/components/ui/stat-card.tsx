@@ -11,9 +11,7 @@ export interface StatCardProps {
   icon: LucideIcon;
   colorClass?: string;
   className?: string;
-  /** Mode-aware chrome (icon well + border accent). */
   mode?: StatCardMode;
-  /** Compact KPI — less padding, tighter type (default). */
   dense?: boolean;
 }
 
@@ -38,7 +36,10 @@ const modeStyles: Record<
   },
 };
 
-/** Dense KPI tile — value first, no wasted vertical space. */
+/**
+ * Content-sized KPI tile — does not stretch empty width.
+ * Parent should use flex-wrap, not equal-width full-bleed grids.
+ */
 export default function StatCard({
   label,
   primary,
@@ -55,36 +56,37 @@ export default function StatCard({
   return (
     <div
       className={cn(
-        "rounded-lg border border-border bg-bg-secondary",
-        dense ? "px-2.5 py-2" : "card p-3",
+        "rounded-lg border border-border bg-bg-secondary inline-flex flex-col",
+        "w-max max-w-full min-w-[9.5rem]",
+        dense ? "px-2.5 py-2" : "px-3 py-2.5",
         chrome.card,
         className
       )}
     >
       <div className="flex items-center gap-1.5 mb-0.5">
-        <div className={cn("rounded-md shrink-0", dense ? "p-1" : "p-1.5", chrome.iconWell)}>
-          <Icon className={cn(dense ? "w-3 h-3" : "w-3.5 h-3.5", chrome.icon)} />
+        <div className={cn("rounded-md shrink-0 p-1", chrome.iconWell)}>
+          <Icon className={cn("w-3.5 h-3.5", chrome.icon)} />
         </div>
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary leading-none truncate">
+        <p className="text-xs font-semibold uppercase tracking-wide text-text-tertiary leading-none">
           {label}
         </p>
       </div>
       <p
         className={cn(
-          "font-bold tabular-nums leading-tight break-words",
-          dense ? "text-base sm:text-lg" : "text-lg sm:text-xl",
+          "font-bold tabular-nums leading-tight whitespace-nowrap",
+          "text-base sm:text-lg",
           colorClass
         )}
       >
         {primary}
         {secondary ? (
-          <span className={cn("ml-1.5 text-xs sm:text-sm font-semibold", colorClass)}>
+          <span className={cn("ml-1.5 text-sm font-semibold", colorClass)}>
             {secondary}
           </span>
         ) : null}
       </p>
       {hint && (
-        <p className="text-[10px] text-text-tertiary mt-0.5 leading-snug line-clamp-2">
+        <p className="text-xs text-text-tertiary mt-0.5 leading-snug max-w-[14rem]">
           {hint}
         </p>
       )}

@@ -252,11 +252,13 @@ export default function LastScanPanel({
               {activeList.map((item, i) => (
                 <li
                   key={`${item.symbol}-${i}`}
-                  className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                  className="inline-flex items-center gap-3 px-3 py-2 text-sm max-w-full"
                 >
-                  <span className="font-medium text-text-primary">{item.symbol}</span>
+                  <span className="font-medium text-text-primary w-24 shrink-0 truncate">
+                    {item.symbol}
+                  </span>
                   {item.meta && (
-                    <span className="shrink-0 text-right text-xs text-text-tertiary max-w-[60%] truncate">
+                    <span className="text-xs text-text-tertiary truncate max-w-[14rem]">
                       {item.meta}
                     </span>
                   )}
@@ -321,9 +323,9 @@ export default function LastScanPanel({
                 {reasons.map(([reason, count]) => (
                   <li
                     key={reason}
-                    className="flex items-center justify-between gap-3 rounded-lg bg-bg-tertiary/50 px-3 py-2 text-sm"
+                    className="inline-flex items-center gap-3 rounded-lg bg-bg-tertiary/50 px-3 py-2 text-sm max-w-full"
                   >
-                    <span className="text-text-secondary">{reason}</span>
+                    <span className="text-text-secondary truncate max-w-[16rem]">{reason}</span>
                     <span className="shrink-0 font-mono text-xs text-text-tertiary">{count}</span>
                   </li>
                 ))}
