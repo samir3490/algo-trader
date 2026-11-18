@@ -51,6 +51,7 @@ import {
 import { isPaperRuleOn } from "@/lib/settings/paper-rules";
 import { isLiveRuleOn } from "@/lib/settings/live-rules";
 import { placeLiveAlgoOrder } from "@/lib/live-trading/place-live-algo-order";
+import { isLiveTradingEnabled } from "@/lib/core/config";
 import { todayDateKeyIST } from "@/lib/portfolio/compute-portfolio";
 import {
   mergeScanIntoDayRollup,
@@ -301,17 +302,42 @@ async function loadUserSettings(
 ): Promise<AppSettings> {
   const snap = await db.doc(`users/${userId}/data/settings`).get();
   if (!snap.exists) return normalizeAppSettings(DEFAULT_SETTINGS);
+  const raw = snap.data() as Record<string, unknown>;
   const before = {
     ...DEFAULT_SETTINGS,
-    ...snap.data(),
+    ...raw,
   } as AppSettings;
   const after = normalizeAppSettings(before);
-  const patch = antiChurnSettingsPersistPatch(before, after);
-  if (patch) {
+
+  // One-shot: when server live trading is enabled, turn the user kill switch ON
+  // once so BUY/SELL can run during market hours. Kill switch still works after.
+  const alreadyBootstrapped = raw.liveAutoBootstrapDone === true;
+  const bootstrapPatch =
+    isLiveTradingEnabled() &&
+    !alreadyBootstrapped &&
+    after.liveAutoTradingEnabled !== true
+      ? {
+          liveAutoTradingEnabled: true,
+          liveAutoBootstrapDone: true,
+        }
+      : isLiveTradingEnabled() && !alreadyBootstrapped
+        ? { liveAutoBootstrapDone: true }
+        : null;
+  if (bootstrapPatch) {
+    after.liveAutoTradingEnabled =
+      bootstrapPatch.liveAutoTradingEnabled ?? after.liveAutoTradingEnabled;
+  }
+
+  const antiChurn = antiChurnSettingsPersistPatch(before, after);
+  const patch: Record<string, unknown> = {
+    ...(antiChurn ?? {}),
+    ...(bootstrapPatch ?? {}),
+  };
+  if (Object.keys(patch).length > 0) {
     try {
       await db.doc(`users/${userId}/data/settings`).set(patch, { merge: true });
     } catch (e) {
-      console.warn(`Failed to persist anti-churn settings for ${userId}:`, e);
+      console.warn(`Failed to persist settings patch for ${userId}:`, e);
     }
   }
   return after;
