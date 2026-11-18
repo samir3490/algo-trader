@@ -10,6 +10,8 @@ export type ScanDetailKey =
   | "buyApproved"
   | "sellApproved"
   | "paperExec"
+  | "liveExec"
+  | "liveSkip"
   | "liveOnly"
   | "openPositions"
   | "deferred"

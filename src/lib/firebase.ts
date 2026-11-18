@@ -372,6 +372,22 @@ export interface AppSettings {
   liveOrderNotional: number;
   /** Max ₹ total deployed in live positions/holdings for algo buys (default ₹50,000). */
   liveCapitalLimit: number;
+  /** Master switch: cron may place real Zerodha orders when ENABLE_LIVE_TRADING is also true. */
+  liveAutoTradingEnabled: boolean;
+  liveRuleFixedOrderNotional: boolean;
+  liveRuleBasicExits2and5: boolean;
+  liveRuleMaxPositions10: boolean;
+  liveRuleStrategySellsOff: boolean;
+  liveRuleClearRebuyLocks: boolean;
+  liveRulePreferStrongSectors: boolean;
+  liveRuleMinBuySignals3: boolean;
+  liveRuleAutoSeedUniverse: boolean;
+  liveRuleEnforceCapitalLimits: boolean;
+  liveRuleRegimeWeighting: boolean;
+  liveRuleEntryConnectedExits: boolean;
+  liveRuleNotifyEmailDigest: boolean;
+  liveRuleNotifyRiskExits: boolean;
+  liveRuleNotifyWeeklyShortlist: boolean;
   paperStartingBalance: number;
   simulateBrokerage: boolean;
   stopLossPercent: number;
@@ -450,7 +466,7 @@ export interface AppSettings {
   regimeAdxSlopeWindow: number;
   /** RSI overbought for SELL when entry was momentum/breakout. */
   momentumRsiOverbought: number;
-  /** When true (default), live auto-trading uses paper automation fields. */
+  /** When true, live auto-trading uses paper automation fields. Default false. */
   liveMirrorPaperAutomation: boolean;
   liveEnableRegimeWeighting?: boolean;
   liveEnableEntryConnectedExits?: boolean;
@@ -484,6 +500,22 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxDailyLoss: 0,
   liveOrderNotional: 5_000,
   liveCapitalLimit: 50_000,
+  liveAutoTradingEnabled: false,
+  liveRuleFixedOrderNotional: true,
+  liveRuleBasicExits2and5: true,
+  liveRuleMaxPositions10: true,
+  liveRuleStrategySellsOff: true,
+  liveRuleClearRebuyLocks: false,
+  liveRulePreferStrongSectors: true,
+  liveRuleMinBuySignals3: true,
+  liveRuleAutoSeedUniverse: true,
+  liveRuleEnforceCapitalLimits: true,
+  liveRuleRegimeWeighting: true,
+  liveRuleEntryConnectedExits: true,
+  liveRuleNotifyEmailDigest: true,
+  liveRuleNotifyRiskExits: true,
+  liveRuleNotifyWeeklyShortlist: true,
+  liveMirrorPaperAutomation: false,
   paperStartingBalance: 1000000,
   simulateBrokerage: false,
   stopLossPercent: 2,
@@ -533,7 +565,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   regimeAdxThreshold: 23,
   regimeAdxSlopeWindow: 5,
   momentumRsiOverbought: 85,
-  liveMirrorPaperAutomation: true,
 };
 
 export async function getSettings(): Promise<AppSettings> {

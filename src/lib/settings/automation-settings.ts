@@ -36,7 +36,8 @@ export function resolveAutomationSettings(
   settings: AppSettings,
   mode: AutomationMode
 ): ResolvedAutomationSettings {
-  const mirror = settings.liveMirrorPaperAutomation !== false;
+  // Default off: live capital/rules stay independent of paper.
+  const mirror = settings.liveMirrorPaperAutomation === true;
 
   if (mode === "paper" || mirror) {
     return {

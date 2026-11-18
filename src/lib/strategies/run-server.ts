@@ -49,6 +49,8 @@ import {
   SIMPLE_PAPER_MIN_BUY_SIGNALS,
 } from "@/lib/settings/normalize-settings";
 import { isPaperRuleOn } from "@/lib/settings/paper-rules";
+import { isLiveRuleOn } from "@/lib/settings/live-rules";
+import { placeLiveAlgoOrder } from "@/lib/live-trading/place-live-algo-order";
 import { todayDateKeyIST } from "@/lib/portfolio/compute-portfolio";
 import {
   mergeScanIntoDayRollup,
@@ -1093,6 +1095,95 @@ export async function runStrategiesForUser(
 
       if (resolveStrategyMode(strat) === "live") {
         diagnostics.liveSignals += 1;
+      }
+
+      // Parallel live auto-buy (independent capital; gated by Live Rules kill switch).
+      const liveAutoOn = isLiveRuleOn(userSettings, "liveAutoTradingEnabled");
+      const liveMinSignalsOk =
+        !isLiveRuleOn(userSettings, "liveRuleMinBuySignals3") ||
+        (decision.buySignalCount ?? 0) >= SIMPLE_PAPER_MIN_BUY_SIGNALS;
+      const liveSectorOk =
+        !isLiveRuleOn(userSettings, "liveRulePreferStrongSectors") ||
+        lookupSectorBias(decision.symbol, sectorBias)?.isStrong === true;
+      if (liveAutoOn && liveMinSignalsOk && liveSectorOk) {
+        const liveResult = await placeLiveAlgoOrder(db, userId, {
+          side: "BUY",
+          symbol: decision.symbol,
+          exchange,
+          price: decision.price,
+          product: userSettings.defaultProduct || "CNC",
+          settings: {
+            liveOrderNotional: userSettings.liveOrderNotional,
+            liveCapitalLimit: userSettings.liveCapitalLimit,
+            liveAutoTradingEnabled: true,
+            liveRuleEnforceCapitalLimits: isLiveRuleOn(
+              userSettings,
+              "liveRuleEnforceCapitalLimits"
+            ),
+          },
+        });
+        if (liveResult.ok) {
+          diagnostics.liveSignals += 1;
+          addScanDetail(
+            diagnostics,
+            "liveExec",
+            decision.symbol,
+            `LIVE BUY · qty ${liveResult.qty ?? "?"} · ${liveResult.orderId ?? ""}`
+          );
+          queueEmail(
+            "executed",
+            {
+              symbol: decision.symbol,
+              exchange,
+              side: "BUY",
+              quantity: liveResult.qty ?? 0,
+              price: decision.price,
+              status: `LIVE EXECUTED · ${detailedReason}`,
+              strategyName: decision.ownerStrategyName,
+              reason: detailedReason,
+            },
+            {
+              mode: "LIVE",
+              symbol: decision.symbol,
+              exchange,
+              side: "BUY",
+              quantity: liveResult.qty ?? 0,
+              price: decision.price,
+              orderType: "MARKET",
+              product: userSettings.defaultProduct || "CNC",
+              status: `LIVE EXECUTED · ${detailedReason}`,
+              strategyName: decision.ownerStrategyName,
+              reason: detailedReason,
+            }
+          );
+        } else if (!liveResult.skipped) {
+          bumpReason(
+            diagnostics.skipReasons,
+            `Live order failed — ${(liveResult.message || "unknown").slice(0, 120)}`
+          );
+          addScanDetail(
+            diagnostics,
+            "liveSkip",
+            decision.symbol,
+            liveResult.message || "Live order failed"
+          );
+        } else if (liveResult.message) {
+          addScanDetail(
+            diagnostics,
+            "liveSkip",
+            decision.symbol,
+            liveResult.message
+          );
+        }
+      } else if (liveAutoOn && (!liveMinSignalsOk || !liveSectorOk)) {
+        addScanDetail(
+          diagnostics,
+          "liveSkip",
+          decision.symbol,
+          !liveMinSignalsOk
+            ? "Live rule: need 3+ signals"
+            : "Live rule: strong sector only"
+        );
       }
     } else if (message) {
       bumpReason(diagnostics.skipReasons, message);

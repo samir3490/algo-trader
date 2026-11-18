@@ -23,6 +23,8 @@ const DETAIL_LABELS: Record<ScanDetailKey, string> = {
   buyApproved: "BUY approved",
   sellApproved: "SELL approved",
   paperExec: "Paper executed",
+  liveExec: "Live executed",
+  liveSkip: "Live skipped",
   liveOnly: "Live-only signals",
   openPositions: "Open positions",
   deferred: "Deferred (rank)",
@@ -141,13 +143,13 @@ export default function LastScanPanel({
               onSelect={setActiveDetail}
             />
             <Stat
-              label="Live only"
-              value={d.liveSignals}
-              detailKey="liveOnly"
+              label="Live exec"
+              value={details?.liveExec?.length ?? d.liveSignals}
+              detailKey="liveExec"
               getList={listFor}
               activeDetail={activeDetail}
               onSelect={setActiveDetail}
-              highlight={d.liveSignals > 0 && d.paperSignals === 0}
+              highlight={(details?.liveExec?.length ?? 0) > 0}
             />
             <Stat
               label="Open positions"

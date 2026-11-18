@@ -47,6 +47,7 @@ import {
 import MarketTrendHero from "@/components/dashboard/market-trend-hero";
 import SectorPerformanceChart from "@/components/dashboard/sector-performance-chart";
 import PaperHealthStrip from "@/components/dashboard/paper-health-strip";
+import LiveTradingDashboardStrip from "@/components/dashboard/live-trading-strip";
 
 interface Holding {
   symbol: string;
@@ -284,82 +285,86 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="card glow-accent">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-text-secondary">Cash remaining</span>
-            <div className="rounded-lg bg-accent-muted p-2">
-              <IndianRupee className="h-4 w-4 text-accent" />
-            </div>
-          </div>
-          <p className="text-2xl font-bold text-text-primary tabular-nums break-words">
-            {formatCurrency(portfolio.balance)}
-          </p>
-          <p className="text-xs text-text-tertiary mt-1">Available to buy</p>
-          <Link
-            href="/paper-trading"
-            className="text-xs text-accent hover:underline mt-2 inline-block"
-          >
-            Paper trading →
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-sky-800">
+            Paper trading
+          </h2>
+          <Link href="/paper-trading" className="text-xs text-accent hover:underline">
+            Open paper →
           </Link>
         </div>
-
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-text-secondary">Invested</span>
-            <div className="rounded-lg bg-bg-tertiary p-2">
-              <Wallet className="h-4 w-4 text-text-secondary" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="card glow-accent border-sky-200/60">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-secondary">Cash remaining</span>
+              <div className="rounded-lg bg-accent-muted p-1.5">
+                <IndianRupee className="h-4 w-4 text-accent" />
+              </div>
             </div>
+            <p className="text-xl font-bold text-text-primary tabular-nums break-words">
+              {formatCurrency(portfolio.balance)}
+            </p>
+            <p className="text-xs text-text-tertiary mt-1">Simulated · available to buy</p>
           </div>
-          <p className="text-2xl font-bold text-text-primary tabular-nums break-words">
-            {formatCurrency(invested)}
-          </p>
-          <p className="text-xs text-text-tertiary mt-1 leading-relaxed">
-            Cost of open holdings
-            {invested > 0 && (
-              <>
-                <br />
-                Mkt value {formatCurrency(portfolio.currentValue)}
-              </>
-            )}
-          </p>
-        </div>
 
-        <div className="card">
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-sm text-text-secondary">Realized P&amp;L</span>
-            <div className="rounded-lg bg-bg-tertiary p-2">
-              {realizedPnl >= 0 ? (
-                <TrendingUp className="h-4 w-4 text-profit" />
-              ) : (
-                <TrendingDown className="h-4 w-4 text-loss" />
+          <div className="card border-sky-200/40">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-secondary">Invested</span>
+              <div className="rounded-lg bg-bg-tertiary p-1.5">
+                <Wallet className="h-4 w-4 text-text-secondary" />
+              </div>
+            </div>
+            <p className="text-xl font-bold text-text-primary tabular-nums break-words">
+              {formatCurrency(invested)}
+            </p>
+            <p className="text-xs text-text-tertiary mt-1 leading-relaxed">
+              Cost of open holdings
+              {invested > 0 && (
+                <>
+                  <br />
+                  Mkt value {formatCurrency(portfolio.currentValue)}
+                </>
               )}
+            </p>
+          </div>
+
+          <div className="card border-sky-200/40">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm text-text-secondary">Realized P&amp;L</span>
+              <div className="rounded-lg bg-bg-tertiary p-1.5">
+                {realizedPnl >= 0 ? (
+                  <TrendingUp className="h-4 w-4 text-profit" />
+                ) : (
+                  <TrendingDown className="h-4 w-4 text-loss" />
+                )}
+              </div>
             </div>
+            <p
+              className={cn(
+                "text-xl font-bold tabular-nums break-words",
+                realizedPnl >= 0 ? "text-profit" : "text-loss"
+              )}
+            >
+              {formatCurrency(realizedPnl)}
+            </p>
+            <div className="flex items-center gap-1 mt-1">
+              {isProfit ? (
+                <ArrowUpRight className="h-3.5 w-3.5 text-profit" />
+              ) : (
+                <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
+              )}
+              <span className={cn("text-sm font-medium", isProfit ? "text-profit" : "text-loss")}>
+                {formatPercent(allTimePnlPercent)}
+              </span>
+              <span className="text-xs text-text-tertiary ml-1">vs start</span>
+            </div>
+            <p className="text-xs text-text-tertiary mt-1">Matched closed lots (FIFO)</p>
           </div>
-          <p
-            className={cn(
-              "text-2xl font-bold tabular-nums break-words",
-              realizedPnl >= 0 ? "text-profit" : "text-loss"
-            )}
-          >
-            {formatCurrency(realizedPnl)}
-          </p>
-          <div className="flex items-center gap-1 mt-1">
-            {isProfit ? (
-              <ArrowUpRight className="h-3.5 w-3.5 text-profit" />
-            ) : (
-              <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
-            )}
-            <span className={cn("text-sm font-medium", isProfit ? "text-profit" : "text-loss")}>
-              {formatPercent(allTimePnlPercent)}
-            </span>
-            <span className="text-xs text-text-tertiary ml-1">vs start</span>
-          </div>
-          <p className="text-xs text-text-tertiary mt-1">
-            Matched closed lots (FIFO)
-          </p>
         </div>
-      </div>
+      </section>
+
+      <LiveTradingDashboardStrip />
 
       <MarketTrendHero marketOpen={marketOpen} />
       <SectorPerformanceChart marketOpen={marketOpen} />

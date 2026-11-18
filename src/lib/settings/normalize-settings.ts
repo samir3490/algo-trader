@@ -4,6 +4,7 @@ import {
   DEFAULT_PAPER_MIN_ORDER_VALUE,
 } from "@/lib/portfolio/paper-position-size";
 import { isPaperRuleOn } from "./paper-rules";
+import { isLiveRuleOn } from "./live-rules";
 
 /** Simple paper loop defaults when the matching Rules are on. */
 export const SIMPLE_PAPER_MAX_POSITIONS = 10;
@@ -130,6 +131,36 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
   next.notifyEmailDigest = isPaperRuleOn(settings, "notifyEmailDigest");
   next.notifyRiskExits = isPaperRuleOn(settings, "notifyRiskExits");
   next.notifyWeeklyShortlist = isPaperRuleOn(settings, "notifyWeeklyShortlist");
+
+  // Live rules (independent of paper) — size/exits for live auto path.
+  next.liveAutoTradingEnabled = isLiveRuleOn(next, "liveAutoTradingEnabled");
+  next.liveRuleEnforceCapitalLimits = isLiveRuleOn(
+    next,
+    "liveRuleEnforceCapitalLimits"
+  );
+  if (isLiveRuleOn(next, "liveRuleBasicExits2and5")) {
+    next.liveAutoStopLoss = true;
+    next.liveAutoTakeProfit = true;
+    next.liveStopLossPercent = 2;
+    next.liveTakeProfitPercent = 5;
+    next.liveAutoTrailingStop = true;
+    next.liveTrailingStopPercent = 1.5;
+  }
+  if (isLiveRuleOn(next, "liveRuleMaxPositions10")) {
+    next.liveMaxPositions = SIMPLE_PAPER_MAX_POSITIONS;
+  }
+  if (isLiveRuleOn(next, "liveRuleStrategySellsOff")) {
+    next.liveEnableStrategySellSignals = false;
+  }
+  next.liveEnableRegimeWeighting = isLiveRuleOn(next, "liveRuleRegimeWeighting");
+  next.liveEnableEntryConnectedExits = isLiveRuleOn(
+    next,
+    "liveRuleEntryConnectedExits"
+  );
+  // Live never mirrors paper by default — keep books independent.
+  if (next.liveMirrorPaperAutomation == null) {
+    next.liveMirrorPaperAutomation = false;
+  }
 
   return next;
 }

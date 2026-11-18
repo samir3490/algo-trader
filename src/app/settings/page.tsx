@@ -26,6 +26,10 @@ import {
 } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { PAPER_RULE_CATALOG, type PaperRuleKey } from "@/lib/settings/paper-rules";
+import {
+  LIVE_RULE_CATALOG,
+  type LiveRuleKey,
+} from "@/lib/settings/live-rules";
 import { useAuth } from "@/lib/auth-context";
 import {
   getSettings as getFirestoreSettings,
@@ -104,6 +108,24 @@ interface AppSettings {
     emailDigest: boolean;
     riskExitEmails: boolean;
   };
+  /** Checklist of live rules — Settings → Live Rules (independent copy of paper). */
+  liveRules: {
+    autoTradingEnabled: boolean;
+    fixedOrderNotional: boolean;
+    basicExits2and5: boolean;
+    maxPositions10: boolean;
+    strategySellsOff: boolean;
+    clearRebuyLocks: boolean;
+    preferStrongSectors: boolean;
+    minBuySignals3: boolean;
+    autoSeedUniverse: boolean;
+    enforceCapitalLimits: boolean;
+    regimeWeighting: boolean;
+    entryConnectedExits: boolean;
+    emailDigest: boolean;
+    riskExitEmails: boolean;
+    weeklyShortlistEmail: boolean;
+  };
   riskManagement: {
     stopLossPercent: number;
     takeProfitPercent: number;
@@ -132,7 +154,7 @@ interface AppSettings {
     regimeAdxThreshold: number;
     momentumRsiOverbought: number;
   };
-  /** Live auto-trading automation (Phase 3). When mirror is on, paper values apply. */
+  /** Live auto-trading automation. When mirror is on, paper values apply. */
   liveTrading: {
     mirrorPaperAutomation: boolean;
     enableRegimeWeighting: boolean;
@@ -154,7 +176,7 @@ interface AppSettings {
   };
 }
 
-type SettingsTab = "paper" | "live" | "general" | "rules";
+type SettingsTab = "paper" | "live" | "general" | "rules" | "live-rules";
 
 function SettingsTabBar({
   active,
@@ -164,7 +186,8 @@ function SettingsTabBar({
   onChange: (tab: SettingsTab) => void;
 }) {
   const tabs: { id: SettingsTab; label: string; hint: string }[] = [
-    { id: "rules", label: "Rules", hint: "On / off" },
+    { id: "rules", label: "Paper Rules", hint: "Simulated" },
+    { id: "live-rules", label: "Live Rules", hint: "Real money" },
     { id: "paper", label: "Paper Trading", hint: "Simulated" },
     { id: "live", label: "Live Trading", hint: "Real money" },
     { id: "general", label: "General", hint: "Alerts & accounts" },
@@ -183,9 +206,9 @@ function SettingsTabBar({
           aria-selected={active === tab.id}
           onClick={() => onChange(tab.id)}
           className={cn(
-            "flex min-w-[5.5rem] flex-1 flex-col items-center rounded-lg px-3 py-2.5 text-center transition-colors sm:flex-none sm:min-w-[9rem] sm:px-4",
+            "flex min-w-[5.5rem] flex-1 flex-col items-center rounded-lg px-3 py-2.5 text-center transition-colors sm:flex-none sm:min-w-[8.5rem] sm:px-4",
             active === tab.id
-              ? tab.id === "live"
+              ? tab.id === "live" || tab.id === "live-rules"
                 ? "bg-amber-100 text-amber-950 ring-1 ring-amber-400/50"
                 : tab.id === "paper"
                   ? "bg-sky-100 text-sky-950 ring-1 ring-sky-400/50"
@@ -225,9 +248,9 @@ function ModeBanner({ mode }: { mode: "paper" | "live" }) {
         Live trading — real Zerodha orders and real money
       </p>
       <p className="text-xs text-amber-900 mt-1">
-        Max order value and daily loss caps apply to Live Trading page orders. Auto-trading
-        from cron is still paper-only until Phase 3; live automation settings are ready for
-        when that ships.
+        Capital limits and Live Rules apply to algo live orders. Use the kill switch below
+        (or Live Rules → Automatic live trading) to stop real orders immediately — paper
+        trading is unaffected.
       </p>
     </div>
   );
@@ -278,6 +301,23 @@ const defaultSettings: AppSettings = {
     emailDigest: true,
     riskExitEmails: true,
   },
+  liveRules: {
+    autoTradingEnabled: false,
+    fixedOrderNotional: true,
+    basicExits2and5: true,
+    maxPositions10: true,
+    strategySellsOff: true,
+    clearRebuyLocks: false,
+    preferStrongSectors: true,
+    minBuySignals3: true,
+    autoSeedUniverse: true,
+    enforceCapitalLimits: true,
+    regimeWeighting: true,
+    entryConnectedExits: true,
+    emailDigest: true,
+    riskExitEmails: true,
+    weeklyShortlistEmail: true,
+  },
   riskManagement: {
     stopLossPercent: 2,
     takeProfitPercent: 5,
@@ -307,14 +347,14 @@ const defaultSettings: AppSettings = {
     momentumRsiOverbought: 85,
   },
   liveTrading: {
-    mirrorPaperAutomation: true,
+    mirrorPaperAutomation: false,
     enableRegimeWeighting: true,
     enableEntryConnectedExits: true,
     regimeAdxThreshold: 23,
     momentumRsiOverbought: 85,
     stopLossPercent: 2,
     takeProfitPercent: 5,
-    maxPositions: 5,
+    maxPositions: 10,
     enableStrategySellSignals: false,
     strategySellMinSignals: 2,
     autoTrailingStop: false,
@@ -379,6 +419,23 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       emailDigest: fs.notifyEmailDigest !== false,
       riskExitEmails: fs.notifyRiskExits !== false,
     },
+    liveRules: {
+      autoTradingEnabled: fs.liveAutoTradingEnabled === true,
+      fixedOrderNotional: fs.liveRuleFixedOrderNotional !== false,
+      basicExits2and5: fs.liveRuleBasicExits2and5 !== false,
+      maxPositions10: fs.liveRuleMaxPositions10 !== false,
+      strategySellsOff: fs.liveRuleStrategySellsOff !== false,
+      clearRebuyLocks: fs.liveRuleClearRebuyLocks === true,
+      preferStrongSectors: fs.liveRulePreferStrongSectors !== false,
+      minBuySignals3: fs.liveRuleMinBuySignals3 !== false,
+      autoSeedUniverse: fs.liveRuleAutoSeedUniverse !== false,
+      enforceCapitalLimits: fs.liveRuleEnforceCapitalLimits !== false,
+      regimeWeighting: fs.liveRuleRegimeWeighting !== false,
+      entryConnectedExits: fs.liveRuleEntryConnectedExits !== false,
+      emailDigest: fs.liveRuleNotifyEmailDigest !== false,
+      riskExitEmails: fs.liveRuleNotifyRiskExits !== false,
+      weeklyShortlistEmail: fs.liveRuleNotifyWeeklyShortlist !== false,
+    },
     riskManagement: {
       stopLossPercent: fs.stopLossPercent,
       takeProfitPercent: fs.takeProfitPercent,
@@ -408,7 +465,7 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       momentumRsiOverbought: fs.momentumRsiOverbought ?? 85,
     },
     liveTrading: {
-      mirrorPaperAutomation: fs.liveMirrorPaperAutomation !== false,
+      mirrorPaperAutomation: fs.liveMirrorPaperAutomation === true,
       enableRegimeWeighting:
         fs.liveEnableRegimeWeighting ?? fs.enableRegimeWeighting !== false,
       enableEntryConnectedExits:
@@ -484,8 +541,27 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     regimeAdxSlopeWindow: 5,
     momentumRsiOverbought: s.marketRegime.momentumRsiOverbought,
     liveMirrorPaperAutomation: s.liveTrading.mirrorPaperAutomation,
-    liveEnableRegimeWeighting: s.liveTrading.enableRegimeWeighting,
-    liveEnableEntryConnectedExits: s.liveTrading.enableEntryConnectedExits,
+    liveAutoTradingEnabled: s.liveRules.autoTradingEnabled,
+    liveRuleFixedOrderNotional: s.liveRules.fixedOrderNotional,
+    liveRuleBasicExits2and5: s.liveRules.basicExits2and5,
+    liveRuleMaxPositions10: s.liveRules.maxPositions10,
+    liveRuleStrategySellsOff: s.liveRules.strategySellsOff,
+    liveRuleClearRebuyLocks: s.liveRules.clearRebuyLocks,
+    liveRulePreferStrongSectors: s.liveRules.preferStrongSectors,
+    liveRuleMinBuySignals3: s.liveRules.minBuySignals3,
+    liveRuleAutoSeedUniverse: s.liveRules.autoSeedUniverse,
+    liveRuleEnforceCapitalLimits: s.liveRules.enforceCapitalLimits,
+    liveRuleRegimeWeighting: s.liveRules.regimeWeighting,
+    liveRuleEntryConnectedExits: s.liveRules.entryConnectedExits,
+    liveRuleNotifyEmailDigest: s.liveRules.emailDigest,
+    liveRuleNotifyRiskExits: s.liveRules.riskExitEmails,
+    liveRuleNotifyWeeklyShortlist: s.liveRules.weeklyShortlistEmail,
+    liveEnableRegimeWeighting: s.liveRules.regimeWeighting
+      ? s.liveTrading.enableRegimeWeighting
+      : false,
+    liveEnableEntryConnectedExits: s.liveRules.entryConnectedExits
+      ? s.liveTrading.enableEntryConnectedExits
+      : false,
     liveRegimeAdxThreshold: s.liveTrading.regimeAdxThreshold,
     liveMomentumRsiOverbought: s.liveTrading.momentumRsiOverbought,
     liveStopLossPercent: s.liveTrading.stopLossPercent,
@@ -520,13 +596,15 @@ function SettingsContent() {
   const initialTab: SettingsTab =
     tabParam === "live"
       ? "live"
-      : tabParam === "general"
-        ? "general"
-        : tabParam === "rules"
-          ? "rules"
-          : tabParam === "paper"
-            ? "paper"
-            : "rules";
+      : tabParam === "live-rules"
+        ? "live-rules"
+        : tabParam === "general"
+          ? "general"
+          : tabParam === "rules"
+            ? "rules"
+            : tabParam === "paper"
+              ? "paper"
+              : "rules";
   const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const { user } = useAuth();
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
@@ -619,6 +697,7 @@ function SettingsContent() {
         } else {
           setToast(`New account ${data.userName || kiteUserId} added successfully!`);
         }
+        await persistServerToken(data.userId || kiteUserId);
         await loadAccounts();
       } else {
         setToast("Connection failed. Please try again.");
@@ -675,6 +754,10 @@ function SettingsContent() {
       setAccounts(merged);
 
       const connectedIds = merged.filter((a) => a.connected).map((a) => a.kiteUserId);
+      // Keep encrypted server tokens fresh for cron live auto-trading.
+      for (const id of connectedIds) {
+        void persistServerToken(id);
+      }
       if (connectedIds.length > 0) {
         const fundResults = await Promise.all(
           connectedIds.map(async (id) => {
@@ -873,6 +956,33 @@ function SettingsContent() {
     });
   }
 
+  function toggleLiveRule(
+    localKey: keyof AppSettings["liveRules"],
+    enabled: boolean
+  ) {
+    setSettings((prev) => ({
+      ...prev,
+      liveRules: { ...prev.liveRules, [localKey]: enabled },
+    }));
+  }
+
+  async function persistServerToken(kiteUserId: string) {
+    if (!user) return;
+    try {
+      const token = await user.getIdToken();
+      await fetch("/api/zerodha/persist-token", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ accountId: kiteUserId }),
+      });
+    } catch (e) {
+      console.warn("Failed to persist Kite token for live auto-trading:", e);
+    }
+  }
+
   const RULE_UI_KEYS: {
     catalogKey: PaperRuleKey;
     localKey: keyof AppSettings["paperRules"];
@@ -890,6 +1000,27 @@ function SettingsContent() {
     { catalogKey: "notifyEmailDigest", localKey: "emailDigest" },
     { catalogKey: "notifyRiskExits", localKey: "riskExitEmails" },
     { catalogKey: "notifyWeeklyShortlist", localKey: "weeklyShortlistEmail" },
+  ];
+
+  const LIVE_RULE_UI_KEYS: {
+    catalogKey: LiveRuleKey;
+    localKey: keyof AppSettings["liveRules"];
+  }[] = [
+    { catalogKey: "liveAutoTradingEnabled", localKey: "autoTradingEnabled" },
+    { catalogKey: "liveRuleFixedOrderNotional", localKey: "fixedOrderNotional" },
+    { catalogKey: "liveRuleEnforceCapitalLimits", localKey: "enforceCapitalLimits" },
+    { catalogKey: "liveRuleBasicExits2and5", localKey: "basicExits2and5" },
+    { catalogKey: "liveRuleMaxPositions10", localKey: "maxPositions10" },
+    { catalogKey: "liveRuleStrategySellsOff", localKey: "strategySellsOff" },
+    { catalogKey: "liveRuleClearRebuyLocks", localKey: "clearRebuyLocks" },
+    { catalogKey: "liveRulePreferStrongSectors", localKey: "preferStrongSectors" },
+    { catalogKey: "liveRuleMinBuySignals3", localKey: "minBuySignals3" },
+    { catalogKey: "liveRuleAutoSeedUniverse", localKey: "autoSeedUniverse" },
+    { catalogKey: "liveRuleRegimeWeighting", localKey: "regimeWeighting" },
+    { catalogKey: "liveRuleEntryConnectedExits", localKey: "entryConnectedExits" },
+    { catalogKey: "liveRuleNotifyEmailDigest", localKey: "emailDigest" },
+    { catalogKey: "liveRuleNotifyRiskExits", localKey: "riskExitEmails" },
+    { catalogKey: "liveRuleNotifyWeeklyShortlist", localKey: "weeklyShortlistEmail" },
   ];
 
   const connectedCount = accounts.filter((a) => a.connected).length;
@@ -1011,462 +1142,793 @@ function SettingsContent() {
 
           <p className="text-xs text-text-tertiary">
             Tip: turn off one rule at a time, Save, then compare the next scan
-            email / fills.
+            email / fills. Live Rules are separate — changing these does not
+            affect live algo trading.
           </p>
+        </section>
+      )}
+
+      {activeTab === "live-rules" && (
+        <section className="card border-amber-200">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="rounded-lg bg-amber-100 p-2">
+              <ListChecks className="h-5 w-5 text-amber-800" />
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-text-primary">
+                Live trading rules
+              </h2>
+              <p className="text-xs text-text-secondary">
+                Full copy of Paper Rules with the same defaults — test on paper
+                first, then flip the matching live rule. Changes here never
+                affect paper. Save after changing.
+              </p>
+            </div>
+          </div>
+
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-xs text-amber-950 leading-relaxed">
+              Kill switch is{" "}
+              <strong>
+                {settings.liveRules.autoTradingEnabled ? "ON" : "OFF"}
+              </strong>
+              . Server also requires{" "}
+              <code className="rounded bg-amber-100 px-1">ENABLE_LIVE_TRADING=true</code>
+              . Active rules:{" "}
+              <strong>
+                {
+                  LIVE_RULE_UI_KEYS.filter(
+                    ({ localKey }) => settings.liveRules[localKey]
+                  ).length
+                }
+                /{LIVE_RULE_UI_KEYS.length}
+              </strong>
+              {" "}(mirrors Paper Rules + live capital / master switch).
+            </p>
+          </div>
+
+          {(
+            [
+              "Master",
+              "Sizing",
+              "Exits",
+              "Portfolio",
+              "Gates",
+              "Ranking",
+              "Universe",
+              "Email",
+            ] as const
+          ).map((category) => {
+            const items = LIVE_RULE_UI_KEYS.filter(({ catalogKey }) => {
+              const def = LIVE_RULE_CATALOG.find((r) => r.key === catalogKey);
+              return def?.category === category;
+            });
+            if (items.length === 0) return null;
+            return (
+              <div key={category} className="mb-5">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-tertiary">
+                  {category}
+                </h3>
+                <div className="space-y-2">
+                  {items.map(({ catalogKey, localKey }) => {
+                    const def = LIVE_RULE_CATALOG.find(
+                      (r) => r.key === catalogKey
+                    )!;
+                    const on = settings.liveRules[localKey];
+                    return (
+                      <div
+                        key={catalogKey}
+                        className="flex items-start justify-between gap-3 rounded-lg bg-bg-tertiary p-4"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-text-primary">
+                            {def.label}
+                          </p>
+                          <p className="mt-1 text-xs text-text-tertiary leading-relaxed">
+                            {def.description}
+                          </p>
+                        </div>
+                        <label className="relative mt-0.5 inline-flex shrink-0 cursor-pointer items-center">
+                          <input
+                            type="checkbox"
+                            checked={on}
+                            onChange={(e) =>
+                              toggleLiveRule(localKey, e.target.checked)
+                            }
+                            className="peer sr-only"
+                          />
+                          <span
+                            className={cn(
+                              "h-6 w-11 rounded-full bg-border peer-checked:bg-amber-600 transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5",
+                              localKey === "autoTradingEnabled" &&
+                                on &&
+                                "peer-checked:bg-loss"
+                            )}
+                          />
+                        </label>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </section>
       )}
 
       {activeTab === "live" && (
         <>
           <ModeBanner mode="live" />
-      <section className="card border-amber-200 space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="rounded-lg bg-accent-muted p-2">
-              <Users className="h-5 w-5 text-accent" />
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-text-primary">
-                Zerodha Accounts
-              </h2>
-              <p className="text-xs text-text-secondary">
-                {connectedCount}/{accounts.length || 0} connected · tokens expire daily
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {availableApps.length <= 1 ? (
-              <a
-                href="/api/zerodha/login"
-                className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-brand hover:bg-accent-hover"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Connect
-              </a>
-            ) : (
-              availableApps.map((app) => (
-                <a
-                  key={app.index}
-                  href={`/api/zerodha/login?credIndex=${app.index}`}
-                  className="inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-brand hover:bg-accent-hover"
-                  title={`API Key: ${app.apiKeyPrefix}`}
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  {app.label}
-                </a>
-              ))
-            )}
-          </div>
-        </div>
 
-        <p className="text-[11px] text-text-tertiary leading-snug">
-          Add funds on{" "}
-          <a
-            href="https://kite.zerodha.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
-            Kite
-          </a>
-          . To link another ID, log out there first, then Connect here.
-        </p>
-
-        {loadingAccounts ? (
-          <div className="flex items-center gap-2 text-text-tertiary text-xs py-4">
-            <RefreshCw className="h-3.5 w-3.5 animate-spin" />
-            Loading accounts…
-          </div>
-        ) : accounts.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border px-4 py-6 text-center">
-            <p className="text-sm text-text-secondary">No accounts connected</p>
-            <p className="text-xs text-text-tertiary mt-1">Connect LX2075 to use live prices and orders</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {accounts.map((account) => (
-              <div
-                key={account.kiteUserId}
-                className={cn(
-                  "rounded-lg border p-3 flex flex-col gap-2 min-h-[7.5rem]",
-                  account.connected
-                    ? "border-profit/30 bg-profit-muted/10"
-                    : "border-border bg-bg-tertiary/60"
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    {editingLabel === account.kiteUserId ? (
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="text"
-                          value={labelInput}
-                          onChange={(e) => setLabelInput(e.target.value)}
-                          className="w-full rounded border border-border bg-bg-primary px-2 py-1 text-xs"
-                          autoFocus
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") handleSaveLabel(account.kiteUserId);
-                            if (e.key === "Escape") {
-                              setEditingLabel(null);
-                              setLabelInput("");
-                            }
-                          }}
-                        />
-                        <button type="button" onClick={() => handleSaveLabel(account.kiteUserId)} className="text-profit">
-                          <Check className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <p className="text-sm font-semibold text-text-primary truncate">
-                          {account.label || account.userName || account.kiteUserId}
-                        </p>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setEditingLabel(account.kiteUserId);
-                            setLabelInput(account.label || "");
-                          }}
-                          className="text-text-tertiary hover:text-text-secondary shrink-0"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    )}
-                    <p className="text-[11px] font-mono text-text-tertiary truncate">
-                      {account.kiteUserId}
-                    </p>
-                  </div>
-                  <span
-                    className={cn(
-                      "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-                      account.connected
-                        ? "bg-profit/15 text-profit"
-                        : "bg-loss/15 text-loss"
-                    )}
-                  >
-                    {account.connected ? "Live" : "Expired"}
-                  </span>
+          {/* Kill switch — live-only */}
+          <section className="card border-amber-300 bg-amber-50/50">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-3">
+                <div className="rounded-lg bg-amber-100 p-2">
+                  <Power className="h-5 w-5 text-amber-900" />
                 </div>
-
-                {account.connected && accountFunds[account.kiteUserId] ? (
-                  <p className="text-[11px] text-text-secondary tabular-nums">
-                    Avail {formatCurrency(accountFunds[account.kiteUserId].available)}
-                    {accountFunds[account.kiteUserId].used > 0
-                      ? ` · Used ${formatCurrency(accountFunds[account.kiteUserId].used)}`
-                      : ""}
+                <div>
+                  <h2 className="text-lg font-semibold text-text-primary">
+                    Live auto-trading kill switch
+                  </h2>
+                  <p className="text-xs text-text-secondary mt-0.5">
+                    Off by default. Turn on only after the matching Live Rules have
+                    been proven on paper. Requires{" "}
+                    <code className="rounded bg-amber-100 px-1 text-[10px]">
+                      ENABLE_LIVE_TRADING=true
+                    </code>{" "}
+                    on the server.
                   </p>
-                ) : (
-                  <p className="text-[11px] text-text-tertiary truncate">
-                    {account.email || "Reconnect for live margins"}
-                  </p>
-                )}
-
-                <div className="mt-auto flex items-center gap-1.5 pt-1">
-                  {account.connected ? (
-                    <button
-                      type="button"
-                      onClick={() => handleDisconnect(account.kiteUserId)}
-                      disabled={disconnectingAccount === account.kiteUserId}
-                      className="rounded-md px-2 py-1 text-[11px] font-medium text-loss hover:bg-loss/10 disabled:opacity-50"
-                    >
-                      {disconnectingAccount === account.kiteUserId ? "…" : "Disconnect"}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => handleReconnect(account.kiteUserId)}
-                      className="rounded-md bg-accent px-2 py-1 text-[11px] font-semibold text-brand hover:bg-accent-hover"
-                    >
-                      Reconnect
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => handleRemoveAccount(account.kiteUserId)}
-                    className="rounded-md px-2 py-1 text-[11px] font-medium text-text-tertiary hover:bg-loss/10 hover:text-loss"
-                  >
-                    Remove
-                  </button>
                 </div>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+              <label className="relative inline-flex shrink-0 cursor-pointer items-center gap-3 self-start sm:self-center">
+                <span
+                  className={cn(
+                    "text-xs font-semibold uppercase tracking-wide",
+                    settings.liveRules.autoTradingEnabled
+                      ? "text-loss"
+                      : "text-text-tertiary"
+                  )}
+                >
+                  {settings.liveRules.autoTradingEnabled ? "Live ON" : "Live OFF"}
+                </span>
+                <input
+                  type="checkbox"
+                  checked={settings.liveRules.autoTradingEnabled}
+                  onChange={(e) =>
+                    toggleLiveRule("autoTradingEnabled", e.target.checked)
+                  }
+                  className="peer sr-only"
+                />
+                <span className="relative h-7 w-12 rounded-full bg-border peer-checked:bg-loss transition-colors after:absolute after:left-0.5 after:top-0.5 after:h-6 after:w-6 after:rounded-full after:bg-white after:transition-transform peer-checked:after:translate-x-5" />
+              </label>
+            </div>
+          </section>
 
-      {/* ── Live order defaults ─────────────────────────────────────────── */}
-      <section className="card border-amber-200">
-        <div className="flex items-center gap-3 mb-4">
-          <div className="rounded-lg bg-amber-100 p-2">
-            <TrendingUp className="h-5 w-5 text-amber-800" />
-          </div>
-          <div>
-            <h2 className="text-lg font-semibold text-text-primary">
-              Live Order Limits
-            </h2>
-            <p className="text-xs text-text-secondary">
-              Hard caps for Live Trading buys — algo stops when capital is used up
-            </p>
-          </div>
-        </div>
+          {/* ── Live Trading (mirrors Paper Trading card) ───────────────── */}
+          <section className="card border-amber-200">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="rounded-lg bg-amber-100 p-2">
+                <Wallet className="h-5 w-5 text-amber-800" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-text-primary">
+                  Live Trading
+                </h2>
+                <p className="text-xs text-text-secondary">
+                  Real money capital &amp; order sizing — independent from paper ₹ amounts
+                </p>
+              </div>
+            </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Total capital limit (₹)
-            </label>
-            <input
-              type="number"
-              min={1000}
-              step={1000}
-              value={settings.liveTrading.capitalLimit}
-              onChange={(e) =>
-                updateSettings("liveTrading", {
-                  capitalLimit: Math.max(1000, Number(e.target.value) || 50_000),
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-            <p className="mt-1 text-[10px] text-text-tertiary">
-              Max deployed in live holdings/positions. Default ₹50,000.
-            </p>
-          </div>
+            <div className="space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    Total capital limit (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min={1000}
+                    step={1000}
+                    value={settings.liveTrading.capitalLimit}
+                    onChange={(e) =>
+                      updateSettings("liveTrading", {
+                        capitalLimit: Math.max(1000, Number(e.target.value) || 50_000),
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <p className="mt-1 text-[10px] text-text-tertiary">
+                    Max deployed in live holdings/positions. Default ₹50,000.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    Order size per trade (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min={500}
+                    step={500}
+                    value={settings.liveTrading.orderNotional}
+                    onChange={(e) => {
+                      const orderNotional = Math.max(
+                        500,
+                        Number(e.target.value) || 5_000
+                      );
+                      updateSettings("liveTrading", { orderNotional });
+                      updateSettings("tradingPreferences", {
+                        maxOrderValue: orderNotional,
+                      });
+                    }}
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <p className="mt-1 text-[10px] text-text-tertiary">
+                    Used when Live Rules → Fixed order size is on. Default ₹5,000.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    Max daily loss (₹)
+                  </label>
+                  <input
+                    type="number"
+                    value={settings.tradingPreferences.maxDailyLoss}
+                    onChange={(e) =>
+                      updateSettings("tradingPreferences", {
+                        maxDailyLoss: Number(e.target.value),
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                  <p className="mt-1 text-[10px] text-text-tertiary">0 = no daily loss halt</p>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    Live product type
+                  </label>
+                  <select
+                    value={settings.tradingPreferences.defaultProductType}
+                    onChange={(e) =>
+                      updateSettings("tradingPreferences", {
+                        defaultProductType: e.target.value as "MIS" | "CNC" | "NRML",
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  >
+                    <option value="CNC">CNC (Delivery) — recommended</option>
+                    <option value="MIS">MIS (Intraday)</option>
+                    <option value="NRML">NRML (F&amp;O)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    Default exchange
+                  </label>
+                  <select
+                    value={settings.tradingPreferences.defaultExchange}
+                    onChange={(e) =>
+                      updateSettings("tradingPreferences", {
+                        defaultExchange: e.target.value as "NSE" | "BSE",
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  >
+                    <option value="NSE">NSE</option>
+                    <option value="BSE">BSE</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    Default order type
+                  </label>
+                  <select
+                    value={settings.tradingPreferences.defaultOrderType}
+                    onChange={(e) =>
+                      updateSettings("tradingPreferences", {
+                        defaultOrderType: e.target.value as "MARKET" | "LIMIT",
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  >
+                    <option value="MARKET">Market</option>
+                    <option value="LIMIT">Limit</option>
+                  </select>
+                </div>
+              </div>
 
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Order size per trade (₹)
-            </label>
-            <input
-              type="number"
-              min={500}
-              step={500}
-              value={settings.liveTrading.orderNotional}
-              onChange={(e) => {
-                const orderNotional = Math.max(500, Number(e.target.value) || 5_000);
-                updateSettings("liveTrading", { orderNotional });
-                updateSettings("tradingPreferences", { maxOrderValue: orderNotional });
-              }}
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-            <p className="mt-1 text-[10px] text-text-tertiary">
-              Default and max ₹ per live BUY. Default ₹5,000.
-            </p>
-          </div>
+              <div className="border-t border-amber-200/80 pt-4 space-y-3">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="rounded-lg bg-amber-100 p-1.5">
+                      <Users className="h-4 w-4 text-amber-800" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-text-primary">
+                        Zerodha Accounts
+                      </h3>
+                      <p className="text-[11px] text-text-secondary">
+                        {connectedCount}/{accounts.length || 0} connected · tokens expire daily
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {availableApps.length <= 1 ? (
+                      <a
+                        href="/api/zerodha/login"
+                        className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        Connect
+                      </a>
+                    ) : (
+                      availableApps.map((app) => (
+                        <a
+                          key={app.index}
+                          href={`/api/zerodha/login?credIndex=${app.index}`}
+                          className="inline-flex items-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700"
+                          title={`API Key: ${app.apiKeyPrefix}`}
+                        >
+                          <Plus className="h-3.5 w-3.5" />
+                          {app.label}
+                        </a>
+                      ))
+                    )}
+                  </div>
+                </div>
+                <p className="text-[11px] text-text-tertiary leading-snug">
+                  Add funds on{" "}
+                  <a
+                    href="https://kite.zerodha.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    Kite
+                  </a>
+                  . Log out there first to link another ID.
+                </p>
+                {loadingAccounts ? (
+                  <div className="flex items-center gap-2 text-text-tertiary text-xs py-2">
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                    Loading accounts…
+                  </div>
+                ) : accounts.length === 0 ? (
+                  <div className="rounded-lg border border-dashed border-amber-200 px-4 py-5 text-center">
+                    <p className="text-sm text-text-secondary">No accounts connected</p>
+                    <p className="text-xs text-text-tertiary mt-1">
+                      Connect LX2075 to use live prices and orders
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                    {accounts.map((account) => (
+                      <div
+                        key={account.kiteUserId}
+                        className={cn(
+                          "rounded-md border px-2.5 py-2 flex flex-col gap-1",
+                          account.connected
+                            ? "border-amber-300/60 bg-amber-50/40"
+                            : "border-border bg-bg-tertiary/60"
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            {editingLabel === account.kiteUserId ? (
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="text"
+                                  value={labelInput}
+                                  onChange={(e) => setLabelInput(e.target.value)}
+                                  className="w-full rounded border border-border bg-bg-primary px-1.5 py-0.5 text-[11px]"
+                                  autoFocus
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter")
+                                      handleSaveLabel(account.kiteUserId);
+                                    if (e.key === "Escape") {
+                                      setEditingLabel(null);
+                                      setLabelInput("");
+                                    }
+                                  }}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleSaveLabel(account.kiteUserId)}
+                                  className="text-profit"
+                                >
+                                  <Check className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 min-w-0">
+                                <p className="text-xs font-semibold text-text-primary truncate">
+                                  {account.label ||
+                                    account.userName ||
+                                    account.kiteUserId}
+                                </p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingLabel(account.kiteUserId);
+                                    setLabelInput(account.label || "");
+                                  }}
+                                  className="text-text-tertiary hover:text-text-secondary shrink-0"
+                                >
+                                  <Edit2 className="h-2.5 w-2.5" />
+                                </button>
+                                <span className="text-[10px] font-mono text-text-tertiary truncate">
+                                  · {account.kiteUserId}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded px-1 py-0.5 text-[9px] font-semibold uppercase tracking-wide",
+                              account.connected
+                                ? "bg-amber-200/80 text-amber-950"
+                                : "bg-loss/15 text-loss"
+                            )}
+                          >
+                            {account.connected ? "Live" : "Expired"}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          {account.connected && accountFunds[account.kiteUserId] ? (
+                            <p className="text-[10px] text-text-secondary tabular-nums truncate">
+                              Avail{" "}
+                              {formatCurrency(
+                                accountFunds[account.kiteUserId].available
+                              )}
+                              {accountFunds[account.kiteUserId].used > 0
+                                ? ` · Used ${formatCurrency(accountFunds[account.kiteUserId].used)}`
+                                : ""}
+                            </p>
+                          ) : (
+                            <p className="text-[10px] text-text-tertiary truncate">
+                              {account.email || "Reconnect for margins"}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-1 shrink-0">
+                            {account.connected ? (
+                              <button
+                                type="button"
+                                onClick={() => handleDisconnect(account.kiteUserId)}
+                                disabled={disconnectingAccount === account.kiteUserId}
+                                className="rounded px-1.5 py-0.5 text-[10px] font-medium text-loss hover:bg-loss/10 disabled:opacity-50"
+                              >
+                                {disconnectingAccount === account.kiteUserId
+                                  ? "…"
+                                  : "Disconnect"}
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleReconnect(account.kiteUserId)}
+                                className="rounded bg-amber-600 px-1.5 py-0.5 text-[10px] font-semibold text-white hover:bg-amber-700"
+                              >
+                                Reconnect
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveAccount(account.kiteUserId)}
+                              className="rounded px-1.5 py-0.5 text-[10px] font-medium text-text-tertiary hover:bg-loss/10 hover:text-loss"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
 
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Max daily loss (₹)
-            </label>
-            <input
-              type="number"
-              value={settings.tradingPreferences.maxDailyLoss}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  maxDailyLoss: Number(e.target.value),
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            />
-            <p className="mt-1 text-[10px] text-text-tertiary">0 = no daily loss halt</p>
-          </div>
+          {/* ── Live Auto-Scan — Market Regime (mirrors paper sky card) ─── */}
+          <section className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 sm:p-6 space-y-4">
+            <div>
+              <h2 className="text-base font-semibold text-text-primary">
+                Live Auto-Scan — Market Regime &amp; Exits
+              </h2>
+              <p className="text-xs text-text-tertiary mt-1">
+                Same controls as Paper Auto-Scan, stored separately. Prefer toggling
+                via Live Rules; fields below apply when mirror is off and the
+                matching rule is off.
+              </p>
+            </div>
 
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Default exchange
-            </label>
-            <select
-              value={settings.tradingPreferences.defaultExchange}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  defaultExchange: e.target.value as "NSE" | "BSE",
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            >
-              <option value="NSE">NSE</option>
-              <option value="BSE">BSE</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Default product
-            </label>
-            <select
-              value={settings.tradingPreferences.defaultProductType}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  defaultProductType: e.target.value as "MIS" | "CNC" | "NRML",
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            >
-              <option value="MIS">MIS (Intraday)</option>
-              <option value="CNC">CNC (Delivery)</option>
-              <option value="NRML">NRML (F&amp;O)</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-text-secondary mb-1.5">
-              Default order type
-            </label>
-            <select
-              value={settings.tradingPreferences.defaultOrderType}
-              onChange={(e) =>
-                updateSettings("tradingPreferences", {
-                  defaultOrderType: e.target.value as "MARKET" | "LIMIT",
-                })
-              }
-              className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-            >
-              <option value="MARKET">Market</option>
-              <option value="LIMIT">Limit</option>
-            </select>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Live auto-trading (Phase 3) ─────────────────────────────────── */}
-      <section className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 sm:p-6 space-y-4">
-        <div>
-          <h2 className="text-base font-semibold text-text-primary">
-            Live Auto-Trading Automation
-          </h2>
-          <p className="text-xs text-text-tertiary mt-1">
-            Cron live orders are not enabled yet. Configure now so Phase 3 can mirror or
-            override paper automation without surprises.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <label className="relative inline-flex cursor-pointer items-center">
-            <input
-              type="checkbox"
-              checked={settings.liveTrading.mirrorPaperAutomation}
-              onChange={(e) =>
-                updateSettings("liveTrading", {
-                  mirrorPaperAutomation: e.target.checked,
-                })
-              }
-              className="peer sr-only"
-            />
-            <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent peer-focus:ring-2 peer-focus:ring-accent/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
-          </label>
-          <div>
-            <p className="text-sm font-medium text-text-primary">
-              Use same automation as Paper tab
-            </p>
-            <p className="text-xs text-text-tertiary">
-              Regime, exits, stop loss, and strategy sells match paper settings (recommended
-              while testing).
-            </p>
-          </div>
-        </div>
-
-        {!settings.liveTrading.mirrorPaperAutomation && (
-          <div className="grid gap-4 sm:grid-cols-2 border-t border-amber-200 pt-4">
-            <div className="flex items-center gap-3 sm:col-span-2">
+            <div className="flex items-center gap-3">
               <label className="relative inline-flex cursor-pointer items-center">
                 <input
                   type="checkbox"
-                  checked={settings.liveTrading.enableRegimeWeighting}
+                  checked={settings.liveTrading.mirrorPaperAutomation}
                   onChange={(e) =>
                     updateSettings("liveTrading", {
-                      enableRegimeWeighting: e.target.checked,
+                      mirrorPaperAutomation: e.target.checked,
                     })
                   }
                   className="peer sr-only"
                 />
-                <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+                <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-amber-600 peer-focus:ring-2 peer-focus:ring-amber-500/30 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
               </label>
-              <span className="text-sm text-text-primary">Live regime-weighted buys</span>
+              <div>
+                <p className="text-sm font-medium text-text-primary">
+                  Use same automation as Paper tab
+                </p>
+                <p className="text-xs text-text-tertiary">
+                  Off by default so live stays independent while you experiment on paper.
+                </p>
+              </div>
             </div>
-            <div className="flex items-center gap-3 sm:col-span-2">
-              <label className="relative inline-flex cursor-pointer items-center">
+
+            {!settings.liveTrading.mirrorPaperAutomation && (
+              <div className="grid gap-4 sm:grid-cols-2 border-t border-amber-200 pt-4">
+                <div className="flex items-center gap-3 sm:col-span-2">
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      checked={settings.liveTrading.enableRegimeWeighting}
+                      onChange={(e) =>
+                        updateSettings("liveTrading", {
+                          enableRegimeWeighting: e.target.checked,
+                        })
+                      }
+                      className="peer sr-only"
+                    />
+                    <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-amber-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+                  </label>
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">
+                      Regime-weighted buys
+                    </p>
+                    <p className="text-xs text-text-tertiary">
+                      ADX regime weighting for live entries (also on Live Rules).
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 sm:col-span-2">
+                  <label className="relative inline-flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      checked={settings.liveTrading.enableEntryConnectedExits}
+                      onChange={(e) =>
+                        updateSettings("liveTrading", {
+                          enableEntryConnectedExits: e.target.checked,
+                        })
+                      }
+                      className="peer sr-only"
+                    />
+                    <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-amber-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+                  </label>
+                  <div>
+                    <p className="text-sm font-medium text-text-primary">
+                      Entry-connected strategy sells
+                    </p>
+                    <p className="text-xs text-text-tertiary">
+                      Only count sells compatible with how the live position was opened.
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    ADX regime threshold
+                  </label>
+                  <input
+                    type="number"
+                    min={10}
+                    max={40}
+                    value={settings.liveTrading.regimeAdxThreshold}
+                    onChange={(e) =>
+                      updateSettings("liveTrading", {
+                        regimeAdxThreshold: Math.max(
+                          10,
+                          Number(e.target.value) || 23
+                        ),
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                    Momentum RSI sell (overbought)
+                  </label>
+                  <input
+                    type="number"
+                    min={70}
+                    max={95}
+                    value={settings.liveTrading.momentumRsiOverbought}
+                    onChange={(e) =>
+                      updateSettings("liveTrading", {
+                        momentumRsiOverbought: Number(e.target.value),
+                      })
+                    }
+                    className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                  />
+                </div>
+              </div>
+            )}
+          </section>
+
+          {/* ── Live Auto-Scan — Risk (mirrors paper risk card) ─────────── */}
+          <section className="card border-amber-200">
+            <div className="flex items-center gap-3 mb-5">
+              <div className="rounded-lg bg-amber-100 p-2">
+                <ShieldCheck className="h-5 w-5 text-amber-800" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-text-primary">
+                  Live Auto-Scan — Risk &amp; Strategy Exits
+                </h2>
+                <p className="text-xs text-text-secondary">
+                  Same layout as paper risk — values are live-only. Live Rules basic
+                  exits (−2% / +5%) override these when that rule is on.
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-5">
+              <div className="flex items-center justify-between rounded-lg bg-bg-tertiary p-4">
+                <div>
+                  <p className="text-sm font-medium text-text-primary">
+                    Auto trailing stop
+                  </p>
+                  <p className="text-xs text-text-tertiary">
+                    Trail after min profit ({settings.liveTrading.takeProfitPercent}%
+                    gate)
+                  </p>
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    checked={settings.liveTrading.autoTrailingStop}
+                    onChange={(e) =>
+                      updateSettings("liveTrading", {
+                        autoTrailingStop: e.target.checked,
+                      })
+                    }
+                    className="peer sr-only"
+                  />
+                  <div className="h-5 w-9 rounded-full bg-bg-hover peer-checked:bg-amber-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+                </label>
+              </div>
+              <div className="flex items-center justify-between rounded-lg bg-bg-tertiary p-4">
+                <div>
+                  <p className="text-sm font-medium text-text-primary">
+                    Strategy SELL signals
+                  </p>
+                  <p className="text-xs text-text-tertiary">
+                    Off when Live Rules ignore strategy sells (default)
+                  </p>
+                </div>
+                <label className="relative inline-flex cursor-pointer items-center">
+                  <input
+                    type="checkbox"
+                    checked={settings.liveTrading.enableStrategySellSignals}
+                    onChange={(e) =>
+                      updateSettings("liveTrading", {
+                        enableStrategySellSignals: e.target.checked,
+                      })
+                    }
+                    className="peer sr-only"
+                  />
+                  <div className="h-5 w-9 rounded-full bg-bg-hover peer-checked:bg-amber-600 after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
+                </label>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Stop Loss (%)
+                </label>
                 <input
-                  type="checkbox"
-                  checked={settings.liveTrading.enableEntryConnectedExits}
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={settings.liveTrading.stopLossPercent}
                   onChange={(e) =>
                     updateSettings("liveTrading", {
-                      enableEntryConnectedExits: e.target.checked,
+                      stopLossPercent: Number(e.target.value),
                     })
                   }
-                  className="peer sr-only"
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
                 />
-                <div className="h-5 w-9 rounded-full bg-bg-tertiary peer-checked:bg-accent after:absolute after:left-[2px] after:top-[2px] after:h-4 after:w-4 after:rounded-full after:bg-white peer-checked:after:translate-x-full" />
-              </label>
-              <span className="text-sm text-text-primary">Live entry-connected sells</span>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Min profit % (strategy sells &amp; trail)
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={settings.liveTrading.takeProfitPercent}
+                  onChange={(e) =>
+                    updateSettings("liveTrading", {
+                      takeProfitPercent: Number(e.target.value),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Max Positions
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={settings.liveTrading.maxPositions}
+                  onChange={(e) =>
+                    updateSettings("liveTrading", {
+                      maxPositions: Math.max(1, Number(e.target.value) || 1),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Trailing stop (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={settings.liveTrading.trailingStopPercent}
+                  onChange={(e) =>
+                    updateSettings("liveTrading", {
+                      trailingStopPercent: Number(e.target.value),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Min hold before strategy sell (min)
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={settings.liveTrading.minHoldMinutesBeforeSell}
+                  onChange={(e) =>
+                    updateSettings("liveTrading", {
+                      minHoldMinutesBeforeSell: Math.max(
+                        0,
+                        Number(e.target.value) || 0
+                      ),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Strategy sell min signals
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={settings.liveTrading.strategySellMinSignals}
+                  onChange={(e) =>
+                    updateSettings("liveTrading", {
+                      strategySellMinSignals: Math.max(
+                        1,
+                        Number(e.target.value) || 2
+                      ),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-amber-500 focus:outline-none focus:ring-1 focus:ring-amber-500"
+                />
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Live stop loss (%)
-              </label>
-              <input
-                type="number"
-                step="0.5"
-                value={settings.liveTrading.stopLossPercent}
-                onChange={(e) =>
-                  updateSettings("liveTrading", {
-                    stopLossPercent: Number(e.target.value),
-                  })
-                }
-                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Live min profit for strategy sells (%)
-              </label>
-              <input
-                type="number"
-                step="0.5"
-                value={settings.liveTrading.takeProfitPercent}
-                onChange={(e) =>
-                  updateSettings("liveTrading", {
-                    takeProfitPercent: Number(e.target.value),
-                  })
-                }
-                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Live max positions
-              </label>
-              <input
-                type="number"
-                min={1}
-                value={settings.liveTrading.maxPositions}
-                onChange={(e) =>
-                  updateSettings("liveTrading", {
-                    maxPositions: Math.max(1, Number(e.target.value) || 1),
-                  })
-                }
-                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Live momentum RSI overbought
-              </label>
-              <input
-                type="number"
-                min={70}
-                max={95}
-                value={settings.liveTrading.momentumRsiOverbought}
-                onChange={(e) =>
-                  updateSettings("liveTrading", {
-                    momentumRsiOverbought: Number(e.target.value),
-                  })
-                }
-                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm"
-              />
-            </div>
-          </div>
-        )}
-      </section>
+          </section>
         </>
       )}
 
