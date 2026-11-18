@@ -47,7 +47,11 @@ async function resolveLiveSellQty(
     const list = Array.isArray(holdings) ? holdings : [];
     for (const h of list) {
       if (String(h.tradingsymbol || "").toUpperCase() !== sym) continue;
-      const q = Number(h.quantity ?? h.qty ?? 0);
+      const q = Number(
+        (h as { quantity?: number; qty?: number }).quantity ??
+          (h as { quantity?: number; qty?: number }).qty ??
+          0
+      );
       if (q > 0) return Math.floor(q);
     }
   } catch {
