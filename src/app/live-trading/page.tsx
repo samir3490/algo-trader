@@ -928,7 +928,6 @@ function LiveTradingContent() {
               Live Settings
             </Link>
             <LiveAutoSwitch
-              compact
               enabled={autoTradingEnabled}
               saving={savingKillSwitch}
               onToggle={(next) => void toggleLiveKillSwitch(next)}
@@ -954,14 +953,6 @@ function LiveTradingContent() {
               <span className="hidden sm:inline">Place Order</span>
             </button>
           </div>
-        </div>
-
-        <div className="mb-4">
-          <LiveAutoSwitch
-            enabled={autoTradingEnabled}
-            saving={savingKillSwitch}
-            onToggle={(next) => void toggleLiveKillSwitch(next)}
-          />
         </div>
 
         <div className="mb-4 rounded-lg border border-emerald-200 bg-white/80 px-4 py-3 text-xs text-emerald-950">

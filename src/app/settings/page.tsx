@@ -1260,26 +1260,26 @@ function SettingsContent() {
         <>
           <ModeBanner mode="live" />
 
-          {/* Kill switch — live-only */}
-          <LiveAutoSwitch
-            enabled={settings.liveRules.autoTradingEnabled}
-            onToggle={(next) => toggleLiveRule("autoTradingEnabled", next)}
-          />
-
           {/* ── Live Trading (mirrors Paper Trading card) ───────────────── */}
           <section className="card border-emerald-200">
-            <div className="flex items-center gap-3 mb-5">
-              <div className="rounded-lg bg-emerald-100 p-2">
-                <Wallet className="h-5 w-5 text-emerald-800" />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-5">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-emerald-100 p-2">
+                  <Wallet className="h-5 w-5 text-emerald-800" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold text-text-primary">
+                    Live Trading
+                  </h2>
+                  <p className="text-xs text-text-secondary">
+                    Real money capital &amp; order sizing — independent from paper ₹ amounts
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-lg font-semibold text-text-primary">
-                  Live Trading
-                </h2>
-                <p className="text-xs text-text-secondary">
-                  Real money capital &amp; order sizing — independent from paper ₹ amounts
-                </p>
-              </div>
+              <LiveAutoSwitch
+                enabled={settings.liveRules.autoTradingEnabled}
+                onToggle={(next) => toggleLiveRule("autoTradingEnabled", next)}
+              />
             </div>
 
             <div className="space-y-5">

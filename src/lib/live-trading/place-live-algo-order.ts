@@ -1,13 +1,16 @@
-import { KiteConnect } from "kiteconnect";
 import type { Firestore } from "firebase-admin/firestore";
-import { FieldValue } from "firebase-admin/firestore";
 import {
   evaluateLiveBuyLimits,
   qtyForLiveNotional,
   resolveLiveOrderNotional,
   type LiveCapitalSettings,
+  type LiveHoldingLike,
+  type LivePositionLike,
 } from "@/lib/live-trading/capital-limits";
-import { listServerKiteTokens } from "@/lib/zerodha/server-token-store";
+import {
+  loadLiveBook,
+  recordLiveAlgoFill,
+} from "@/lib/live-trading/live-book";
 import { isLiveTradingEnabled } from "@/lib/core/config";
 
 export interface LiveAlgoOrderResult {
@@ -19,12 +22,24 @@ export interface LiveAlgoOrderResult {
 }
 
 async function resolveLiveSellQty(
-  kite: InstanceType<typeof KiteConnect>,
+  kite: NonNullable<Awaited<ReturnType<typeof loadLiveBook>>["kite"]>,
   symbol: string,
-  product?: string
+  product?: string,
+  book?: Awaited<ReturnType<typeof loadLiveBook>>
 ): Promise<number> {
   const sym = symbol.toUpperCase();
   const prod = (product || "CNC").toUpperCase();
+
+  if (book?.ok) {
+    // Prefer fresh book quantities when available (already aggregated).
+    for (const p of book.positions) {
+      if ((p.qty ?? 0) > 0 && book.openSymbols.has(sym)) {
+        /* positions list has no symbol — fall through to kite */
+        break;
+      }
+    }
+  }
+
   try {
     const positions = await kite.getPositions();
     const net = (positions as { net?: any[] })?.net ?? [];
@@ -76,8 +91,14 @@ export async function placeLiveAlgoOrder(
     };
     /** For SELL, exact qty (or omit to use open live position/holding qty). */
     qty?: number;
-    positions?: { qty: number; avgPrice: number }[];
-    holdings?: { qty: number; avgPrice: number; invested?: number }[];
+    positions?: { qty?: number; avgPrice?: number; average_price?: number }[];
+    holdings?: {
+      qty?: number;
+      quantity?: number;
+      avgPrice?: number;
+      average_price?: number;
+      invested?: number;
+    }[];
   }
 ): Promise<LiveAlgoOrderResult> {
   if (!isLiveTradingEnabled()) {
@@ -87,22 +108,33 @@ export async function placeLiveAlgoOrder(
     return { ok: false, skipped: true, message: "Live auto trading switch is off" };
   }
 
-  const tokens = await listServerKiteTokens(db, appUserId);
-  const token = tokens[0];
-  if (!token) {
+  const book = await loadLiveBook(db, appUserId);
+  if (!book.ok || !book.kite) {
     return {
       ok: false,
       skipped: true,
-      message: "No server Kite token — reconnect Zerodha in Settings",
+      message: book.message || "Could not load live broker book",
     };
   }
 
+  const kite = book.kite;
   const price = Math.max(0, input.price);
   const product = input.product || "CNC";
   const notional = resolveLiveOrderNotional(input.settings);
-
-  const kite = new KiteConnect({ api_key: token.apiKey });
-  kite.setAccessToken(token.accessToken);
+  const positions: LivePositionLike[] = (input.positions ?? book.positions).map(
+    (p) => ({
+      qty: Number(p.qty) || 0,
+      avgPrice: Number(p.avgPrice ?? p.average_price) || 0,
+    })
+  );
+  const holdings: LiveHoldingLike[] = (input.holdings ?? book.holdings).map(
+    (h) => ({
+      qty: Number(h.qty ?? h.quantity) || 0,
+      quantity: Number(h.quantity ?? h.qty) || 0,
+      avgPrice: Number(h.avgPrice ?? h.average_price) || 0,
+      invested: h.invested,
+    })
+  );
 
   let qty =
     input.qty != null && input.qty > 0 ? Math.floor(input.qty) : 0;
@@ -112,7 +144,7 @@ export async function placeLiveAlgoOrder(
       qty = qtyForLiveNotional(notional, price);
     }
   } else if (qty <= 0) {
-    qty = await resolveLiveSellQty(kite, input.symbol, product);
+    qty = await resolveLiveSellQty(kite, input.symbol, product, book);
     if (qty <= 0) {
       return {
         ok: false,
@@ -132,8 +164,8 @@ export async function placeLiveAlgoOrder(
       qty,
       price,
       settings: input.settings,
-      positions: input.positions ?? [],
-      holdings: input.holdings ?? [],
+      positions,
+      holdings,
     });
     if (!gate.ok) {
       return { ok: false, skipped: true, message: gate.error };
@@ -141,7 +173,11 @@ export async function placeLiveAlgoOrder(
     if (gate.remainingCapital < qty * price) {
       qty = qtyForLiveNotional(Math.min(notional, gate.remainingCapital), price);
       if (qty <= 0) {
-        return { ok: false, skipped: true, message: gate.error || "No live capital left" };
+        return {
+          ok: false,
+          skipped: true,
+          message: gate.error || "No live capital left",
+        };
       }
     }
   }
@@ -159,23 +195,14 @@ export async function placeLiveAlgoOrder(
     } as any);
 
     const orderId = result.order_id;
-    await db
-      .collection(`users/${appUserId}/data`)
-      .doc("liveTrading")
-      .set(
-        {
-          lastAlgoOrderAt: FieldValue.serverTimestamp(),
-          lastAlgoOrder: {
-            orderId,
-            side: input.side,
-            symbol: input.symbol.toUpperCase(),
-            qty,
-            price,
-            kiteUserId: token.kiteUserId,
-          },
-        },
-        { merge: true }
-      );
+    await recordLiveAlgoFill(db, appUserId, {
+      orderId,
+      side: input.side,
+      symbol: input.symbol,
+      qty,
+      price,
+      kiteUserId: book.kiteUserId,
+    });
 
     return { ok: true, orderId, qty };
   } catch (e) {

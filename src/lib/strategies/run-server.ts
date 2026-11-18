@@ -23,9 +23,11 @@ import {
   buyOnlyOpinions,
   scanSignalToOpinion,
   buildRankedPaperBuyQueue,
+  buildRankedLiveBuyQueue,
   buildRankedPaperSellQueue,
   rankBuyOpinions,
 } from "@/lib/portfolio/portfolio-manager";
+import { loadLiveBook } from "@/lib/live-trading/live-book";
 import { detectStrategyConflicts } from "@/lib/portfolio/conflict-detector";
 import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trading/balance";
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
@@ -1161,95 +1163,6 @@ export async function runStrategiesForUser(
       if (resolveStrategyMode(strat) === "live") {
         diagnostics.liveSignals += 1;
       }
-
-      // Parallel live auto-buy (independent capital; gated by Live Rules kill switch).
-      const liveAutoOn = isLiveRuleOn(userSettings, "liveAutoTradingEnabled");
-      const liveMinSignalsOk =
-        !isLiveRuleOn(userSettings, "liveRuleMinBuySignals3") ||
-        (decision.buySignalCount ?? 0) >= SIMPLE_PAPER_MIN_BUY_SIGNALS;
-      const liveSectorOk =
-        !isLiveRuleOn(userSettings, "liveRulePreferStrongSectors") ||
-        lookupSectorBias(decision.symbol, sectorBias)?.isStrong === true;
-      if (liveAutoOn && liveMinSignalsOk && liveSectorOk) {
-        const liveResult = await placeLiveAlgoOrder(db, userId, {
-          side: "BUY",
-          symbol: decision.symbol,
-          exchange,
-          price: decision.price,
-          product: userSettings.defaultProduct || "CNC",
-          settings: {
-            liveOrderNotional: userSettings.liveOrderNotional,
-            liveCapitalLimit: userSettings.liveCapitalLimit,
-            liveAutoTradingEnabled: true,
-            liveRuleEnforceCapitalLimits: isLiveRuleOn(
-              userSettings,
-              "liveRuleEnforceCapitalLimits"
-            ),
-          },
-        });
-        if (liveResult.ok) {
-          diagnostics.liveSignals += 1;
-          addScanDetail(
-            diagnostics,
-            "liveExec",
-            decision.symbol,
-            `LIVE BUY · qty ${liveResult.qty ?? "?"} · ${liveResult.orderId ?? ""}`
-          );
-          queueEmail(
-            "executed",
-            {
-              symbol: decision.symbol,
-              exchange,
-              side: "BUY",
-              quantity: liveResult.qty ?? 0,
-              price: decision.price,
-              status: `LIVE EXECUTED · ${detailedReason}`,
-              strategyName: decision.ownerStrategyName,
-              reason: detailedReason,
-            },
-            {
-              mode: "LIVE",
-              symbol: decision.symbol,
-              exchange,
-              side: "BUY",
-              quantity: liveResult.qty ?? 0,
-              price: decision.price,
-              orderType: "MARKET",
-              product: userSettings.defaultProduct || "CNC",
-              status: `LIVE EXECUTED · ${detailedReason}`,
-              strategyName: decision.ownerStrategyName,
-              reason: detailedReason,
-            }
-          );
-        } else if (!liveResult.skipped) {
-          bumpReason(
-            diagnostics.skipReasons,
-            `Live order failed — ${(liveResult.message || "unknown").slice(0, 120)}`
-          );
-          addScanDetail(
-            diagnostics,
-            "liveSkip",
-            decision.symbol,
-            liveResult.message || "Live order failed"
-          );
-        } else if (liveResult.message) {
-          addScanDetail(
-            diagnostics,
-            "liveSkip",
-            decision.symbol,
-            liveResult.message
-          );
-        }
-      } else if (liveAutoOn && (!liveMinSignalsOk || !liveSectorOk)) {
-        addScanDetail(
-          diagnostics,
-          "liveSkip",
-          decision.symbol,
-          !liveMinSignalsOk
-            ? "Live rule: need 3+ signals"
-            : "Live rule: strong sector only"
-        );
-      }
     } else if (message) {
       bumpReason(diagnostics.skipReasons, message);
       queueEmail(
@@ -1276,6 +1189,158 @@ export async function runStrategiesForUser(
           strategyName: decision.ownerStrategyName,
         }
       );
+    }
+  }
+
+  // Live auto-buys: independent position slots + capital from Zerodha book.
+  // Paper max-positions / paper fills must not block live quota.
+  if (isLiveRuleOn(userSettings, "liveAutoTradingEnabled")) {
+    const liveBook = await loadLiveBook(db, userId);
+    if (!liveBook.ok) {
+      addScanDetail(
+        diagnostics,
+        "liveSkip",
+        "—",
+        liveBook.message || "Live book unavailable"
+      );
+    } else {
+      const liveAutomation = resolveAutomationSettings(userSettings, "live");
+      const liveMaxPositions =
+        liveAutomation.maxPositions ??
+        userSettings.liveMaxPositions ??
+        SIMPLE_PAPER_MAX_POSITIONS;
+      const liveMinBuySignals = isLiveRuleOn(
+        userSettings,
+        "liveRuleMinBuySignals3"
+      )
+        ? SIMPLE_PAPER_MIN_BUY_SIGNALS
+        : 1;
+      const livePreferStrong = isLiveRuleOn(
+        userSettings,
+        "liveRulePreferStrongSectors"
+      );
+
+      const liveQueue = buildRankedLiveBuyQueue(
+        opinions,
+        liveBook.openSymbols,
+        regimeSnapshot,
+        sectorBias
+      );
+      const liveSelect = selectTopBuyDecisionsForScan(liveQueue, {
+        openPositionCount: liveBook.openCount,
+        maxPositions: liveMaxPositions,
+        minBuySignalCount: liveMinBuySignals,
+        requireStrongSector: livePreferStrong,
+      });
+
+      addScanDetail(
+        diagnostics,
+        "liveExec",
+        "—",
+        `Live slots ${liveSelect.slotsToFill} · open ${liveBook.openCount}/${liveMaxPositions} · deployed ₹${Math.round(liveBook.deployed)}`
+      );
+
+      for (const skip of liveSelect.skippedQuality) {
+        addScanDetail(
+          diagnostics,
+          "liveSkip",
+          skip.decision.symbol,
+          skip.reason
+        );
+      }
+
+      let livePlaced = 0;
+      const liveOpen = new Set(liveBook.openSymbols);
+      let liveOpenCount = liveBook.openCount;
+      let livePositions = [...liveBook.positions];
+      let liveHoldings = [...liveBook.holdings];
+
+      for (const decision of liveSelect.toExecute) {
+        if (livePlaced >= liveSelect.slotsToFill) break;
+        const sym = decision.symbol.toUpperCase();
+        if (liveOpen.has(sym)) continue;
+
+        const exchange = decision.exchange || "NSE";
+        const liveResult = await placeLiveAlgoOrder(db, userId, {
+          side: "BUY",
+          symbol: decision.symbol,
+          exchange,
+          price: decision.price,
+          product: userSettings.defaultProduct || "CNC",
+          settings: {
+            liveOrderNotional: userSettings.liveOrderNotional,
+            liveCapitalLimit: userSettings.liveCapitalLimit,
+            liveAutoTradingEnabled: true,
+            liveRuleEnforceCapitalLimits: isLiveRuleOn(
+              userSettings,
+              "liveRuleEnforceCapitalLimits"
+            ),
+          },
+          positions: livePositions,
+          holdings: liveHoldings,
+        });
+
+        if (liveResult.ok) {
+          livePlaced += 1;
+          diagnostics.liveSignals += 1;
+          liveOpen.add(sym);
+          liveOpenCount += 1;
+          const fillQty = liveResult.qty ?? 0;
+          livePositions = [
+            ...livePositions,
+            { qty: fillQty, avgPrice: decision.price },
+          ];
+          addScanDetail(
+            diagnostics,
+            "liveExec",
+            decision.symbol,
+            `LIVE BUY · qty ${fillQty || "?"} · ${liveResult.orderId ?? ""} · live open ${liveOpenCount}/${liveMaxPositions}`
+          );
+          const reason =
+            decision.signalReason ||
+            `${decision.buySignalCount ?? 1} signals`;
+          queueEmail(
+            "executed",
+            {
+              symbol: decision.symbol,
+              exchange,
+              side: "BUY",
+              quantity: fillQty,
+              price: decision.price,
+              status: `LIVE EXECUTED · ${reason}`,
+              strategyName: decision.ownerStrategyName,
+              reason,
+            },
+            {
+              mode: "LIVE",
+              symbol: decision.symbol,
+              exchange,
+              side: "BUY",
+              quantity: fillQty,
+              price: decision.price,
+              orderType: "MARKET",
+              product: userSettings.defaultProduct || "CNC",
+              status: `LIVE EXECUTED · ${reason}`,
+              strategyName: decision.ownerStrategyName,
+              reason,
+            }
+          );
+        } else if (liveResult.message) {
+          addScanDetail(
+            diagnostics,
+            "liveSkip",
+            decision.symbol,
+            liveResult.message
+          );
+          if (
+            /capital limit|No live capital|per-trade limit/i.test(
+              liveResult.message
+            )
+          ) {
+            break;
+          }
+        }
+      }
     }
   }
 

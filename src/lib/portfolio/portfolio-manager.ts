@@ -358,6 +358,29 @@ export function rankBuyOpinions(
     });
 }
 
+function opinionToBuyDecision(op: StrategyOpinion): PortfolioDecision {
+  const type = op.strategyType ?? inferStrategyType(op.strategyName);
+  return {
+    action: "BUY" as const,
+    symbol: op.symbol,
+    exchange: op.exchange,
+    ownerStrategyId: op.strategyId,
+    ownerStrategyName: op.strategyName,
+    ownerStrategyType: type,
+    ownerEntryArchetype: getEntryArchetype(type),
+    price: op.price,
+    quantity: op.quantity,
+    signalReason: op.reason,
+    buySignalCount: op.buySignalCount,
+    signalStrategyNames: op.signalStrategyNames,
+    scanConfidence: op.confidenceSum ?? op.confidence,
+    sectorChangePercent: op.sectorChangePercent,
+    sectorIsStrong: op.sectorIsStrong,
+    sectorName: op.sectorName,
+    sectorRank: op.sectorRank,
+  };
+}
+
 /** Ranked paper BUY queue — matches display list; skips symbols already held. */
 export function buildRankedPaperBuyQueue(
   opinions: StrategyOpinion[],
@@ -367,28 +390,22 @@ export function buildRankedPaperBuyQueue(
 ): PortfolioDecision[] {
   return rankBuyOpinions(opinions, regime, sectorBias)
     .filter((op) => !hasOpenPositionForSymbol(ctx.state, op.symbol, op.exchange))
-    .map((op) => {
-      const type = op.strategyType ?? inferStrategyType(op.strategyName);
-      return {
-      action: "BUY" as const,
-      symbol: op.symbol,
-      exchange: op.exchange,
-      ownerStrategyId: op.strategyId,
-      ownerStrategyName: op.strategyName,
-      ownerStrategyType: type,
-      ownerEntryArchetype: getEntryArchetype(type),
-      price: op.price,
-      quantity: op.quantity,
-      signalReason: op.reason,
-      buySignalCount: op.buySignalCount,
-      signalStrategyNames: op.signalStrategyNames,
-      scanConfidence: op.confidenceSum ?? op.confidence,
-      sectorChangePercent: op.sectorChangePercent,
-      sectorIsStrong: op.sectorIsStrong,
-      sectorName: op.sectorName,
-      sectorRank: op.sectorRank,
-    };
-    });
+    .map(opinionToBuyDecision);
+}
+
+/**
+ * Ranked live BUY queue — independent of paper holdings.
+ * Skips only symbols already open on the live broker book.
+ */
+export function buildRankedLiveBuyQueue(
+  opinions: StrategyOpinion[],
+  liveOpenSymbols: Set<string>,
+  regime?: RegimeSnapshot | null,
+  sectorBias?: SectorBiasContext | null
+): PortfolioDecision[] {
+  return rankBuyOpinions(opinions, regime, sectorBias)
+    .filter((op) => !liveOpenSymbols.has(op.symbol.toUpperCase()))
+    .map(opinionToBuyDecision);
 }
 
 /** @deprecated Use buildRankedPaperBuyQueue */
