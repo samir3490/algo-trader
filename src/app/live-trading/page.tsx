@@ -920,24 +920,24 @@ function LiveTradingContent() {
             primary={formatCurrency(selectedFunds?.available ?? 0)}
             hint={connected ? selectedAccountId || "Zerodha" : "Connect account"}
             icon={IndianRupee}
-            colorClass="text-amber-800"
-            className="border-amber-200 bg-white/90"
+            colorClass="text-text-primary"
+            className="border-amber-200 bg-white"
           />
           <StatCard
             label="Margin used"
             primary={formatCurrency(selectedFunds?.used ?? 0)}
             hint={`Net ${formatCurrency(selectedFunds?.net ?? 0)}`}
             icon={Wallet}
-            colorClass="text-amber-800"
-            className="border-amber-200 bg-white/90"
+            colorClass="text-text-primary"
+            className="border-amber-200 bg-white"
           />
           <StatCard
             label="Day P&L (positions)"
             primary={formatCurrency(netPnl)}
             hint={`${positions.length} open position${positions.length === 1 ? "" : "s"}`}
             icon={netPnl >= 0 ? TrendingUp : TrendingDown}
-            colorClass={netPnl >= 0 ? "text-profit" : "text-loss"}
-            className="border-amber-200 bg-white/90"
+            colorClass={netPnl >= 0 ? "text-emerald-700" : "text-red-700"}
+            className="border-amber-200 bg-white"
           />
           <StatCard
             label="Holdings P&L"
@@ -945,8 +945,10 @@ function LiveTradingContent() {
             secondary={formatPercent(holdingsPnlPercent)}
             hint={`Invested ${formatCurrency(holdingsTotals.invested)}`}
             icon={Wallet}
-            colorClass={holdingsTotals.pnl >= 0 ? "text-profit" : "text-loss"}
-            className="border-amber-200 bg-white/90"
+            colorClass={
+              holdingsTotals.pnl >= 0 ? "text-emerald-700" : "text-red-700"
+            }
+            className="border-amber-200 bg-white"
           />
         </div>
       </div>
@@ -1033,7 +1035,7 @@ function LiveTradingContent() {
                               {!account.connected && " · Session expired"}
                             </p>
                             {account.connected && accountFunds[account.kiteUserId] && (
-                              <p className="text-xs text-emerald-400/90 mt-0.5">
+                              <p className="text-xs text-text-primary mt-0.5 tabular-nums">
                                 Available {formatCurrency(accountFunds[account.kiteUserId].available)}
                               </p>
                             )}
@@ -1068,10 +1070,10 @@ function LiveTradingContent() {
 
           {connected && (
             <div className="flex items-center gap-3 flex-wrap">
-              <div className="flex items-center gap-1.5 rounded-md bg-emerald-900/20 border border-emerald-800/40 px-3 py-1.5">
-                <Wallet className="h-3.5 w-3.5 text-emerald-400" />
+              <div className="flex items-center gap-1.5 rounded-md bg-bg-elevated border border-border px-3 py-1.5">
+                <Wallet className="h-3.5 w-3.5 text-text-secondary" />
                 <span className="text-xs text-text-secondary">Available</span>
-                <span className="text-sm font-semibold text-emerald-300">
+                <span className="text-sm font-semibold text-text-primary tabular-nums">
                   {loadingFunds && !selectedFunds
                     ? "..."
                     : formatCurrency(selectedFunds?.available ?? 0)}

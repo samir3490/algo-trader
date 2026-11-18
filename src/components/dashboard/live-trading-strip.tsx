@@ -176,7 +176,7 @@ export default function LiveTradingDashboardStrip() {
                 <IndianRupee className="h-4 w-4 text-amber-800" />
               </div>
             </div>
-            <p className="text-xl font-bold text-text-primary tabular-nums break-words">
+            <p className="text-xl font-bold text-amber-950 tabular-nums break-words">
               {formatCurrency(snap.available)}
             </p>
             <p className="text-xs text-text-tertiary mt-1">
