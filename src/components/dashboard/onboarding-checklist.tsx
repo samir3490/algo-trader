@@ -132,28 +132,25 @@ export default function OnboardingChecklist() {
   }
 
   return (
-    <section className="rounded-xl border border-accent/30 bg-accent-muted/40 p-4 sm:p-5">
-      <div className="flex items-start justify-between gap-3 mb-3">
-        <div>
-          <p className="type-label text-brand-muted">Getting started</p>
-          <h2 className="type-title text-text-primary mt-0.5">
-            Set up AlgoTrader ({doneCount}/{items.length})
+    <section className="rounded-lg border border-accent/30 bg-accent-muted/40 p-2.5">
+      <div className="flex items-center justify-between gap-2 mb-1.5">
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-text-primary">
+            Setup ({doneCount}/{items.length})
           </h2>
-          <p className="type-caption text-text-secondary mt-1">
-            Complete these once — most trading happens from your phone.
-          </p>
+          <p className="text-[11px] text-text-secondary">Phone-first checklist</p>
         </div>
         <button
           type="button"
           onClick={dismiss}
-          className="p-2 rounded-lg text-text-tertiary hover:bg-bg-hover touch-manipulation"
+          className="p-1.5 rounded-md text-text-tertiary hover:bg-bg-hover touch-manipulation"
           aria-label="Dismiss checklist"
         >
           <X className="h-4 w-4" />
         </button>
       </div>
 
-      <ul className="space-y-2">
+      <ul className="space-y-1">
         {items.map((item) => {
           const Icon = item.icon;
           return (
@@ -161,31 +158,31 @@ export default function OnboardingChecklist() {
               <Link
                 href={item.href}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl border px-3 py-3 min-h-[52px] transition-colors touch-manipulation",
+                  "flex items-center gap-2 rounded-md border px-2 py-1.5 min-h-9 transition-colors touch-manipulation",
                   item.done
                     ? "border-profit/20 bg-profit-muted/40"
                     : "border-border bg-bg-secondary hover:bg-bg-hover"
                 )}
               >
                 {item.done ? (
-                  <CheckCircle2 className="h-5 w-5 text-profit shrink-0" />
+                  <CheckCircle2 className="h-4 w-4 text-profit shrink-0" />
                 ) : (
-                  <Circle className="h-5 w-5 text-text-tertiary shrink-0" />
+                  <Circle className="h-4 w-4 text-text-tertiary shrink-0" />
                 )}
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium text-text-primary">{item.label}</p>
-                  <p className="text-[11px] text-text-tertiary">{item.hint}</p>
+                  <p className="text-xs font-medium text-text-primary leading-tight">{item.label}</p>
+                  <p className="text-[10px] text-text-tertiary leading-tight">{item.hint}</p>
                 </div>
-                <Icon className="h-4 w-4 text-text-tertiary shrink-0" />
+                <Icon className="h-3.5 w-3.5 text-text-tertiary shrink-0" />
               </Link>
             </li>
           );
         })}
       </ul>
 
-      <div className="mt-3 flex justify-end">
-        <Button variant="ghost" size="sm" onClick={dismiss}>
-          Skip for now
+      <div className="mt-1.5 flex justify-end">
+        <Button variant="ghost" size="sm" onClick={dismiss} className="!min-h-8">
+          Skip
         </Button>
       </div>
     </section>

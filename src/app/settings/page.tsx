@@ -51,6 +51,7 @@ import { effectivePositionSizingMode } from "@/lib/settings/normalize-settings";
 import LiveAutoSwitch from "@/components/live-trading/live-auto-switch";
 import PageHeader from "@/components/ui/page-header";
 import { useOptionalToast } from "@/components/ui/toast";
+import ScheduledReportPreview from "@/components/reporting/scheduled-report-preview";
 
 interface ServerAccount {
   kiteUserId: string;
@@ -2734,22 +2735,27 @@ function SettingsContent() {
 
       {activeTab === "general" && (
         <>
-      <section className="card">
-        <div className="flex items-center gap-3 mb-5">
-          <div className="rounded-lg bg-accent-muted p-2">
-            <Bell className="h-5 w-5 text-accent" />
+      <section className="card space-y-3">
+        <div className="flex items-center gap-2">
+          <div className="rounded-md bg-accent-muted p-1.5">
+            <Bell className="h-4 w-4 text-accent" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold text-text-primary">
+            <h2 className="text-sm font-semibold text-text-primary">
               Notifications
             </h2>
-            <p className="text-xs text-text-secondary">
-              Email alerts for paper scans, live signals, and risk exits
+            <p className="text-[11px] text-text-secondary">
+              Email alerts for scans, live signals, and risk exits
             </p>
           </div>
         </div>
 
-        <div className="space-y-4">
+        <ScheduledReportPreview
+          emailDigestEnabled={settings.notifications.emailDigest}
+          weeklyShortlistEnabled={settings.notifications.weeklyShortlist}
+        />
+
+        <div className="space-y-2">
           {[
             {
               key: "orderExecution" as const,

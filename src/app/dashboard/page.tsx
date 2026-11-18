@@ -2,17 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
-import {
-  TrendingUp,
-  TrendingDown,
-  IndianRupee,
-  Wallet,
-  BarChart3,
-  Clock,
-  ArrowUpRight,
-  ArrowDownRight,
-  Loader2,
-} from "lucide-react";
+import { BarChart3, Clock } from "lucide-react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -50,9 +40,12 @@ import PaperHealthStrip from "@/components/dashboard/paper-health-strip";
 import LiveTradingDashboardStrip from "@/components/dashboard/live-trading-strip";
 import OnboardingChecklist from "@/components/dashboard/onboarding-checklist";
 import WatchlistPanel from "@/components/dashboard/watchlist-panel";
+import AttributionWidgets from "@/components/dashboard/attribution-widgets";
+import BenchmarkWidget from "@/components/dashboard/benchmark-widget";
 import PageHeader from "@/components/ui/page-header";
 import { SkeletonChart } from "@/components/ui/skeleton";
 import { chartTokens } from "@/lib/ui/chart-tokens";
+import ExecutiveSummaryButton from "@/components/reporting/executive-summary-button";
 
 interface Holding {
   symbol: string;
@@ -259,7 +252,7 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
+    <div className="min-h-screen p-2.5 sm:p-4 md:p-6 space-y-2.5 sm:space-y-3">
       <PageHeader
         title="Dashboard"
         subtitle="Market context & portfolio overview"
@@ -295,103 +288,73 @@ export default function DashboardPage() {
 
       <WatchlistPanel />
 
-      <section className="rounded-xl border-2 border-mode-paper-border bg-mode-paper-muted/70 p-4 sm:p-5 space-y-3">
+      <section className="rounded-lg border border-mode-paper-border bg-mode-paper-muted/70 p-2.5 sm:p-3 space-y-2">
         <div className="flex items-center justify-between gap-2">
-          <div>
-            <p className="type-label text-mode-paper">
-              Simulated
-            </p>
-            <h2 className="type-title text-mode-paper-fg">Paper trading</h2>
+          <div className="flex items-baseline gap-2 min-w-0">
+            <h2 className="text-sm font-semibold text-mode-paper-fg">Paper</h2>
+            <span className="text-[10px] uppercase tracking-wide text-mode-paper">Simulated</span>
           </div>
           <Link
             href="/paper-trading"
-            className="rounded-md bg-mode-paper px-2.5 py-1 text-xs font-semibold text-white hover:bg-mode-paper-hover"
+            className="rounded-md bg-mode-paper px-2 py-1 text-[11px] font-semibold text-white hover:bg-mode-paper-hover"
           >
-            Open paper →
+            Open →
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="rounded-lg border border-mode-paper-border bg-white/80 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-text-secondary">Cash remaining</span>
-              <div className="rounded-lg bg-mode-paper-soft p-1.5">
-                <IndianRupee className="h-4 w-4 text-mode-paper" />
-              </div>
-            </div>
-            <p className="text-xl font-bold text-text-primary tabular-nums break-words">
+        <div className="grid grid-cols-3 gap-1.5">
+          <div className="rounded-md border border-mode-paper-border bg-white/80 px-2 py-1.5">
+            <p className="text-[10px] text-text-tertiary">Cash</p>
+            <p className="text-sm font-bold text-text-primary tabular-nums leading-tight break-words">
               {formatCurrency(portfolio.balance)}
             </p>
-            <p className="text-xs text-text-tertiary mt-1">Simulated · available to buy</p>
           </div>
-
-          <div className="rounded-lg border border-mode-paper-border bg-white/80 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-text-secondary">Invested</span>
-              <div className="rounded-lg bg-mode-paper-soft p-1.5">
-                <Wallet className="h-4 w-4 text-mode-paper" />
-              </div>
-            </div>
-            <p className="text-xl font-bold text-text-primary tabular-nums break-words">
+          <div className="rounded-md border border-mode-paper-border bg-white/80 px-2 py-1.5">
+            <p className="text-[10px] text-text-tertiary">Invested</p>
+            <p className="text-sm font-bold text-text-primary tabular-nums leading-tight break-words">
               {formatCurrency(invested)}
             </p>
-            <p className="text-xs text-text-tertiary mt-1 leading-relaxed">
-              Cost of open holdings
-              {invested > 0 && (
-                <>
-                  <br />
-                  Mkt value {formatCurrency(portfolio.currentValue)}
-                </>
-              )}
-            </p>
+            {invested > 0 && (
+              <p className="text-[10px] text-text-tertiary truncate">
+                Mkt {formatCurrency(portfolio.currentValue)}
+              </p>
+            )}
           </div>
-
-          <div className="rounded-lg border border-mode-paper-border bg-white/80 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-text-secondary">Realized P&amp;L</span>
-              <div className="rounded-lg bg-mode-paper-soft p-1.5">
-                {realizedPnl >= 0 ? (
-                  <TrendingUp className="h-4 w-4 text-profit" />
-                ) : (
-                  <TrendingDown className="h-4 w-4 text-loss" />
-                )}
-              </div>
-            </div>
+          <div className="rounded-md border border-mode-paper-border bg-white/80 px-2 py-1.5">
+            <p className="text-[10px] text-text-tertiary">Realized</p>
             <p
               className={cn(
-                "text-xl font-bold tabular-nums break-words",
+                "text-sm font-bold tabular-nums leading-tight break-words",
                 realizedPnl >= 0 ? "text-profit" : "text-loss"
               )}
             >
               {formatCurrency(realizedPnl)}
             </p>
-            <div className="flex items-center gap-1 mt-1">
-              {isProfit ? (
-                <ArrowUpRight className="h-3.5 w-3.5 text-profit" />
-              ) : (
-                <ArrowDownRight className="h-3.5 w-3.5 text-loss" />
-              )}
-              <span className={cn("text-sm font-medium", isProfit ? "text-profit" : "text-loss")}>
-                {formatPercent(allTimePnlPercent)}
-              </span>
-              <span className="text-xs text-text-tertiary ml-1">vs start</span>
-            </div>
-            <p className="text-xs text-text-tertiary mt-1">Matched closed lots (FIFO)</p>
+            <p className={cn("text-[10px] font-medium", isProfit ? "text-profit" : "text-loss")}>
+              {formatPercent(allTimePnlPercent)} vs start
+            </p>
           </div>
         </div>
       </section>
 
       <LiveTradingDashboardStrip />
 
+      <div className="flex justify-end">
+        <ExecutiveSummaryButton />
+      </div>
+
+      <BenchmarkWidget />
+      <AttributionWidgets />
+
       <MarketTrendHero marketOpen={marketOpen} />
       <SectorPerformanceChart marketOpen={marketOpen} />
 
       <div className="card">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-2">
           <div>
-            <h2 className="text-lg font-semibold text-text-primary">
+            <h2 className="text-sm font-semibold text-text-primary">
               Portfolio Performance
             </h2>
-            <p className="text-sm text-text-secondary">
+            <p className="text-[11px] text-text-secondary">
               {chartHasData
                 ? portfolioChartPeriodLabel(chartPeriod)
                 : "Start trading to see performance"}
@@ -426,50 +389,45 @@ export default function DashboardPage() {
           </div>
         </div>
         {chartHasData && (
-          <div className="mb-4 grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Trades</p>
-              <p className="text-sm font-semibold tabular-nums text-text-primary">
+          <div className="mb-2 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+            <div className="rounded-md border border-border/60 bg-bg-secondary/40 px-2 py-1.5">
+              <p className="text-[10px] text-text-tertiary">Trades</p>
+              <p className="text-sm font-semibold tabular-nums leading-tight">
                 {chartPeriodTotals.tradeCount}
               </p>
-              <p className="text-[11px] text-text-tertiary">
-                {chartPeriodTotals.buyCount} buy · {chartPeriodTotals.sellCount} sell
+              <p className="text-[10px] text-text-tertiary">
+                {chartPeriodTotals.buyCount}B · {chartPeriodTotals.sellCount}S
               </p>
             </div>
-            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Total traded</p>
-              <p className="text-sm font-semibold tabular-nums text-text-primary">
+            <div className="rounded-md border border-border/60 bg-bg-secondary/40 px-2 py-1.5">
+              <p className="text-[10px] text-text-tertiary">Traded</p>
+              <p className="text-sm font-semibold tabular-nums leading-tight">
                 {formatCurrency(chartPeriodTotals.totalTurnover)}
               </p>
             </div>
-            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Realized P&amp;L</p>
+            <div className="rounded-md border border-border/60 bg-bg-secondary/40 px-2 py-1.5">
+              <p className="text-[10px] text-text-tertiary">Realized</p>
               <p
                 className={cn(
-                  "text-sm font-semibold tabular-nums",
+                  "text-sm font-semibold tabular-nums leading-tight",
                   chartPeriodTotals.realizedPnl >= 0 ? "text-profit" : "text-loss"
                 )}
               >
-                {chartPeriodTotals.realizedPnl >= 0 ? "+" : ""}
                 {formatCurrency(chartPeriodTotals.realizedPnl)}
               </p>
-              <p className="text-[11px] text-text-tertiary">
-                {chartPeriodTotals.wins}W / {chartPeriodTotals.losses}L
-                {chartPeriodTotals.winRate > 0 ? ` · ${chartPeriodTotals.winRate}%` : ""}
+              <p className="text-[10px] text-text-tertiary">
+                {chartPeriodTotals.wins}W/{chartPeriodTotals.losses}L
               </p>
             </div>
-            <div className="rounded-lg border border-border/60 bg-bg-secondary/40 px-3 py-2">
-              <p className="text-[10px] uppercase tracking-wide text-text-tertiary">Fees</p>
-              <p className="text-sm font-semibold tabular-nums text-text-primary">
+            <div className="rounded-md border border-border/60 bg-bg-secondary/40 px-2 py-1.5">
+              <p className="text-[10px] text-text-tertiary">Fees</p>
+              <p className="text-sm font-semibold tabular-nums leading-tight">
                 {formatCurrency(chartPeriodTotals.fees)}
               </p>
-              {chartPeriodTotals.feesEstimated && (
-                <p className="text-[11px] text-text-tertiary">est. Zerodha schedule</p>
-              )}
             </div>
           </div>
         )}
-        <div className="h-72">
+        <div className="h-52 sm:h-64">
           {chartHasData ? (
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData} margin={{ top: 5, right: 5, bottom: 5, left: 5 }}>

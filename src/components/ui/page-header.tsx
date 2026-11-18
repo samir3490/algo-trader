@@ -39,19 +39,15 @@ const modeChrome: Record<
 export interface PageHeaderProps {
   title: string;
   subtitle?: string;
-  /** Trading mode chrome — paper (sky), live (emerald), or neutral. */
   mode?: PageMode;
-  /** Overrides the default mode eyebrow label. */
   eyebrow?: string;
   actions?: ReactNode;
-  /** Extra content under the title row (KPI strip, banners, etc.). */
   children?: ReactNode;
   className?: string;
-  /** Inner padding; mode headers usually need horizontal padding matching the page. */
   padded?: boolean;
 }
 
-/** Standard page header: title, subtitle, actions, optional mode strip. */
+/** Compact page header — title row dense; optional mode strip. */
 export default function PageHeader({
   title,
   subtitle,
@@ -69,34 +65,33 @@ export default function PageHeader({
     <header
       className={cn(
         chrome.wrap,
-        padded && (mode === "neutral" ? "mb-6" : "px-3 sm:px-6 py-4 sm:py-5"),
+        padded && (mode === "neutral" ? "mb-3" : "px-3 sm:px-4 py-2.5 sm:py-3"),
         className
       )}
     >
       <div
         className={cn(
-          "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3",
-          children && "mb-4"
+          "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2",
+          children && "mb-2.5"
         )}
       >
         <div className="min-w-0">
           {showEyebrow && (
-            <p
-              className={cn(
-                "type-label mb-1",
-                chrome.eyebrow
-              )}
-            >
+            <p className={cn("text-[10px] font-semibold uppercase tracking-wide mb-0.5", chrome.eyebrow)}>
               {eyebrow ?? chrome.defaultEyebrow}
             </p>
           )}
-          <h1 className={cn("type-display", chrome.title)}>{title}</h1>
+          <h1 className={cn("text-xl sm:text-2xl font-bold leading-tight tracking-tight", chrome.title)}>
+            {title}
+          </h1>
           {subtitle && (
-            <p className={cn("type-subtitle mt-1", chrome.subtitle)}>{subtitle}</p>
+            <p className={cn("text-xs sm:text-sm mt-0.5 leading-snug", chrome.subtitle)}>
+              {subtitle}
+            </p>
           )}
         </div>
         {actions && (
-          <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto shrink-0">
+          <div className="flex flex-wrap items-center gap-1.5 self-start sm:self-auto shrink-0">
             {actions}
           </div>
         )}

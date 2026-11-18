@@ -34,6 +34,11 @@ import PageHeader from "@/components/ui/page-header";
 import EmptyState from "@/components/ui/empty-state";
 import Button from "@/components/ui/button";
 import { SkeletonTable } from "@/components/ui/skeleton";
+import { useOptionalToast } from "@/components/ui/toast";
+import {
+  downloadCombinedOrdersCsv,
+  downloadLiveOrdersCsv,
+} from "@/lib/export/live-data-export";
 import {
   ClipboardList,
   Search,
@@ -45,6 +50,7 @@ import {
   XCircle,
   AlertCircle,
   RefreshCw,
+  Download,
 } from "lucide-react";
 
 type OrderStatus = "EXECUTED" | "PENDING" | "REJECTED" | "CANCELLED" | "OPEN" | "COMPLETE";
@@ -166,6 +172,7 @@ function mapPaperTrade(t: PaperTrade, idx: number): Order {
 
 export default function OrdersPage() {
   const { user } = useAuth();
+  const toast = useOptionalToast();
   const [orders, setOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>("all");
@@ -388,23 +395,60 @@ export default function OrdersPage() {
     live: orders.filter((o) => o.mode === "LIVE").length,
   };
 
+  function exportLive() {
+    const live = orders.filter((o) => o.mode === "LIVE");
+    if (live.length === 0) {
+      toast.info("No live orders to export");
+      return;
+    }
+    downloadLiveOrdersCsv(live);
+    toast.success(`Exported ${live.length} live orders`);
+  }
+
+  function exportBlotter() {
+    if (sortedFiltered.length === 0) {
+      toast.info("Nothing to export for current filters");
+      return;
+    }
+    downloadCombinedOrdersCsv(sortedFiltered);
+    toast.success(`Exported ${sortedFiltered.length} orders`);
+  }
+
   return (
-    <div className="space-y-4 sm:space-y-6 p-3 sm:p-4 md:p-6">
+    <div className="space-y-2.5 sm:space-y-3 p-2.5 sm:p-4 md:p-6">
       <PageHeader
         title="Orders"
-        subtitle="Track paper and live fills"
+        subtitle="Paper + live blotter"
         mode="neutral"
         padded={false}
         actions={
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-1.5 w-full sm:w-auto">
             <PaperExportMenu variant="compact" />
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<Download className="h-3.5 w-3.5" />}
+              onClick={exportLive}
+              className="min-h-9"
+            >
+              Live CSV
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              leftIcon={<Download className="h-3.5 w-3.5" />}
+              onClick={exportBlotter}
+              className="min-h-9"
+            >
+              Blotter
+            </Button>
             <Button
               variant="secondary"
               size="sm"
               loading={isLoading}
               leftIcon={<RefreshCw className="h-4 w-4" />}
               onClick={() => void fetchAllOrders()}
-              className="flex-1 sm:flex-none min-h-11"
+              className="min-h-9"
             >
               Refresh
             </Button>

@@ -981,21 +981,19 @@ function LiveTradingContent() {
           </>
         }
       >
-        <div className="mb-4 rounded-lg border border-mode-live-border bg-white/80 px-4 py-3 text-xs text-mode-live-fg">
-          <span className="font-medium">Algo sizing: </span>
-          ₹{liveOrderNotional.toLocaleString("en-IN")} / trade · ₹
-          {liveCapitalLimit.toLocaleString("en-IN")} algo cap · algo deployed ₹
-          {Math.round(liveDeployed).toLocaleString("en-IN")} · remaining ₹
+        <div className="mb-2 rounded-md border border-mode-live-border bg-white/80 px-2.5 py-1.5 text-[11px] text-mode-live-fg leading-snug">
+          <span className="font-medium">Algo: </span>
+          ₹{liveOrderNotional.toLocaleString("en-IN")}/trade · ₹
+          {liveCapitalLimit.toLocaleString("en-IN")} cap · deployed ₹
+          {Math.round(liveDeployed).toLocaleString("en-IN")} · left ₹
           {Math.round(liveRemaining).toLocaleString("en-IN")}
-          {" "}
-          (existing holdings do not count)
           {" · "}
           <Link href="/settings?tab=live" className="underline font-medium">
-            Edit limits
+            Edit
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-2">
           <StatCard
             label="Available cash"
             primary={formatCurrency(selectedFunds?.available ?? 0)}
@@ -1235,7 +1233,7 @@ function LiveTradingContent() {
         </div>
       )}
 
-      <div className="p-3 sm:p-4 md:p-6 lg:p-8 space-y-4 sm:space-y-6">
+      <div className="p-2.5 sm:p-4 md:p-6 space-y-2.5 sm:space-y-3">
         {/* No Account Warning */}
         {!isCheckingAuth && connectedAccounts.length === 0 && (
           <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 sm:px-6 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">

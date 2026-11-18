@@ -1138,19 +1138,19 @@ export default function PaperTradingPage() {
   }
 
   return (
-    <div className="min-h-screen bg-bg-primary p-3 sm:p-4 md:p-6 lg:p-8 pb-6">
+    <div className="min-h-screen bg-bg-primary p-2.5 sm:p-4 md:p-6 pb-4">
       {/* Header */}
-      <div className="mb-6">
+      <div className="mb-3">
         <PageHeader
           title="Paper Trading"
           subtitle={
             zerodhaConnected
-              ? "Practice trading with virtual money using real market data"
-              : "Practice trading with virtual money — connect Zerodha for live prices"
+              ? "Virtual money · real market data"
+              : "Virtual money — connect Zerodha for live prices"
           }
           mode="paper"
           padded={false}
-          className="mb-6"
+          className="mb-2.5"
           actions={
             <>
             {!isCheckingAuth && (
@@ -1181,12 +1181,12 @@ export default function PaperTradingPage() {
           }
         >
         {appSettings && (
-          <div className="mb-4 rounded-lg border border-mode-paper-border bg-white/80 px-4 py-3 text-xs text-mode-paper-fg">
-            <span className="font-medium">Position sizing: </span>
+          <div className="mb-2 rounded-md border border-mode-paper-border bg-white/80 px-2.5 py-1.5 text-[11px] text-mode-paper-fg leading-snug">
+            <span className="font-medium">Sizing: </span>
             {formatPaperSizingSummary(appSettings)}
             {" · "}
-            <span className="opacity-75">product {appSettings.paperDefaultProduct}</span>
-            {" "}
+            {appSettings.paperDefaultProduct}
+            {" · "}
             <a href="/settings" className="text-mode-paper underline font-medium">Settings</a>
           </div>
         )}
@@ -1197,8 +1197,8 @@ export default function PaperTradingPage() {
             appSettings.autoTrailingStop ||
             (appSettings.maxHoldDays ?? 0) > 0 ||
             (appSettings.noProgressDays ?? 0) > 0) && (
-          <div className="mb-4 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 text-xs text-text-secondary">
-            <span className="text-accent font-medium">Risk guard active: </span>
+          <div className="mb-2 rounded-md border border-accent/30 bg-accent/5 px-2.5 py-1.5 text-[11px] text-text-secondary leading-snug">
+            <span className="text-accent font-medium">Risk: </span>
             {appSettings.autoStopLoss && (
               <span>stop loss at −{appSettings.stopLossPercent}%</span>
             )}
@@ -1218,14 +1218,14 @@ export default function PaperTradingPage() {
         )}
 
         {riskToast && (
-          <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-amber-700" />
+          <div className="mb-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-950 flex items-start gap-1.5">
+            <AlertCircle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-700" />
             {riskToast}
           </div>
         )}
 
         {/* Portfolio Summary */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-2">
           {summaryItems.map((item) => (
             <StatCard
               key={item.label}

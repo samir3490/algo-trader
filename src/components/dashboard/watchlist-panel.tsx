@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Loader2, Plus, Star, Trash2, TrendingDown, TrendingUp } from "lucide-react";
+import { Loader2, Plus, Star, Trash2 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import {
   getWatchlist,
@@ -19,7 +19,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 interface QuoteRow extends WatchlistItem {
   lastPrice?: number;
   changePercent?: number;
-  loading?: boolean;
 }
 
 export default function WatchlistPanel() {
@@ -96,7 +95,10 @@ export default function WatchlistPanel() {
       toast.info(`${sym} is already on your watchlist`);
       return;
     }
-    const next = [...rows.map(({ symbol: s, exchange }) => ({ symbol: s, exchange })), { symbol: sym, exchange: "NSE" }];
+    const next = [
+      ...rows.map(({ symbol: s, exchange }) => ({ symbol: s, exchange })),
+      { symbol: sym, exchange: "NSE" },
+    ];
     setSymbol("");
     await persist(next);
     toast.success(`Added ${sym}`);
@@ -111,49 +113,44 @@ export default function WatchlistPanel() {
   }
 
   return (
-    <section className="card">
-      <div className="flex items-start justify-between gap-2 mb-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <Star className="h-4 w-4 text-accent" />
-            <h2 className="type-title text-text-primary">Watchlist</h2>
-          </div>
-          <p className="type-caption text-text-secondary mt-1">
-            Quick quotes — tap a symbol to trade on paper
-          </p>
+    <section className="rounded-lg border border-border bg-bg-secondary p-2.5 sm:p-3">
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <Star className="h-3.5 w-3.5 text-accent shrink-0" />
+          <h2 className="text-sm font-semibold text-text-primary">Watchlist</h2>
         </div>
+        <form
+          className="flex items-center gap-1.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void addSymbol();
+          }}
+        >
+          <input
+            value={symbol}
+            onChange={(e) => setSymbol(e.target.value.toUpperCase())}
+            placeholder="Add"
+            className="w-24 sm:w-28 h-8 rounded-md border border-border bg-bg-primary px-2 text-xs text-text-primary outline-none focus:border-accent"
+            inputMode="text"
+            autoCapitalize="characters"
+          />
+          <Button
+            type="submit"
+            size="sm"
+            loading={saving}
+            leftIcon={<Plus className="h-3.5 w-3.5" />}
+            className="!min-h-8 !px-2"
+            aria-label="Add to watchlist"
+          >
+            <span className="sr-only sm:not-sr-only sm:inline">Add</span>
+          </Button>
+        </form>
       </div>
 
-      <form
-        className="flex gap-2 mb-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void addSymbol();
-        }}
-      >
-        <input
-          value={symbol}
-          onChange={(e) => setSymbol(e.target.value.toUpperCase())}
-          placeholder="Add symbol e.g. SBIN"
-          className="min-h-11 flex-1 rounded-lg border border-border bg-bg-primary px-3 text-sm text-text-primary outline-none focus:border-accent"
-          inputMode="text"
-          autoCapitalize="characters"
-        />
-        <Button
-          type="submit"
-          size="md"
-          loading={saving}
-          leftIcon={<Plus className="h-4 w-4" />}
-          aria-label="Add to watchlist"
-        >
-          <span className="hidden sm:inline">Add</span>
-        </Button>
-      </form>
-
       {loading ? (
-        <div className="space-y-2">
+        <div className="space-y-1">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-14 w-full rounded-xl" />
+            <Skeleton key={i} className="h-8 w-full rounded-md" />
           ))}
         </div>
       ) : rows.length === 0 ? (
@@ -161,53 +158,54 @@ export default function WatchlistPanel() {
           compact
           icon={Star}
           title="No symbols yet"
-          description="Add NSE symbols you want to track on the go."
+          description="Add NSE symbols to track."
         />
       ) : (
-        <ul className="divide-y divide-border -mx-1">
+        <ul className="divide-y divide-border">
           {rows.map((row) => {
             const up = (row.changePercent ?? 0) >= 0;
             return (
               <li key={`${row.exchange}:${row.symbol}`}>
-                <div className="flex items-center gap-2 py-2.5 px-1 min-h-[52px]">
+                <div className="flex items-center gap-2.5 py-1.5 min-h-8">
                   <Link
                     href={`/paper-trading?symbol=${encodeURIComponent(row.symbol)}`}
-                    className="min-w-0 flex-1 touch-manipulation"
+                    className="w-[5.25rem] shrink-0 touch-manipulation"
                   >
-                    <p className="text-sm font-semibold text-text-primary">{row.symbol}</p>
-                    <p className="text-[11px] text-text-tertiary">{row.exchange}</p>
+                    <span className="block text-xs font-semibold text-text-primary truncate leading-tight">
+                      {row.symbol}
+                    </span>
+                    <span className="block text-[10px] text-text-tertiary leading-none">
+                      {row.exchange}
+                    </span>
                   </Link>
-                  <div className="text-right shrink-0">
+                  <span className="w-[5.75rem] shrink-0 text-right tabular-nums text-xs font-semibold text-text-primary">
                     {row.lastPrice != null ? (
-                      <>
-                        <p className="text-sm font-semibold tabular-nums text-text-primary">
-                          {formatCurrency(row.lastPrice)}
-                        </p>
-                        <p
-                          className={cn(
-                            "text-[11px] font-medium tabular-nums inline-flex items-center gap-0.5",
-                            up ? "text-profit" : "text-loss"
-                          )}
-                        >
-                          {up ? (
-                            <TrendingUp className="h-3 w-3" />
-                          ) : (
-                            <TrendingDown className="h-3 w-3" />
-                          )}
-                          {formatPercent(row.changePercent ?? 0)}
-                        </p>
-                      </>
+                      formatCurrency(row.lastPrice)
                     ) : (
-                      <Loader2 className="h-4 w-4 animate-spin text-text-tertiary ml-auto" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin text-text-tertiary inline" />
                     )}
-                  </div>
+                  </span>
+                  <span
+                    className={cn(
+                      "w-12 shrink-0 text-right tabular-nums text-[11px] font-medium",
+                      row.changePercent == null
+                        ? "text-text-tertiary"
+                        : up
+                          ? "text-profit"
+                          : "text-loss"
+                    )}
+                  >
+                    {row.changePercent != null
+                      ? formatPercent(row.changePercent)
+                      : "—"}
+                  </span>
                   <button
                     type="button"
                     onClick={() => void removeSymbol(row.symbol)}
-                    className="p-2.5 rounded-lg text-text-tertiary hover:text-loss hover:bg-loss-muted touch-manipulation"
+                    className="ml-auto p-1 rounded-md text-text-tertiary hover:text-loss hover:bg-loss-muted touch-manipulation"
                     aria-label={`Remove ${row.symbol}`}
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </li>
