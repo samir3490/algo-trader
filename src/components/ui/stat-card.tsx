@@ -24,7 +24,7 @@ export default function StatCard({
   return (
     <div className={cn("card p-4", className)}>
       <div className="flex items-center gap-2 mb-2">
-        <div className={cn("p-2 rounded-lg bg-bg-tertiary shrink-0", colorClass)}>
+        <div className="p-2 rounded-lg bg-bg-tertiary shrink-0 text-text-secondary">
           <Icon className="w-4 h-4" />
         </div>
         <p className="text-xs font-medium text-text-tertiary uppercase tracking-wide leading-tight">

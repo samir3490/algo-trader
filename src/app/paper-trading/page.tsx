@@ -1140,12 +1140,12 @@ export default function PaperTradingPage() {
               <div className={cn(
                 "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border",
                 zerodhaConnected
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+                  ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+                  : "bg-amber-50 border-amber-300 text-amber-950"
               )}>
                 <span className={cn(
                   "w-2 h-2 rounded-full",
-                  zerodhaConnected ? "bg-emerald-400" : "bg-amber-400"
+                  zerodhaConnected ? "bg-emerald-600" : "bg-amber-500"
                 )} />
                 {zerodhaConnected ? "Live Prices" : "Manual Prices"}
               </div>

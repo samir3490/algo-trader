@@ -19,8 +19,8 @@ const LEVEL_STYLES = {
   ok: {
     border: "border-emerald-500/30",
     icon: CheckCircle2,
-    iconClass: "text-emerald-400",
-    badge: "bg-emerald-500/15 text-emerald-400",
+    iconClass: "text-emerald-700",
+    badge: "bg-emerald-100 text-emerald-900",
     label: "Healthy",
   },
   warning: {

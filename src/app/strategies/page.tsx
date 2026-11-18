@@ -773,7 +773,7 @@ function StrategiesPageContent() {
             type="button"
             onClick={handleRunScanNow}
             disabled={isScanning || runningCount === 0}
-            className="inline-flex items-center gap-2 rounded-xl border border-emerald-600/50 bg-emerald-600/10 px-4 py-2.5 text-sm font-medium text-emerald-400 transition-colors hover:bg-emerald-600/20 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl border border-emerald-600/50 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-900 transition-colors hover:bg-emerald-100 disabled:opacity-50"
           >
             {isScanning ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -873,8 +873,8 @@ function StrategiesPageContent() {
             className={cn(
               "shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-medium",
               runningCount > 0
-                ? "bg-emerald-500/20 text-emerald-300"
-                : "bg-amber-500/20 text-amber-300"
+                ? "bg-emerald-100 text-emerald-900"
+                : "bg-amber-100 text-amber-950"
             )}
           >
             {runningCount > 0
@@ -980,7 +980,7 @@ function StrategiesPageContent() {
                   className={cn(
                     "shrink-0 rounded-lg px-3 py-1 text-[10px] font-semibold",
                     state.active
-                      ? "bg-emerald-500/10 text-emerald-400"
+                      ? "bg-emerald-100 text-emerald-900"
                       : "bg-accent text-brand"
                   )}
                 >

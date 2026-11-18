@@ -16,8 +16,8 @@ import type { PaperTradingHealth } from "@/lib/health/paper-trading-health";
 const LEVEL_STYLES = {
   ok: {
     icon: CheckCircle2,
-    iconClass: "text-emerald-400",
-    badge: "bg-emerald-500/15 text-emerald-400",
+    iconClass: "text-emerald-700",
+    badge: "bg-emerald-100 text-emerald-900",
     label: "Healthy",
     border: "border-emerald-500/30",
   },
