@@ -239,7 +239,7 @@ export default function OrdersPage() {
     // Paper orders: merge Firestore order history with paper trades (includes SELL exits).
     try {
       const [fsOrders, paperState] = await Promise.all([
-        getFirestoreOrders(500),
+        getFirestoreOrders(),
         getPaperTradingState(),
       ]);
 

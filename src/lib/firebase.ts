@@ -2,6 +2,7 @@ import {
   antiChurnSettingsPersistPatch,
   normalizeAppSettings,
 } from "@/lib/settings/normalize-settings";
+import { PAPER_TRADE_HISTORY_LIMIT } from "@/lib/paper-trades/history-limit";
 import { initializeApp, getApps } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import {
@@ -680,7 +681,9 @@ export async function saveOrder(order: OrderRecord): Promise<void> {
   }
 }
 
-export async function getOrders(maxCount = 100): Promise<OrderRecord[]> {
+export async function getOrders(
+  maxCount = PAPER_TRADE_HISTORY_LIMIT
+): Promise<OrderRecord[]> {
   try {
     const ref = collection(db, "users", getUserId(), "orders");
     const q = query(ref, orderBy("createdAt", "desc"), limit(maxCount));

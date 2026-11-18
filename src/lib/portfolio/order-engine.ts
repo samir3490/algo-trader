@@ -4,6 +4,7 @@ import {
   computeZerodhaCharges,
   type ZerodhaProduct,
 } from "@/lib/brokerage/zerodha-charges";
+import { capPaperTradeHistory } from "@/lib/paper-trades/history-limit";
 import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
 import {
   addPositionToState,
@@ -184,7 +185,9 @@ export function executePortfolioDecision(
       state: {
         ...current,
         balance: round2(balance - cashOut),
-        trades: normalizePaperTrades([newTrade, ...trades], []).slice(0, 500),
+        trades: capPaperTradeHistory(
+          normalizePaperTrades([newTrade, ...trades], [])
+        ),
       },
       executed: true,
       executedQty: qty,
@@ -243,7 +246,9 @@ export function executePortfolioDecision(
     state: {
       ...closed.state,
       balance: round2(balance + cashIn),
-      trades: normalizePaperTrades([newTrade, ...trades], []).slice(0, 500),
+      trades: capPaperTradeHistory(
+        normalizePaperTrades([newTrade, ...trades], [])
+      ),
     },
     executed: true,
     executedQty: closed.closedQty,

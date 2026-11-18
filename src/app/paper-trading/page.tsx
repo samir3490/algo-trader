@@ -79,6 +79,7 @@ import {
   tradePeriodLabel,
   type TradePeriodPreset,
 } from "@/lib/portfolio/trade-period";
+import { PAPER_TRADE_HISTORY_LIMIT } from "@/lib/paper-trades/history-limit";
 import { PaperOrderPanel } from "@/app/paper-trading/order-panel";
 import PaperExportMenu from "@/components/paper-export-menu";
 import PaperHealthPanel from "@/components/paper-health-panel";
@@ -297,7 +298,7 @@ export default function PaperTradingPage() {
     try {
       const [state, orders, settings] = await Promise.all([
         getPaperTradingState(),
-        getOrders(500),
+        getOrders(),
         getSettings().catch(() => settingsRef.current),
       ]);
       if (settings) {
@@ -1891,6 +1892,11 @@ export default function PaperTradingPage() {
             <span className="block mt-1 text-text-tertiary/90">
               Fees = brokerage + STT + GST + other. Enable <em>Simulate brokerage</em> in Settings.
             </span>
+            {enrichedTrades.length >= PAPER_TRADE_HISTORY_LIMIT && (
+              <span className="block text-amber-700 mt-1 leading-snug">
+                Showing the newest {PAPER_TRADE_HISTORY_LIMIT} trades (storage cap).
+              </span>
+            )}
             {holdingsNotInHistory.length > 0 && (
               <span className="block text-amber-700 mt-1 leading-snug">
                 {holdingsNotInHistory.length} holding

@@ -125,7 +125,7 @@ export default function DashboardPage() {
       try {
         const [fsState, orders, fsSettings] = await Promise.all([
           getPaperTradingState(),
-          getOrders(500),
+          getOrders(),
           getSettings(),
         ]);
 

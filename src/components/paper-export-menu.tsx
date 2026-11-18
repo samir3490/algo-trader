@@ -57,7 +57,7 @@ export default function PaperExportMenu({
       try {
         const [state, orders] = await Promise.all([
           getPaperTradingState(),
-          getOrders(500),
+          getOrders(),
         ]);
         const trades = normalizePaperTrades(state.trades ?? [], orders);
         downloadPaperExport(kind, {

@@ -1,6 +1,7 @@
 import type { PaperHolding, PaperTrade, PaperTradingState } from "@/lib/firebase";
 import type { PaperPosition } from "@/lib/portfolio/types";
 import { sanitizeForFirestore } from "@/lib/audit/sanitize-audit";
+import { capPaperTradeHistory } from "@/lib/paper-trades/history-limit";
 
 function finiteNumber(value: unknown, fallback = 0): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -63,7 +64,7 @@ export function sanitizePaperTradingPayload(state: {
     return row;
   });
 
-  const trades = (state.trades ?? []).slice(0, 500).map((t) => {
+  const trades = capPaperTradeHistory(state.trades ?? []).map((t) => {
     const row: PaperTrade = {
       id: String(t.id),
       time: String(t.time ?? ""),

@@ -30,6 +30,10 @@ import { detectStrategyConflicts } from "@/lib/portfolio/conflict-detector";
 import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trading/balance";
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
 import {
+  capPaperTradeHistory,
+  PAPER_TRADE_HISTORY_LIMIT,
+} from "@/lib/paper-trades/history-limit";
+import {
   selectTopBuyDecisionsForScan,
 } from "@/lib/portfolio/buy-selection";
 import {
@@ -241,7 +245,7 @@ async function loadPaperState(db: Firestore, userId: string): Promise<PaperTradi
 async function loadRecentOrders(
   db: Firestore,
   userId: string,
-  max = 300
+  max = PAPER_TRADE_HISTORY_LIMIT
 ): Promise<OrderRecord[]> {
   try {
     const snap = await db
@@ -263,7 +267,7 @@ async function persistPaperState(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const raw = paperState.trades ?? [];
-    const trades = normalizePaperTrades(raw, orders).slice(0, 500);
+    const trades = capPaperTradeHistory(normalizePaperTrades(raw, orders));
     const payload = sanitizePaperTradingPayload({
       balance: paperState.balance,
       holdings: paperState.holdings,

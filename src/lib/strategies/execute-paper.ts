@@ -5,6 +5,7 @@ import {
   computeZerodhaCharges,
   type ZerodhaProduct,
 } from "@/lib/brokerage/zerodha-charges";
+import { capPaperTradeHistory } from "@/lib/paper-trades/history-limit";
 
 const INITIAL_BALANCE = 1_000_000;
 
@@ -148,7 +149,7 @@ export function applyPaperSignal(
       state: {
         balance: round2(balance - cashOut),
         holdings,
-        trades: [newTrade, ...trades].slice(0, 500),
+        trades: capPaperTradeHistory([newTrade, ...trades]),
       },
       executed: true,
       executedQty: qty,
@@ -198,7 +199,7 @@ export function applyPaperSignal(
       state: {
         balance: round2(balance + cashIn),
         holdings: newHoldings,
-        trades: [newTrade, ...trades].slice(0, 500),
+        trades: capPaperTradeHistory([newTrade, ...trades]),
       },
       executed: true,
       executedQty: sellQty,

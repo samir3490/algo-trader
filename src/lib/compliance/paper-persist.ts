@@ -1,6 +1,7 @@
 import { FieldValue, type Firestore } from "firebase-admin/firestore";
 import type { OrderRecord, PaperTradingState } from "@/lib/firebase";
 import { sanitizePaperTradingPayload } from "@/lib/paper-trading/firestore-sanitize";
+import { capPaperTradeHistory } from "@/lib/paper-trades/history-limit";
 import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
 
 export async function persistPaperStateAdmin(
@@ -11,7 +12,7 @@ export async function persistPaperStateAdmin(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   try {
     const raw = paperState.trades ?? [];
-    const trades = normalizePaperTrades(raw, orders).slice(0, 500);
+    const trades = capPaperTradeHistory(normalizePaperTrades(raw, orders));
     const payload = sanitizePaperTradingPayload({
       balance: paperState.balance,
       holdings: paperState.holdings,
