@@ -106,19 +106,23 @@ export async function POST(request: NextRequest) {
       orderId = result.order_id;
     }
 
-    sendOrderEmail({
-      mode: "LIVE",
-      symbol: orderParams.tradingsymbol,
-      exchange: orderParams.exchange,
-      side: orderParams.transaction_type as "BUY" | "SELL",
-      quantity: Number(orderParams.quantity),
-      price: Number(orderParams.price) || 0,
-      orderType: orderParams.order_type,
-      product: orderParams.product,
-      orderId,
-      status: "PLACED",
-      accountId: accountId || undefined,
-    }).catch(() => {});
+    try {
+      await sendOrderEmail({
+        mode: "LIVE",
+        symbol: orderParams.tradingsymbol,
+        exchange: orderParams.exchange,
+        side: orderParams.transaction_type as "BUY" | "SELL",
+        quantity: Number(orderParams.quantity),
+        price: Number(orderParams.price) || 0,
+        orderType: orderParams.order_type,
+        product: orderParams.product,
+        orderId,
+        status: "PLACED",
+        accountId: accountId || undefined,
+      });
+    } catch (emailErr) {
+      console.error("Live manual order email failed:", emailErr);
+    }
 
     return NextResponse.json({ orderId, status: "success" });
   } catch (error: any) {

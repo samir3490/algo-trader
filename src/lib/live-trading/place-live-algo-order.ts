@@ -234,22 +234,26 @@ export async function placeLiveAlgoOrder(
       kiteUserId: book.kiteUserId,
     });
 
-    // Always email live algo fills immediately (independent of paper digest).
-    void sendOrderEmail({
-      mode: "LIVE",
-      symbol: input.symbol.toUpperCase(),
-      exchange: input.exchange || "NSE",
-      side: input.side,
-      quantity: qty,
-      price,
-      orderType: "MARKET",
-      product,
-      orderId,
-      status: `LIVE ${input.side} EXECUTED`,
-      accountId: book.kiteUserId,
-      strategyName: input.strategyName,
-      reason: input.reason || `Algo live ${input.side}`,
-    }).catch(() => {});
+    // Await email so Vercel does not freeze the lambda before Gmail accepts it.
+    try {
+      await sendOrderEmail({
+        mode: "LIVE",
+        symbol: input.symbol.toUpperCase(),
+        exchange: input.exchange || "NSE",
+        side: input.side,
+        quantity: qty,
+        price,
+        orderType: "MARKET",
+        product,
+        orderId,
+        status: `LIVE ${input.side} EXECUTED`,
+        accountId: book.kiteUserId,
+        strategyName: input.strategyName,
+        reason: input.reason || `Algo live ${input.side}`,
+      });
+    } catch (emailErr) {
+      console.error("Live order email failed:", formatKiteError(emailErr));
+    }
 
     return { ok: true, orderId, qty };
   } catch (e) {

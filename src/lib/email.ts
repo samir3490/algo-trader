@@ -103,7 +103,9 @@ export async function sendOrderEmail(params: OrderEmailParams) {
   const recipientEmail = process.env.EMAIL_RECIPIENT || process.env.EMAIL_USER;
 
   if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD || !recipientEmail) {
-    console.log("Email not configured, skipping notification");
+    console.error(
+      "Email not configured, skipping notification (need EMAIL_USER, EMAIL_APP_PASSWORD, EMAIL_RECIPIENT)"
+    );
     return;
   }
 
@@ -168,14 +170,18 @@ export async function sendOrderEmail(params: OrderEmailParams) {
   `;
 
   try {
-    await transporter.sendMail({
+    const info = await transporter.sendMail({
       from: `"AlgoTrader" <${process.env.EMAIL_USER}>`,
       to: recipientEmail,
       subject,
       html,
     });
+    console.log(
+      `Order email sent to ${recipientEmail} · ${mode} ${side} ${symbol} · messageId=${info.messageId || "?"}`
+    );
   } catch (error) {
     console.error("Failed to send order email:", error);
+    throw error;
   }
 }
 

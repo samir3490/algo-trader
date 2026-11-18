@@ -1,0 +1,36 @@
+name: Test live email
+
+on:
+  workflow_dispatch:
+
+jobs:
+  email:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send test LIVE order email
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET is not set"
+            exit 1
+          fi
+          BASE="${APP_URL:-https://algo-trader-umber.vercel.app}"
+          URL="${BASE}/api/cron/test-live-email?symbol=SBIN&orderId=261118151237399&qty=1&price=1140.05"
+          SECRET="$(printf '%s' "$CRON_SECRET" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          echo "GET ${URL}"
+          HTTP=$(curl -sS -w "%{http_code}" -o /tmp/email.json \
+            -H "Authorization: Bearer ${SECRET}" \
+            "${URL}")
+          echo "HTTP ${HTTP}"
+          cat /tmp/email.json
+          echo ""
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::Email test HTTP ${HTTP}"
+            exit 1
+          fi
+          if ! grep -q '"ok":true' /tmp/email.json; then
+            echo "::error::Email test failed"
+            exit 1
+          fi
