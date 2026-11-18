@@ -1,0 +1,44 @@
+# One-shot live smoke BUY to verify Zerodha algo path.
+name: Live smoke trade
+
+on:
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: "NSE symbol (default SBIN)"
+        required: false
+        default: "SBIN"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Place live smoke BUY
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL }}
+          SYMBOL: ${{ inputs.symbol }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET is not set"
+            exit 1
+          fi
+          BASE="${APP_URL:-https://algo-trader-umber.vercel.app}"
+          SYM="${SYMBOL:-SBIN}"
+          URL="${BASE}/api/cron/live-smoke?symbol=${SYM}"
+          SECRET="$(printf '%s' "$CRON_SECRET" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+          echo "GET ${URL}"
+          HTTP=$(curl -sS -w "%{http_code}" -o /tmp/smoke.json \
+            -H "Authorization: Bearer ${SECRET}" \
+            "${URL}")
+          echo "HTTP ${HTTP}"
+          cat /tmp/smoke.json
+          echo ""
+          if [ "$HTTP" != "200" ]; then
+            echo "::error::Smoke API HTTP ${HTTP}"
+            exit 1
+          fi
+          if ! grep -q '"ok":true' /tmp/smoke.json; then
+            echo "::error::Live smoke trade did not succeed"
+            exit 1
+          fi
