@@ -285,21 +285,27 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <section className="space-y-3">
+      <section className="rounded-xl border-2 border-sky-300 bg-sky-50/70 p-4 sm:p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-sky-800">
-            Paper trading
-          </h2>
-          <Link href="/paper-trading" className="text-xs text-accent hover:underline">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-sky-700">
+              Simulated
+            </p>
+            <h2 className="text-base font-bold text-sky-950">Paper trading</h2>
+          </div>
+          <Link
+            href="/paper-trading"
+            className="rounded-md bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-sky-700"
+          >
             Open paper →
           </Link>
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="card glow-accent border-sky-200/60">
+          <div className="rounded-lg border border-sky-200 bg-white/80 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-text-secondary">Cash remaining</span>
-              <div className="rounded-lg bg-accent-muted p-1.5">
-                <IndianRupee className="h-4 w-4 text-accent" />
+              <div className="rounded-lg bg-sky-100 p-1.5">
+                <IndianRupee className="h-4 w-4 text-sky-700" />
               </div>
             </div>
             <p className="text-xl font-bold text-text-primary tabular-nums break-words">
@@ -308,11 +314,11 @@ export default function DashboardPage() {
             <p className="text-xs text-text-tertiary mt-1">Simulated · available to buy</p>
           </div>
 
-          <div className="card border-sky-200/40">
+          <div className="rounded-lg border border-sky-200 bg-white/80 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-text-secondary">Invested</span>
-              <div className="rounded-lg bg-bg-tertiary p-1.5">
-                <Wallet className="h-4 w-4 text-text-secondary" />
+              <div className="rounded-lg bg-sky-100 p-1.5">
+                <Wallet className="h-4 w-4 text-sky-700" />
               </div>
             </div>
             <p className="text-xl font-bold text-text-primary tabular-nums break-words">
@@ -329,10 +335,10 @@ export default function DashboardPage() {
             </p>
           </div>
 
-          <div className="card border-sky-200/40">
+          <div className="rounded-lg border border-sky-200 bg-white/80 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-text-secondary">Realized P&amp;L</span>
-              <div className="rounded-lg bg-bg-tertiary p-1.5">
+              <div className="rounded-lg bg-sky-100 p-1.5">
                 {realizedPnl >= 0 ? (
                   <TrendingUp className="h-4 w-4 text-profit" />
                 ) : (

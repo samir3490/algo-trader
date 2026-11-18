@@ -120,38 +120,44 @@ export default function LiveTradingDashboardStrip() {
   }, [user]);
 
   return (
-    <section className="space-y-3">
+    <section className="rounded-xl border-2 border-amber-400 bg-amber-50/80 p-4 sm:p-5 space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-900">
-            Live trading
-          </h2>
-          <span
-            className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
-              snap.autoOn
-                ? "bg-loss/15 text-loss"
-                : "bg-bg-tertiary text-text-tertiary"
-            )}
-          >
-            Auto {snap.autoOn ? "ON" : "OFF"}
-          </span>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-800">
+            Real money
+          </p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-amber-950">Live trading</h2>
+            <span
+              className={cn(
+                "rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+                snap.autoOn
+                  ? "bg-red-100 text-red-800"
+                  : "bg-amber-200/80 text-amber-900"
+              )}
+            >
+              Auto {snap.autoOn ? "ON" : "OFF"}
+            </span>
+          </div>
         </div>
-        <Link href="/live-trading" className="text-xs text-amber-800 hover:underline">
+        <Link
+          href="/live-trading"
+          className="rounded-md bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-700"
+        >
           Open live →
         </Link>
       </div>
 
       {loading ? (
-        <div className="card border-amber-200/50 flex items-center gap-2 py-6 text-sm text-text-tertiary">
+        <div className="rounded-lg border border-amber-200 bg-white/70 flex items-center gap-2 py-6 px-4 text-sm text-text-tertiary">
           <Loader2 className="h-4 w-4 animate-spin" />
           Loading Zerodha balances…
         </div>
       ) : !snap.connected ? (
-        <div className="card border-amber-200/50 px-4 py-4">
+        <div className="rounded-lg border border-amber-200 bg-white/70 px-4 py-4">
           <p className="text-sm text-text-secondary">
             Connect a Zerodha account in{" "}
-            <Link href="/settings?tab=live" className="text-accent hover:underline">
+            <Link href="/settings?tab=live" className="text-amber-800 font-medium hover:underline">
               Settings → Live
             </Link>{" "}
             to see live cash, margins, and day P&amp;L here.
@@ -163,7 +169,7 @@ export default function LiveTradingDashboardStrip() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="card border-amber-200/60">
+          <div className="rounded-lg border border-amber-200 bg-white/80 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-text-secondary">Cash available</span>
               <div className="rounded-lg bg-amber-100 p-1.5">
@@ -178,11 +184,11 @@ export default function LiveTradingDashboardStrip() {
             </p>
           </div>
 
-          <div className="card border-amber-200/40">
+          <div className="rounded-lg border border-amber-200 bg-white/80 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-text-secondary">Margin used</span>
-              <div className="rounded-lg bg-bg-tertiary p-1.5">
-                <Wallet className="h-4 w-4 text-text-secondary" />
+              <div className="rounded-lg bg-amber-100 p-1.5">
+                <Wallet className="h-4 w-4 text-amber-800" />
               </div>
             </div>
             <p className="text-xl font-bold text-text-primary tabular-nums break-words">
@@ -194,10 +200,10 @@ export default function LiveTradingDashboardStrip() {
             </p>
           </div>
 
-          <div className="card border-amber-200/40">
+          <div className="rounded-lg border border-amber-200 bg-white/80 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-text-secondary">Day P&amp;L</span>
-              <div className="rounded-lg bg-bg-tertiary p-1.5">
+              <div className="rounded-lg bg-amber-100 p-1.5">
                 {snap.dayPnl >= 0 ? (
                   <TrendingUp className="h-4 w-4 text-profit" />
                 ) : (

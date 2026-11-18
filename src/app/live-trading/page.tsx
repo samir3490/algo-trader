@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -19,7 +20,11 @@ import {
   Users,
   RefreshCw,
   Wallet,
+  IndianRupee,
+  TrendingUp,
+  TrendingDown,
 } from "lucide-react";
+import StatCard from "@/components/ui/stat-card";
 import {
   cn,
   formatCurrency,
@@ -35,6 +40,7 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import {
   getSettings,
+  saveSettings,
   getZerodhaAccounts,
   type AppSettings,
   type ZerodhaAccount,
@@ -150,14 +156,6 @@ const ERROR_MESSAGES: Record<string, string> = {
   session_failed: "Failed to create Zerodha session. Your request token may have expired. Please reconnect.",
 };
 
-const strategies = [
-  "SMA Crossover",
-  "EMA Crossover",
-  "RSI Strategy",
-  "MACD Crossover",
-  "Bollinger Bands",
-];
-
 function LiveTradingContent() {
   const searchParams = useSearchParams();
   const { user } = useAuth();
@@ -219,11 +217,10 @@ function LiveTradingContent() {
 
   const [activeTab, setActiveTab] = useState<TabType>("positions");
 
-  const [autoTradingEnabled, setAutoTradingEnabled] = useState(false);
-  const [selectedStrategy, setSelectedStrategy] = useState(strategies[0]);
-  const [tradingSymbols, setTradingSymbols] = useState("");
-  const [maxOrdersPerDay, setMaxOrdersPerDay] = useState("20");
-  const [maxLossLimit, setMaxLossLimit] = useState("5000");
+  const [autoTradingEnabled, setAutoTradingEnabled] = useState(
+    () => loadSettingsFromCache().liveAutoTradingEnabled === true
+  );
+  const [savingKillSwitch, setSavingKillSwitch] = useState(false);
 
   const connected = accounts.some((a) => a.kiteUserId === selectedAccountId && a.connected);
   const selectedAccount = accounts.find((a) => a.kiteUserId === selectedAccountId);
@@ -260,12 +257,34 @@ function LiveTradingContent() {
       .then((s) => {
         setAppSettings(s);
         saveSettingsToCache(s);
+        setAutoTradingEnabled(s.liveAutoTradingEnabled === true);
         setExchange((s.defaultExchange as Exchange) || "NSE");
         setProductType((s.defaultProduct as ProductType) || "MIS");
         setOrderType((s.defaultOrderType as OrderType) || "MARKET");
       })
       .catch(() => {});
   }, [user]);
+
+  async function toggleLiveKillSwitch(next: boolean) {
+    setSavingKillSwitch(true);
+    setAutoTradingEnabled(next);
+    try {
+      await saveSettings({ liveAutoTradingEnabled: next });
+      const merged = { ...appSettings, liveAutoTradingEnabled: next };
+      setAppSettings(merged);
+      saveSettingsToCache(merged);
+      setStatusMessage(
+        next
+          ? "Live auto-trading ON — cron may place real orders (also needs ENABLE_LIVE_TRADING)."
+          : "Live auto-trading OFF — paper continues; no algo live orders."
+      );
+    } catch {
+      setAutoTradingEnabled(!next);
+      setErrorMessage("Could not save live kill switch. Try Settings → Live.");
+    } finally {
+      setSavingKillSwitch(false);
+    }
+  }
 
   const liveOrderNotional = resolveLiveOrderNotional(appSettings);
   const liveCapitalLimit = resolveLiveCapitalLimit(appSettings);
@@ -839,12 +858,105 @@ function LiveTradingContent() {
 
   return (
     <div className="min-h-screen bg-bg-primary text-text-primary">
+      {/* Page header — mirrors Paper Trading layout (amber = live) */}
+      <div className="border-b border-amber-200/80 bg-amber-50/60 px-3 sm:px-6 py-4 sm:py-5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-800">
+              Real money · Zerodha
+            </p>
+            <h1 className="text-2xl md:text-3xl font-bold text-amber-950">
+              Live Trading
+            </h1>
+            <p className="text-sm text-amber-900/80 mt-1">
+              Place real orders and monitor positions — separate capital from paper
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href="/settings?tab=live-rules"
+              className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+            >
+              Live Rules
+            </Link>
+            <Link
+              href="/settings?tab=live"
+              className="rounded-lg border border-amber-300 bg-white px-3 py-1.5 text-xs font-semibold text-amber-950 hover:bg-amber-100"
+            >
+              Live Settings
+            </Link>
+            <button
+              type="button"
+              disabled={savingKillSwitch}
+              onClick={() => void toggleLiveKillSwitch(!autoTradingEnabled)}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-60",
+                autoTradingEnabled
+                  ? "bg-red-600 text-white hover:bg-red-700"
+                  : "bg-amber-200 text-amber-950 hover:bg-amber-300"
+              )}
+            >
+              <Power className="h-3.5 w-3.5" />
+              Auto {autoTradingEnabled ? "ON" : "OFF"}
+            </button>
+          </div>
+        </div>
+
+        <div className="mb-4 rounded-lg border border-amber-200 bg-white/80 px-4 py-3 text-xs text-amber-950">
+          <span className="font-medium">Algo sizing: </span>
+          ₹{liveOrderNotional.toLocaleString("en-IN")} / trade · ₹
+          {liveCapitalLimit.toLocaleString("en-IN")} capital cap · deployed ₹
+          {Math.round(liveDeployed).toLocaleString("en-IN")} · remaining ₹
+          {Math.round(liveRemaining).toLocaleString("en-IN")}
+          {" · "}
+          <Link href="/settings?tab=live" className="underline font-medium">
+            Edit limits
+          </Link>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <StatCard
+            label="Available cash"
+            primary={formatCurrency(selectedFunds?.available ?? 0)}
+            hint={connected ? selectedAccountId || "Zerodha" : "Connect account"}
+            icon={IndianRupee}
+            colorClass="text-amber-800"
+            className="border-amber-200 bg-white/90"
+          />
+          <StatCard
+            label="Margin used"
+            primary={formatCurrency(selectedFunds?.used ?? 0)}
+            hint={`Net ${formatCurrency(selectedFunds?.net ?? 0)}`}
+            icon={Wallet}
+            colorClass="text-amber-800"
+            className="border-amber-200 bg-white/90"
+          />
+          <StatCard
+            label="Day P&L (positions)"
+            primary={formatCurrency(netPnl)}
+            hint={`${positions.length} open position${positions.length === 1 ? "" : "s"}`}
+            icon={netPnl >= 0 ? TrendingUp : TrendingDown}
+            colorClass={netPnl >= 0 ? "text-profit" : "text-loss"}
+            className="border-amber-200 bg-white/90"
+          />
+          <StatCard
+            label="Holdings P&L"
+            primary={formatCurrency(holdingsTotals.pnl)}
+            secondary={formatPercent(holdingsPnlPercent)}
+            hint={`Invested ${formatCurrency(holdingsTotals.invested)}`}
+            icon={Wallet}
+            colorClass={holdingsTotals.pnl >= 0 ? "text-profit" : "text-loss"}
+            className="border-amber-200 bg-white/90"
+          />
+        </div>
+      </div>
+
       {/* Account Selector Banner */}
-      <div className="bg-bg-secondary border-b border-border px-3 sm:px-6 py-3">
+      <div className="bg-bg-secondary border-b border-amber-200/50 px-3 sm:px-6 py-2.5">
         <div className="flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center gap-2 sm:gap-4">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <Users className="h-4 w-4 text-text-secondary hidden sm:block" />
+              <Users className="h-4 w-4 text-amber-800 hidden sm:block" />
               <span className="text-xs sm:text-sm text-text-secondary">Account:</span>
             </div>
 
@@ -1691,85 +1803,58 @@ function LiveTradingContent() {
           </div>
         </div>
 
-        {/* Auto-Trading Section */}
-        <div className="bg-bg-secondary border border-border rounded-lg p-4 sm:p-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <Power className="h-5 w-5 text-orange-400" />
-              <h2 className="text-lg font-semibold">Auto Trading</h2>
-              {autoTradingEnabled && (
-                <span className="text-xs bg-green-900/50 text-green-400 px-2 py-0.5 rounded-full font-medium">
-                  ACTIVE
-                </span>
-              )}
+        {/* Live auto kill switch — same control as Settings → Live */}
+        <div className="rounded-xl border-2 border-amber-300 bg-amber-50/90 p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex items-start gap-3">
+              <div className="rounded-lg bg-amber-100 p-2">
+                <Power className="h-5 w-5 text-amber-900" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-amber-950">
+                  Automatic live trading
+                </h2>
+                <p className="text-xs text-amber-900/80 mt-1 max-w-xl">
+                  When ON (and server <code className="rounded bg-amber-100 px-1">ENABLE_LIVE_TRADING=true</code>),
+                  cron places real Zerodha orders using Live Rules + capital limits.
+                  Paper trading is unaffected. Prefer testing rules on paper first.
+                </p>
+                <p className="text-xs text-amber-900 mt-2">
+                  Full checklist:{" "}
+                  <Link href="/settings?tab=live-rules" className="underline font-medium">
+                    Settings → Live Rules
+                  </Link>
+                </p>
+              </div>
             </div>
             <button
-              onClick={() => setAutoTradingEnabled(!autoTradingEnabled)}
+              type="button"
+              disabled={savingKillSwitch}
+              onClick={() => void toggleLiveKillSwitch(!autoTradingEnabled)}
               className={cn(
-                "relative inline-flex h-6 w-11 items-center rounded-full transition-colors",
-                autoTradingEnabled ? "bg-green-600" : "bg-bg-tertiary"
+                "relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-60 self-start sm:self-center",
+                autoTradingEnabled ? "bg-red-600" : "bg-amber-200"
               )}
+              aria-pressed={autoTradingEnabled}
+              aria-label="Toggle live auto-trading"
             >
               <span
                 className={cn(
-                  "inline-block h-4 w-4 transform rounded-full bg-white transition-transform",
+                  "inline-block h-5 w-5 transform rounded-full bg-white transition-transform shadow",
                   autoTradingEnabled ? "translate-x-6" : "translate-x-1"
                 )}
               />
             </button>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">Strategy</label>
-              <select
-                value={selectedStrategy}
-                onChange={(e) => setSelectedStrategy(e.target.value)}
-                className="w-full bg-bg-primary border border-border rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none focus:border-accent transition-colors"
-              >
-                {strategies.map((s) => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+          {autoTradingEnabled && (
+            <div className="mt-4 flex items-start gap-2 rounded-lg border border-red-500/35 bg-red-500/10 p-3">
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+              <p className="text-xs leading-relaxed text-red-900">
+                Live auto-trading is ON. Real money orders can be placed by the algo.
+                Turn OFF anytime with this switch.
+              </p>
             </div>
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">Symbols to Trade</label>
-              <input
-                type="text"
-                value={tradingSymbols}
-                onChange={(e) => setTradingSymbols(e.target.value)}
-                placeholder="RELIANCE, INFY, TCS"
-                className="w-full bg-bg-primary border border-border rounded-md py-2 px-3 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent transition-colors"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">Max Orders / Day</label>
-              <input
-                type="number"
-                value={maxOrdersPerDay}
-                onChange={(e) => setMaxOrdersPerDay(e.target.value)}
-                className="w-full bg-bg-primary border border-border rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none focus:border-accent transition-colors"
-              />
-            </div>
-            <div>
-              <label className="text-xs text-text-secondary mb-1 block">Max Loss Limit (₹)</label>
-              <input
-                type="number"
-                value={maxLossLimit}
-                onChange={(e) => setMaxLossLimit(e.target.value)}
-                className="w-full bg-bg-primary border border-border rounded-md py-2 px-3 text-sm text-text-primary focus:outline-none focus:border-accent transition-colors"
-              />
-            </div>
-          </div>
-
-          <div className="mt-5 flex items-start gap-2 rounded-lg border border-red-500/35 bg-red-500/10 p-3">
-            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-red-400" />
-            <p className="text-xs leading-relaxed text-text-secondary">
-              Auto-trading will place orders automatically based on strategy signals.
-              Ensure proper risk management parameters are set. You are solely responsible
-              for any losses incurred.
-            </p>
-          </div>
+          )}
         </div>
       </div>
     </div>
