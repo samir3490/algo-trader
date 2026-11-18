@@ -27,7 +27,7 @@ import {
   buildRankedPaperSellQueue,
   rankBuyOpinions,
 } from "@/lib/portfolio/portfolio-manager";
-import { loadLiveBook } from "@/lib/live-trading/live-book";
+import { algoCapitalBook, loadLiveBook } from "@/lib/live-trading/live-book";
 import { detectStrategyConflicts } from "@/lib/portfolio/conflict-detector";
 import { resolvePaperStartingBalance, formatBuyStrength } from "@/lib/paper-trading/balance";
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
@@ -1237,7 +1237,7 @@ export async function runStrategiesForUser(
         diagnostics,
         "liveExec",
         "—",
-        `Live slots ${liveSelect.slotsToFill} · open ${liveBook.openCount}/${liveMaxPositions} · deployed ₹${Math.round(liveBook.deployed)}`
+        `Live algo slots ${liveSelect.slotsToFill} · open ${liveBook.openCount}/${liveMaxPositions} · algo deployed ₹${Math.round(liveBook.deployed)} · trades today ${liveBook.tradesToday}`
       );
 
       for (const skip of liveSelect.skippedQuality) {
@@ -1252,8 +1252,7 @@ export async function runStrategiesForUser(
       let livePlaced = 0;
       const liveOpen = new Set(liveBook.openSymbols);
       let liveOpenCount = liveBook.openCount;
-      let livePositions = [...liveBook.positions];
-      let liveHoldings = [...liveBook.holdings];
+      let liveDeployed = liveBook.deployed;
 
       for (const decision of liveSelect.toExecute) {
         if (livePlaced >= liveSelect.slotsToFill) break;
@@ -1261,6 +1260,7 @@ export async function runStrategiesForUser(
         if (liveOpen.has(sym)) continue;
 
         const exchange = decision.exchange || "NSE";
+        const capitalBook = algoCapitalBook(liveDeployed);
         const liveResult = await placeLiveAlgoOrder(db, userId, {
           side: "BUY",
           symbol: decision.symbol,
@@ -1276,8 +1276,8 @@ export async function runStrategiesForUser(
               "liveRuleEnforceCapitalLimits"
             ),
           },
-          positions: livePositions,
-          holdings: liveHoldings,
+          positions: capitalBook.positions,
+          holdings: capitalBook.holdings,
         });
 
         if (liveResult.ok) {
@@ -1286,10 +1286,7 @@ export async function runStrategiesForUser(
           liveOpen.add(sym);
           liveOpenCount += 1;
           const fillQty = liveResult.qty ?? 0;
-          livePositions = [
-            ...livePositions,
-            { qty: fillQty, avgPrice: decision.price },
-          ];
+          liveDeployed += fillQty * decision.price;
           addScanDetail(
             diagnostics,
             "liveExec",

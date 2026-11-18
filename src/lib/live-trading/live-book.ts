@@ -2,7 +2,6 @@ import { KiteConnect } from "kiteconnect";
 import type { Firestore } from "firebase-admin/firestore";
 import { FieldValue } from "firebase-admin/firestore";
 import {
-  computeLiveDeployedCapital,
   type LiveHoldingLike,
   type LivePositionLike,
 } from "@/lib/live-trading/capital-limits";
@@ -12,17 +11,44 @@ import { todayDateKeyIST } from "@/lib/portfolio/compute-portfolio";
 export interface LiveBook {
   ok: boolean;
   message?: string;
+  /** Broker positions (for order qty / display). */
   positions: LivePositionLike[];
   holdings: LiveHoldingLike[];
-  /** Distinct symbols with a long live position or holding. */
+  /** Algo-only open symbols (independent of paper + non-algo holdings). */
   openSymbols: Set<string>;
   openCount: number;
+  /** Algo-only deployed ₹ (independent of full broker book). */
   deployed: number;
+  tradesToday: number;
+  buyNotionalToday: number;
   kiteUserId?: string;
   kite?: InstanceType<typeof KiteConnect>;
 }
 
-/** Load live positions/holdings from Zerodha for algo capital + slot accounting. */
+function readAlgoQuota(data: Record<string, unknown> | undefined): {
+  openSymbols: Set<string>;
+  deployed: number;
+  tradesToday: number;
+  buyNotionalToday: number;
+} {
+  const dateIST = todayDateKeyIST();
+  const sameDay = data?.algoStatsDateIST === dateIST;
+  const openSymbols = new Set<string>(
+    (Array.isArray(data?.algoOpenSymbols) ? data!.algoOpenSymbols : [])
+      .map((s) => String(s).toUpperCase())
+      .filter(Boolean)
+  );
+  return {
+    openSymbols,
+    deployed: Math.max(0, Number(data?.algoDeployedCapital ?? 0) || 0),
+    tradesToday: sameDay ? Number(data?.algoTradesToday ?? 0) || 0 : 0,
+    buyNotionalToday: sameDay
+      ? Number(data?.algoBuyNotionalToday ?? 0) || 0
+      : 0,
+  };
+}
+
+/** Load Zerodha session + algo-only live quotas (not paper, not full portfolio). */
 export async function loadLiveBook(
   db: Firestore,
   appUserId: string
@@ -38,6 +64,8 @@ export async function loadLiveBook(
       openSymbols: new Set(),
       openCount: 0,
       deployed: 0,
+      tradesToday: 0,
+      buyNotionalToday: 0,
     };
   }
 
@@ -46,7 +74,6 @@ export async function loadLiveBook(
 
   const positions: LivePositionLike[] = [];
   const holdings: LiveHoldingLike[] = [];
-  const openSymbols = new Set<string>();
 
   try {
     const posResp = await kite.getPositions();
@@ -54,13 +81,10 @@ export async function loadLiveBook(
     for (const p of net) {
       const qty = Number(p.quantity ?? 0);
       if (qty <= 0) continue;
-      const sym = String(p.tradingsymbol || "").toUpperCase();
-      if (!sym) continue;
       positions.push({
         qty,
         avgPrice: Number(p.average_price ?? p.avg_price ?? 0),
       });
-      openSymbols.add(sym);
     }
   } catch {
     /* holdings still useful */
@@ -76,38 +100,47 @@ export async function loadLiveBook(
           0
       );
       if (qty <= 0) continue;
-      const sym = String(
-        (h as { tradingsymbol?: string }).tradingsymbol || ""
-      ).toUpperCase();
-      if (!sym) continue;
-      const invested = Number((h as { average_price?: number }).average_price)
-        ? qty * Number((h as { average_price?: number }).average_price)
-        : undefined;
       holdings.push({
         qty,
         quantity: qty,
         avgPrice: Number((h as { average_price?: number }).average_price ?? 0),
-        invested:
-          typeof (h as { close_price?: number }).close_price === "number"
-            ? undefined
-            : invested,
       });
-      openSymbols.add(sym);
     }
   } catch {
     /* ignore */
   }
 
-  const deployed = computeLiveDeployedCapital(positions, holdings);
+  const quotaSnap = await db.doc(`users/${appUserId}/data/liveTrading`).get();
+  const quota = readAlgoQuota(
+    quotaSnap.exists ? (quotaSnap.data() as Record<string, unknown>) : undefined
+  );
+
   return {
     ok: true,
     positions,
     holdings,
-    openSymbols,
-    openCount: openSymbols.size,
-    deployed,
+    openSymbols: quota.openSymbols,
+    openCount: quota.openSymbols.size,
+    deployed: quota.deployed,
+    tradesToday: quota.tradesToday,
+    buyNotionalToday: quota.buyNotionalToday,
     kiteUserId: token.kiteUserId,
     kite,
+  };
+}
+
+/**
+ * Positions/holdings stand-ins so capital gates use algo-only deployed ₹,
+ * not the full broker portfolio (paper and live stay independent).
+ */
+export function algoCapitalBook(deployed: number): {
+  positions: LivePositionLike[];
+  holdings: LiveHoldingLike[];
+} {
+  if (deployed <= 0) return { positions: [], holdings: [] };
+  return {
+    positions: [{ qty: 1, avgPrice: deployed }],
+    holdings: [],
   };
 }
 
@@ -127,26 +160,20 @@ export async function recordLiveAlgoFill(
   const dateIST = todayDateKeyIST();
   const ref = db.doc(`users/${appUserId}/data/liveTrading`);
   const snap = await ref.get();
-  const prev = snap.exists ? snap.data() ?? {} : {};
-  const sameDay = prev.algoStatsDateIST === dateIST;
-  const tradesToday = sameDay ? Number(prev.algoTradesToday ?? 0) : 0;
-  const buyNotionalToday = sameDay
-    ? Number(prev.algoBuyNotionalToday ?? 0)
-    : 0;
-  const sellNotionalToday = sameDay
-    ? Number(prev.algoSellNotionalToday ?? 0)
-    : 0;
+  const prev = (snap.exists ? snap.data() : {}) as Record<string, unknown>;
+  const quota = readAlgoQuota(prev);
   const notional = Math.round(fill.qty * fill.price * 100) / 100;
 
-  const openSymbols: string[] = Array.isArray(prev.algoOpenSymbols)
-    ? [...prev.algoOpenSymbols]
-    : [];
+  const openSymbols = new Set(quota.openSymbols);
   const sym = fill.symbol.toUpperCase();
+  let deployed = quota.deployed;
+
   if (fill.side === "BUY") {
-    if (!openSymbols.includes(sym)) openSymbols.push(sym);
+    openSymbols.add(sym);
+    deployed += notional;
   } else {
-    const idx = openSymbols.indexOf(sym);
-    if (idx >= 0) openSymbols.splice(idx, 1);
+    openSymbols.delete(sym);
+    deployed = Math.max(0, deployed - notional);
   }
 
   await ref.set(
@@ -161,15 +188,18 @@ export async function recordLiveAlgoFill(
         kiteUserId: fill.kiteUserId,
       },
       algoStatsDateIST: dateIST,
-      algoTradesToday: tradesToday + 1,
+      algoTradesToday: quota.tradesToday + 1,
       algoBuyNotionalToday:
-        fill.side === "BUY" ? buyNotionalToday + notional : buyNotionalToday,
+        fill.side === "BUY"
+          ? quota.buyNotionalToday + notional
+          : quota.buyNotionalToday,
       algoSellNotionalToday:
         fill.side === "SELL"
-          ? sellNotionalToday + notional
-          : sellNotionalToday,
-      algoOpenSymbols: openSymbols,
-      algoOpenCount: openSymbols.length,
+          ? Number(prev.algoSellNotionalToday ?? 0) + notional
+          : Number(prev.algoSellNotionalToday ?? 0) || 0,
+      algoOpenSymbols: [...openSymbols],
+      algoOpenCount: openSymbols.size,
+      algoDeployedCapital: Math.round(deployed * 100) / 100,
     },
     { merge: true }
   );

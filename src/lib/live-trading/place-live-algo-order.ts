@@ -8,6 +8,7 @@ import {
   type LivePositionLike,
 } from "@/lib/live-trading/capital-limits";
 import {
+  algoCapitalBook,
   loadLiveBook,
   recordLiveAlgoFill,
 } from "@/lib/live-trading/live-book";
@@ -121,20 +122,24 @@ export async function placeLiveAlgoOrder(
   const price = Math.max(0, input.price);
   const product = input.product || "CNC";
   const notional = resolveLiveOrderNotional(input.settings);
-  const positions: LivePositionLike[] = (input.positions ?? book.positions).map(
-    (p) => ({
-      qty: Number(p.qty) || 0,
-      avgPrice: Number(p.avgPrice ?? p.average_price) || 0,
-    })
-  );
-  const holdings: LiveHoldingLike[] = (input.holdings ?? book.holdings).map(
-    (h) => ({
-      qty: Number(h.qty ?? h.quantity) || 0,
-      quantity: Number(h.quantity ?? h.qty) || 0,
-      avgPrice: Number(h.avgPrice ?? h.average_price) || 0,
-      invested: h.invested,
-    })
-  );
+  // Capital gate uses algo-only deployed ₹ (not full broker / paper book).
+  const capitalBook =
+    input.positions != null || input.holdings != null
+      ? {
+          positions: (input.positions ?? []).map((p) => ({
+            qty: Number(p.qty) || 0,
+            avgPrice: Number(p.avgPrice ?? p.average_price) || 0,
+          })),
+          holdings: (input.holdings ?? []).map((h) => ({
+            qty: Number(h.qty ?? h.quantity) || 0,
+            quantity: Number(h.quantity ?? h.qty) || 0,
+            avgPrice: Number(h.avgPrice ?? h.average_price) || 0,
+            invested: h.invested,
+          })),
+        }
+      : algoCapitalBook(book.deployed);
+  const positions: LivePositionLike[] = capitalBook.positions;
+  const holdings: LiveHoldingLike[] = capitalBook.holdings;
 
   let qty =
     input.qty != null && input.qty > 0 ? Math.floor(input.qty) : 0;
