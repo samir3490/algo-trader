@@ -1,10 +1,12 @@
 import type { Firestore } from "firebase-admin/firestore";
-import type { KiteConnect } from "kiteconnect";
+import { KiteConnect } from "kiteconnect";
 import {
   evaluateLiveBuyLimits,
   type LiveCapitalSettings,
 } from "@/lib/live-trading/capital-limits";
 import { loadUserSettingsAdmin, listStrategyUserIds } from "@/lib/compliance/admin-data";
+
+type KiteInstance = InstanceType<typeof KiteConnect>;
 
 async function loadLiveSettings(db: Firestore): Promise<LiveCapitalSettings> {
   const userIds = await listStrategyUserIds(db);
@@ -21,7 +23,7 @@ async function loadLiveSettings(db: Firestore): Promise<LiveCapitalSettings> {
 /** Server-side gate for live BUY orders using Kite book + Firestore settings. */
 export async function assertLiveBuyWithinLimits(input: {
   db: Firestore;
-  kite: KiteConnect;
+  kite: KiteInstance;
   side: "BUY" | "SELL";
   qty: number;
   estimatedPrice: number;
