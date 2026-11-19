@@ -3,7 +3,8 @@ import { fetchYahooQuote, type MarketQuoteResult } from "@/lib/market-data/yahoo
 
 export type LiveQuoteSource = "zerodha" | "yahoo";
 
-export interface ResolvedLiveQuote extends MarketQuoteResult {
+export interface ResolvedLiveQuote
+  extends Omit<MarketQuoteResult, "source"> {
   source: LiveQuoteSource;
   priceNote: string;
 }
