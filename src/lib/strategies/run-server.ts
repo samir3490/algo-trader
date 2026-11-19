@@ -763,7 +763,7 @@ export async function runStrategiesForUser(
             diagnostics,
             "liveExec",
             exit.symbol,
-            `LIVE SELL (risk) · qty ${liveSell.qty ?? "?"} · ${liveSell.orderId ?? ""}`
+            `SELL · Live risk exit · ${exit.message || "Risk exit"} · qty ${liveSell.qty ?? "?"}`
           );
         } else if (liveSell.message) {
           addScanDetail(
@@ -1267,7 +1267,6 @@ export async function runStrategiesForUser(
       });
 
       const liveSummary = `Live algo slots ${liveSelect.slotsToFill} · open ${liveBook.openCount}/${liveMaxPositions} · algo deployed ₹${Math.round(liveBook.deployed)} · trades today ${liveBook.tradesToday}`;
-      addScanDetail(diagnostics, "liveExec", "—", liveSummary);
       bumpReason(diagnostics.skipReasons, liveSummary);
 
       for (const skip of liveSelect.skippedQuality) {
@@ -1332,11 +1331,15 @@ export async function runStrategiesForUser(
           liveOpenCount += 1;
           const fillQty = liveResult.qty ?? 0;
           liveDeployed += fillQty * decision.price;
+          const liveStrategy =
+            decision.ownerStrategyName ||
+            decision.signalReason ||
+            "Live algo";
           addScanDetail(
             diagnostics,
             "liveExec",
             decision.symbol,
-            `LIVE BUY · qty ${fillQty || "?"} · ${liveResult.orderId ?? ""} · live open ${liveOpenCount}/${liveMaxPositions}`
+            `BUY · ${liveStrategy} · ${liveBuyReason} · qty ${fillQty || "?"}`
           );
           const reason =
             decision.signalReason ||
@@ -1635,7 +1638,7 @@ export async function runStrategiesForUser(
               diagnostics,
               "liveExec",
               decision.symbol,
-              `LIVE SELL · qty ${liveSell.qty ?? "?"} · ${liveSell.orderId ?? ""}`
+              `SELL · ${decision.ownerStrategyName || "Live algo"} · ${sellReason} · qty ${liveSell.qty ?? "?"}`
             );
             queueEmail(
               "executed",

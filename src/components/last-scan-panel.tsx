@@ -67,14 +67,18 @@ export default function LastScanPanel({
 
   function listFor(key: ScanDetailKey) {
     const fromDetails = details?.[key];
-    if (fromDetails && fromDetails.length > 0) return fromDetails;
+    // Drop legacy placeholder rows (old liveExec summary used symbol "—").
+    const cleaned = fromDetails?.filter(
+      (item) => item.symbol && item.symbol !== "—"
+    );
+    if (cleaned && cleaned.length > 0) return cleaned;
     if (key === "buyApproved" && d?.rankedBuyCandidates?.length) {
       return d.rankedBuyCandidates.map((c) => ({
         symbol: c.symbol,
         meta: `${c.signalCount} signal${c.signalCount !== 1 ? "s" : ""}`,
       }));
     }
-    return fromDetails;
+    return cleaned;
   }
 
   const activeList = activeDetail ? listFor(activeDetail) : undefined;
@@ -144,12 +148,18 @@ export default function LastScanPanel({
             />
             <Stat
               label="Live exec"
-              value={details?.liveExec?.length ?? d.liveSignals}
+              value={
+                details?.liveExec?.filter((x) => x.symbol && x.symbol !== "—")
+                  .length ?? d.liveSignals
+              }
               detailKey="liveExec"
               getList={listFor}
               activeDetail={activeDetail}
               onSelect={setActiveDetail}
-              highlight={(details?.liveExec?.length ?? 0) > 0}
+              highlight={
+                (details?.liveExec?.filter((x) => x.symbol && x.symbol !== "—")
+                  .length ?? 0) > 0
+              }
             />
             <Stat
               label="Open positions"
@@ -252,16 +262,16 @@ export default function LastScanPanel({
               {activeList.map((item, i) => (
                 <li
                   key={`${item.symbol}-${i}`}
-                  className="inline-flex items-center gap-3 px-3 py-2 text-sm max-w-full"
+                  className="flex items-start gap-3 px-3 py-2.5 text-sm"
                 >
-                  <span className="font-medium text-text-primary w-24 shrink-0 truncate">
+                  <span className="font-semibold text-text-primary w-24 shrink-0 truncate pt-0.5">
                     {item.symbol}
                   </span>
-                  {item.meta && (
-                    <span className="text-xs text-text-tertiary truncate max-w-[14rem]">
+                  {item.meta ? (
+                    <span className="text-xs text-text-secondary leading-snug min-w-0 break-words">
                       {item.meta}
                     </span>
-                  )}
+                  ) : null}
                 </li>
               ))}
             </ul>
