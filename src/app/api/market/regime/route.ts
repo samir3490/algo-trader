@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchMarketRegime } from "@/lib/market-data/market-regime";
+import { getRequestKiteCreds } from "@/lib/zerodha/request-creds";
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    const data = await fetchMarketRegime();
+    const creds = getRequestKiteCreds(request);
+    const data = await fetchMarketRegime(creds);
     return NextResponse.json(data);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to fetch market regime";

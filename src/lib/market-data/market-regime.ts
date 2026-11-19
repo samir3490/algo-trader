@@ -1,6 +1,9 @@
 import { DEFAULT_SETTINGS } from "@/lib/firebase";
 import { fetchYahooHistory } from "@/lib/market-data/history";
-import { fetchYahooQuote } from "@/lib/market-data/yahoo";
+import {
+  resolveLiveQuote,
+  type KiteCreds,
+} from "@/lib/market-data/resolve-live-quote";
 import { computeRegimeSnapshot, type RegimeSnapshot } from "@/lib/strategies/regime";
 import { isMarketOpen } from "@/lib/utils";
 
@@ -19,19 +22,27 @@ export interface MarketRegimePayload {
 const CACHE_TTL_OPEN_MS = 5 * 60 * 1000;
 const CACHE_TTL_CLOSED_MS = 30 * 60 * 1000;
 
-let cache: { expiresAt: number; data: MarketRegimePayload } | null = null;
+let cache: {
+  expiresAt: number;
+  data: MarketRegimePayload;
+  source: string;
+} | null = null;
 
-export async function fetchMarketRegime(): Promise<MarketRegimePayload> {
+export async function fetchMarketRegime(
+  kiteCreds?: KiteCreds | null
+): Promise<MarketRegimePayload> {
   const now = Date.now();
   const ttl = isMarketOpen() ? CACHE_TTL_OPEN_MS : CACHE_TTL_CLOSED_MS;
+  const sourceKey = kiteCreds?.accessToken ? "zerodha" : "yahoo";
 
-  if (cache && cache.expiresAt > now) {
+  if (cache && cache.expiresAt > now && cache.source === sourceKey) {
     return cache.data;
   }
 
   const indexSymbol = DEFAULT_SETTINGS.regimeIndexSymbol ?? "^NSEI";
+  // Live LTP prefers Zerodha; sparkline/ADX history still uses Yahoo daily bars.
   const [quote, bars] = await Promise.all([
-    fetchYahooQuote(indexSymbol, "NSE"),
+    resolveLiveQuote(indexSymbol, "NSE", kiteCreds),
     fetchYahooHistory(indexSymbol, "NSE", "Day"),
   ]);
 
@@ -50,6 +61,12 @@ export async function fetchMarketRegime(): Promise<MarketRegimePayload> {
     close: b.close,
   }));
 
+  const historyNote =
+    quote?.source === "zerodha"
+      ? "Live LTP via Zerodha · chart/regime history via Yahoo"
+      : quote?.priceNote ||
+        "Prices via Yahoo Finance (delayed ~15 min for NSE)";
+
   const data: MarketRegimePayload = {
     indexSymbol,
     indexName: "Nifty 50",
@@ -59,10 +76,10 @@ export async function fetchMarketRegime(): Promise<MarketRegimePayload> {
     regime,
     sparkline,
     fetchedAt: new Date().toISOString(),
-    priceNote: "Prices via Yahoo Finance (delayed ~15 min for NSE)",
+    priceNote: historyNote,
   };
 
-  cache = { expiresAt: now + ttl, data };
+  cache = { expiresAt: now + ttl, data, source: sourceKey };
   return data;
 }
 

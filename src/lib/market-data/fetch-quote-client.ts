@@ -20,15 +20,22 @@ export interface ClientQuote {
   hasDepth?: boolean;
 }
 
-/** Fetch quote from free market data (Yahoo). Works without Zerodha connection. */
+/**
+ * Fetch quote preferring Zerodha when connected; Yahoo as fallback.
+ * Works without Zerodha (Yahoo delayed prices).
+ */
 export async function fetchMarketQuote(
   symbol: string,
-  exchange: string
+  exchange: string,
+  accountId?: string
 ): Promise<ClientQuote | null> {
   try {
-    const res = await fetch(
-      `/api/market/quote?symbol=${encodeURIComponent(symbol.trim())}&exchange=${exchange}`
-    );
+    const params = new URLSearchParams({
+      symbol: symbol.trim(),
+      exchange,
+    });
+    if (accountId) params.set("accountId", accountId);
+    const res = await fetch(`/api/market/quote?${params}`);
     if (!res.ok) return null;
     const data = await res.json();
     if (!data?.lastPrice || data.lastPrice <= 0) return null;
