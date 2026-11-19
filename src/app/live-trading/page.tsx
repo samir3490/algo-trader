@@ -88,11 +88,14 @@ type Exchange = "NSE" | "BSE";
 
 interface Position {
   symbol: string;
+  exchange: string;
   qty: number;
   avgPrice: number;
   ltp: number;
   pnl: number;
   product: string;
+  /** Day change % vs previous close (when Kite provides close_price). */
+  dayChange: number;
 }
 
 interface KiteOrder {
@@ -452,14 +455,22 @@ function LiveTradingContent() {
       const res = await fetch(`/api/zerodha/positions?${apiQuery}`);
       if (!res.ok) return;
       const data = await res.json();
-      const mapped: Position[] = (data.positions?.net || []).map((p: any) => ({
-        symbol: p.tradingsymbol,
-        qty: p.quantity,
-        avgPrice: p.average_price,
-        ltp: p.last_price,
-        pnl: p.pnl,
-        product: p.product,
-      }));
+      const mapped: Position[] = (data.positions?.net || []).map((p: any) => {
+        const ltp = Number(p.last_price) || 0;
+        const close = Number(p.close_price) || 0;
+        const dayChange =
+          close > 0 ? ((ltp - close) / close) * 100 : 0;
+        return {
+          symbol: p.tradingsymbol,
+          exchange: String(p.exchange || "NSE").toUpperCase(),
+          qty: Number(p.quantity) || 0,
+          avgPrice: Number(p.average_price) || 0,
+          ltp,
+          pnl: Number(p.pnl) || 0,
+          product: p.product || "CNC",
+          dayChange,
+        };
+      });
       setPositions(mapped.filter((p) => p.qty !== 0));
     } catch { /* ignore */ }
   }, [selectedAccountId, apiQuery]);
@@ -821,7 +832,18 @@ function LiveTradingContent() {
         qty: (p) => p.qty,
         avg: (p) => p.avgPrice,
         ltp: (p) => p.ltp,
+        invested: (p) => Math.abs(p.qty) * p.avgPrice,
+        value: (p) => {
+          const mark = p.ltp > 0 ? p.ltp : p.avgPrice;
+          return Math.abs(p.qty) * mark;
+        },
         pnl: (p) => p.pnl,
+        pnlPct: (p) => {
+          const invested = Math.abs(p.qty) * p.avgPrice;
+          if (invested <= 0) return 0;
+          return (p.pnl / invested) * 100;
+        },
+        dayPct: (p) => p.dayChange,
         product: (p) => p.product,
       }),
     [positions, positionsSort.sortRows]
@@ -1810,44 +1832,223 @@ function LiveTradingContent() {
                             Square Off All
                           </button>
                         </div>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm">
+                        <div className="overflow-x-auto -mx-5">
+                          <table className="w-full text-sm min-w-[760px]">
                             <thead>
-                              <tr className="text-text-secondary text-xs border-b border-border">
-                                <SortableTh sortKey="symbol" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} className="py-2 px-3 font-medium">Symbol</SortableTh>
-                                <SortableTh sortKey="qty" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Qty</SortableTh>
-                                <SortableTh sortKey="avg" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Avg Price</SortableTh>
-                                <SortableTh sortKey="ltp" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} align="right" className="py-2 px-3 font-medium">LTP</SortableTh>
-                                <SortableTh sortKey="pnl" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} align="right" className="py-2 px-3 font-medium">P&amp;L</SortableTh>
-                                <SortableTh sortKey="product" activeKey={positionsSort.sortKey} direction={positionsSort.sortDir} onSort={positionsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Product</SortableTh>
-                                <th className="text-right py-2 px-3 font-medium"></th>
+                              <tr className="border-b border-border">
+                                <SortableTh
+                                  sortKey="symbol"
+                                  activeKey={positionsSort.sortKey}
+                                  direction={positionsSort.sortDir}
+                                  onSort={positionsSort.toggleSort}
+                                  className="py-3 pl-5 pr-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                                >
+                                  Symbol
+                                </SortableTh>
+                                <th className="py-3 px-2 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                                  Strategies
+                                </th>
+                                <SortableTh
+                                  sortKey="qty"
+                                  activeKey={positionsSort.sortKey}
+                                  direction={positionsSort.sortDir}
+                                  onSort={positionsSort.toggleSort}
+                                  align="right"
+                                  className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                                >
+                                  Qty
+                                </SortableTh>
+                                <SortableTh
+                                  sortKey="avg"
+                                  activeKey={positionsSort.sortKey}
+                                  direction={positionsSort.sortDir}
+                                  onSort={positionsSort.toggleSort}
+                                  align="right"
+                                  className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                                >
+                                  Avg
+                                </SortableTh>
+                                <SortableTh
+                                  sortKey="ltp"
+                                  activeKey={positionsSort.sortKey}
+                                  direction={positionsSort.sortDir}
+                                  onSort={positionsSort.toggleSort}
+                                  align="right"
+                                  className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                                >
+                                  LTP
+                                </SortableTh>
+                                <SortableTh
+                                  sortKey="invested"
+                                  activeKey={positionsSort.sortKey}
+                                  direction={positionsSort.sortDir}
+                                  onSort={positionsSort.toggleSort}
+                                  align="right"
+                                  className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                                >
+                                  Invested
+                                </SortableTh>
+                                <SortableTh
+                                  sortKey="value"
+                                  activeKey={positionsSort.sortKey}
+                                  direction={positionsSort.sortDir}
+                                  onSort={positionsSort.toggleSort}
+                                  align="right"
+                                  className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                                >
+                                  Value
+                                </SortableTh>
+                                <SortableTh
+                                  sortKey="pnl"
+                                  activeKey={positionsSort.sortKey}
+                                  direction={positionsSort.sortDir}
+                                  onSort={positionsSort.toggleSort}
+                                  align="right"
+                                  className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                                >
+                                  P&amp;L
+                                </SortableTh>
+                                <SortableTh
+                                  sortKey="pnlPct"
+                                  activeKey={positionsSort.sortKey}
+                                  direction={positionsSort.sortDir}
+                                  onSort={positionsSort.toggleSort}
+                                  align="right"
+                                  className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                                >
+                                  P&amp;L %
+                                </SortableTh>
+                                <SortableTh
+                                  sortKey="dayPct"
+                                  activeKey={positionsSort.sortKey}
+                                  direction={positionsSort.sortDir}
+                                  onSort={positionsSort.toggleSort}
+                                  align="right"
+                                  className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                                >
+                                  Day %
+                                </SortableTh>
+                                <SortableTh
+                                  sortKey="product"
+                                  activeKey={positionsSort.sortKey}
+                                  direction={positionsSort.sortDir}
+                                  onSort={positionsSort.toggleSort}
+                                  align="right"
+                                  className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                                >
+                                  Product
+                                </SortableTh>
+                                <th className="py-3 pl-2 pr-5 text-center text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                                  Action
+                                </th>
                               </tr>
                             </thead>
                             <tbody>
-                              {sortedPositions.map((pos, i) => (
-                                <tr key={i} className="border-b border-border/50 hover:bg-bg-tertiary/30">
-                                  <td className="py-2.5 px-3 font-medium">{pos.symbol}</td>
-                                  <td className={cn("text-right py-2.5 px-3", pos.qty > 0 ? "text-emerald-700" : "text-red-400")}>
-                                    {pos.qty}
-                                  </td>
-                                  <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(pos.avgPrice)}</td>
-                                  <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(pos.ltp)}</td>
-                                  <td className={cn("text-right py-2.5 px-3 font-medium", pos.pnl >= 0 ? "text-emerald-700" : "text-red-400")}>
-                                    {formatCurrency(pos.pnl)}
-                                  </td>
-                                  <td className="text-right py-2.5 px-3">
-                                    <span className="text-xs bg-bg-tertiary px-2 py-0.5 rounded text-text-secondary">{pos.product}</span>
-                                  </td>
-                                  <td className="text-right py-2.5 px-3">
-                                    <button
-                                      onClick={() => handleExitPosition(pos)}
-                                      className="text-xs font-semibold text-orange-400 hover:text-orange-300 bg-orange-900/20 hover:bg-orange-900/40 px-2.5 py-1 rounded transition-colors"
+                              {sortedPositions.map((pos) => {
+                                const mark = pos.ltp > 0 ? pos.ltp : pos.avgPrice;
+                                const investedVal = Math.abs(pos.qty) * pos.avgPrice;
+                                const currentVal = Math.abs(pos.qty) * mark;
+                                const pnlPct =
+                                  investedVal > 0 ? (pos.pnl / investedVal) * 100 : 0;
+                                const isProfit = pos.pnl >= 0;
+                                const symKey = `${pos.symbol.toUpperCase()}:${(
+                                  pos.exchange || "NSE"
+                                ).toUpperCase()}`;
+                                const stratInfo = buyStrategiesBySymbol.get(symKey);
+                                return (
+                                  <tr
+                                    key={`${pos.symbol}-${pos.exchange}-${pos.product}`}
+                                    className="border-b border-border/50 hover:bg-bg-hover/50"
+                                  >
+                                    <td className="py-3 pl-5 pr-2">
+                                      <span className="font-medium text-text-primary">
+                                        {pos.symbol}
+                                      </span>
+                                      <span className="ml-1 text-xs text-text-tertiary">
+                                        {pos.exchange}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-2 max-w-[140px]">
+                                      {stratInfo && stratInfo.names.length > 0 ? (
+                                        <StrategyBadges
+                                          names={stratInfo.names}
+                                          unknownCount={stratInfo.unknown}
+                                          size="sm"
+                                        />
+                                      ) : (
+                                        <span className="text-xs text-text-tertiary">
+                                          —
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td
+                                      className={cn(
+                                        "py-3 px-2 text-right tabular-nums",
+                                        pos.qty > 0 ? "text-profit" : "text-loss"
+                                      )}
                                     >
-                                      Exit
-                                    </button>
-                                  </td>
-                                </tr>
-                              ))}
+                                      {formatNumber(pos.qty)}
+                                    </td>
+                                    <td className="py-3 px-2 text-right text-text-secondary tabular-nums whitespace-nowrap">
+                                      {formatCurrency(pos.avgPrice)}
+                                    </td>
+                                    <td className="py-3 px-2 text-right text-text-secondary tabular-nums whitespace-nowrap">
+                                      {formatCurrency(mark)}
+                                    </td>
+                                    <td className="py-3 px-2 text-right text-text-secondary tabular-nums whitespace-nowrap">
+                                      {formatCurrency(investedVal)}
+                                    </td>
+                                    <td className="py-3 px-2 text-right text-text-secondary tabular-nums whitespace-nowrap">
+                                      {formatCurrency(currentVal)}
+                                    </td>
+                                    <td
+                                      className={cn(
+                                        "py-3 px-2 text-right font-medium tabular-nums whitespace-nowrap",
+                                        isProfit ? "text-profit" : "text-loss"
+                                      )}
+                                    >
+                                      {isProfit ? "+" : ""}
+                                      {formatCurrency(pos.pnl)}
+                                    </td>
+                                    <td
+                                      className={cn(
+                                        "py-3 px-2 text-right font-medium tabular-nums",
+                                        isProfit ? "text-profit" : "text-loss"
+                                      )}
+                                    >
+                                      {formatPercent(pnlPct)}
+                                    </td>
+                                    <td className="py-3 px-2 text-right">
+                                      <span
+                                        className={cn(
+                                          "text-xs font-medium",
+                                          pos.dayChange >= 0
+                                            ? "text-profit"
+                                            : "text-loss"
+                                        )}
+                                      >
+                                        {formatPercent(pos.dayChange)}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-2 text-right">
+                                      <span className="text-xs bg-bg-tertiary px-2 py-0.5 rounded text-text-secondary">
+                                        {pos.product}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 pl-2 pr-5">
+                                      <div className="flex items-center justify-center">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleExitPosition(pos)}
+                                          className="text-xs font-semibold text-orange-400 hover:text-orange-300 bg-orange-900/20 hover:bg-orange-900/40 px-2.5 py-1 rounded transition-colors"
+                                        >
+                                          Exit
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
                             </tbody>
                           </table>
                         </div>
