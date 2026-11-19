@@ -49,7 +49,6 @@ import SectorPerformanceChart from "@/components/dashboard/sector-performance-ch
 import PaperHealthStrip from "@/components/dashboard/paper-health-strip";
 import LiveTradingDashboardStrip from "@/components/dashboard/live-trading-strip";
 import OnboardingChecklist from "@/components/dashboard/onboarding-checklist";
-import WatchlistPanel from "@/components/dashboard/watchlist-panel";
 import AttributionWidgets from "@/components/dashboard/attribution-widgets";
 import BenchmarkWidget from "@/components/dashboard/benchmark-widget";
 import ExecutiveSummaryButton from "@/components/reporting/executive-summary-button";
@@ -292,7 +291,6 @@ export default function DashboardPage() {
       </div>
 
       <OnboardingChecklist />
-      <WatchlistPanel />
 
       <section className="rounded-xl border-2 border-sky-300 bg-sky-50/70 p-4 sm:p-5 space-y-3">
         <div className="flex items-center justify-between gap-2">
