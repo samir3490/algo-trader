@@ -44,6 +44,7 @@ import {
   isMarketOpen,
   getMarketStatus,
   nowISTDateTimeString,
+  parseDateTimeMs,
   tableDateTimeThClass,
   tableDateTimeTdClass,
 } from "@/lib/utils";
@@ -53,6 +54,7 @@ import {
   saveSettings,
   getZerodhaAccounts,
   getLiveAlgoQuota,
+  getOrders as getFirestoreOrders,
   type AppSettings,
   type ZerodhaAccount,
 } from "@/lib/firebase";
@@ -90,6 +92,21 @@ interface KiteOrder {
   qty: number;
   price: number;
   status: string;
+  /** From Firestore history (prior days) — not on today's Kite book. */
+  fromHistory?: boolean;
+}
+
+/** Kite sends IST datetimes without offset; pin +05:30 so the day label is correct. */
+function normalizeKiteTimestamp(raw: string): string {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  if (/[zZ]|[+-]\d{2}:?\d{2}$/.test(s)) return s;
+  const m = s.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)/);
+  if (m) {
+    const time = m[2].length === 5 ? `${m[2]}:00` : m[2];
+    return `${m[1]}T${time}+05:30`;
+  }
+  return s;
 }
 
 interface Holding {
@@ -432,20 +449,48 @@ function LiveTradingContent() {
   const fetchOrders = useCallback(async () => {
     if (!selectedAccountId) return;
     try {
-      const res = await fetch(`/api/zerodha/orders?${apiQuery}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const mapped: KiteOrder[] = (data.orders || []).map((o: any) => ({
-        orderId: o.order_id || "",
-        time: o.order_timestamp || o.exchange_timestamp || "",
+      const [res, firestoreOrders] = await Promise.all([
+        fetch(`/api/zerodha/orders?${apiQuery}`),
+        getFirestoreOrders(300).catch(() => []),
+      ]);
+      const data = res.ok ? await res.json() : { orders: [] };
+      const kiteMapped: KiteOrder[] = (data.orders || []).map((o: any) => ({
+        orderId: String(o.order_id || ""),
+        time: normalizeKiteTimestamp(
+          String(o.order_timestamp || o.exchange_timestamp || "")
+        ),
         symbol: o.tradingsymbol,
         type: o.order_type,
         side: o.transaction_type,
         qty: o.quantity,
         price: o.average_price || o.price || 0,
         status: o.status,
+        fromHistory: false,
       }));
-      setOrders(mapped);
+      const kiteIds = new Set(
+        kiteMapped.map((o) => o.orderId).filter(Boolean)
+      );
+      // Zerodha day book is today-only — keep prior LIVE fills from our history.
+      const historyMapped: KiteOrder[] = firestoreOrders
+        .filter((o) => o.mode === "LIVE")
+        .filter((o) => !o.orderId || !kiteIds.has(o.orderId))
+        .map((o) => ({
+          orderId: o.orderId || o.id || "",
+          time: normalizeKiteTimestamp(o.time || o.date || ""),
+          symbol: o.symbol,
+          type: o.orderType || "MARKET",
+          side: o.side,
+          qty: o.qty,
+          price: o.price,
+          status: o.status || "COMPLETE",
+          fromHistory: true,
+        }));
+      const merged = [...kiteMapped, ...historyMapped].sort((a, b) => {
+        const tb = parseDateTimeMs(b.time);
+        const ta = parseDateTimeMs(a.time);
+        return tb - ta;
+      });
+      setOrders(merged);
     } catch { /* ignore */ }
   }, [selectedAccountId, apiQuery]);
 
@@ -626,13 +671,19 @@ function LiveTradingContent() {
   const holdingsPnlPercent =
     holdingsTotals.invested > 0 ? (holdingsTotals.pnl / holdingsTotals.invested) * 100 : 0;
 
+  /** Today's Zerodha day-book only (exclude Firestore history). */
+  const todayKiteOrders = useMemo(
+    () => orders.filter((o) => !o.fromHistory),
+    [orders]
+  );
+
   /** Aggregate live orders by symbol for Strategies Performance tab. */
   const strategyPerfRows = useMemo(() => {
     const map = new Map<
       string,
       { symbol: string; buys: number; sells: number; buyQty: number; sellQty: number; complete: number }
     >();
-    for (const o of orders) {
+    for (const o of todayKiteOrders) {
       const key = (o.symbol || "").toUpperCase();
       if (!key) continue;
       const row = map.get(key) || {
@@ -657,7 +708,7 @@ function LiveTradingContent() {
     return [...map.values()].sort(
       (a, b) => b.buys + b.sells - (a.buys + a.sells)
     );
-  }, [orders]);
+  }, [todayKiteOrders]);
 
   const positionsSort = useTableSort({ key: "pnl", dir: "desc" });
   const sortedPositions = useMemo(
@@ -1261,7 +1312,7 @@ function LiveTradingContent() {
           counts={{
             holdings: holdings.length,
             positions: positions.length,
-            trades: orders.length,
+            trades: todayKiteOrders.length,
             strategies: strategyPerfRows.length,
           }}
         />
@@ -1709,10 +1760,19 @@ function LiveTradingContent() {
                 {/* Trades Tab (Zerodha orders) */}
                 {activeTab === "trades" && (
                   <div className="card">
+                    <div className="mb-3">
+                      <h2 className="text-lg font-semibold text-text-primary">Trades</h2>
+                      <p className="text-xs text-text-secondary mt-0.5">
+                        Today from Zerodha · prior days from AlgoTrader live order history
+                      </p>
+                    </div>
                     {orders.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-16 text-text-tertiary">
                         <Clock className="h-10 w-10 mb-3 text-text-tertiary" />
-                        <p className="text-sm">No orders placed today.</p>
+                        <p className="text-sm">No live orders yet.</p>
+                        <p className="text-xs mt-1">
+                          Today&apos;s Zerodha book and saved live history will appear here.
+                        </p>
                       </div>
                     ) : (
                       <div>
@@ -1737,7 +1797,12 @@ function LiveTradingContent() {
                                   className={cn(tableDateTimeTdClass, "py-2.5 px-3")}
                                   title={formatDateTimeIST(order.time)}
                                 >
-                                  {formatDateTimeCompactIST(order.time)}
+                                  <span className="block">{formatDateTimeCompactIST(order.time)}</span>
+                                  {order.fromHistory && (
+                                    <span className="text-[9px] uppercase tracking-wide text-text-tertiary">
+                                      History
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="py-2.5 px-3 font-medium">{order.symbol}</td>
                                 <td className="py-2.5 px-3 text-text-secondary text-xs">{order.type}</td>
@@ -1763,7 +1828,8 @@ function LiveTradingContent() {
                                   </span>
                                 </td>
                                 <td className="text-right py-2.5 px-3">
-                                  {(order.status === "PENDING" || order.status === "OPEN") && (
+                                  {!order.fromHistory &&
+                                    (order.status === "PENDING" || order.status === "OPEN") && (
                                     <button
                                       onClick={() => handleCancelOrder(order)}
                                       disabled={isCancellingOrder === order.orderId}
