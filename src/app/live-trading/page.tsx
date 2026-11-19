@@ -26,19 +26,16 @@ import {
   X,
 } from "lucide-react";
 import StatCard from "@/components/ui/stat-card";
-import PaginationBar, {
-  DEFAULT_PAGE_SIZE,
-  paginateItems,
-} from "@/components/ui/pagination-bar";
 import LiveTabBar, {
   type LiveTradingTab,
 } from "@/components/live-trading/live-tab-bar";
 import LiveHealthPanel from "@/components/live-trading/live-health-panel";
 import LiveAutoSwitch from "@/components/live-trading/live-auto-switch";
+import LiveTradesPanel from "@/components/live-trading/live-trades-panel";
+import LiveStrategyPerformancePanel from "@/components/live-trading/live-strategy-performance-panel";
 import {
   cn,
   formatCurrency,
-  formatDateTimeCompactIST,
   formatDateTimeIST,
   formatPercent,
   isMarketOpen,
@@ -55,6 +52,8 @@ import {
   getZerodhaAccounts,
   getLiveAlgoQuota,
   getOrders as getFirestoreOrders,
+  getActiveStrategies,
+  saveOrder,
   type AppSettings,
   type ZerodhaAccount,
 } from "@/lib/firebase";
@@ -67,6 +66,15 @@ import {
   resolveLiveCapitalLimit,
   resolveLiveOrderNotional,
 } from "@/lib/live-trading/capital-limits";
+import {
+  buildLiveOrderRecord,
+  liveOrdersToPaperTrades,
+} from "@/lib/live-trading/live-order-record";
+import {
+  enrichTradesWithStrategy,
+  computeStrategyDetailBundles,
+  buildStrategyNamesBySymbol,
+} from "@/lib/strategies/strategy-performance";
 import { loadSettingsFromCache, saveSettingsToCache } from "@/lib/settings/cache";
 
 type TransactionType = "BUY" | "SELL";
@@ -87,11 +95,15 @@ interface KiteOrder {
   orderId: string;
   time: string;
   symbol: string;
+  exchange?: string;
   type: string;
   side: string;
   qty: number;
   price: number;
   status: string;
+  product?: string;
+  strategyName?: string;
+  reason?: string;
   /** From Firestore history (prior days) — not on today's Kite book. */
   fromHistory?: boolean;
 }
@@ -243,7 +255,9 @@ function LiveTradingContent() {
       : STOCK_LIST.slice(0, 15);
 
   const [activeTab, setActiveTab] = useState<LiveTradingTab>("holdings");
-  const [ordersPage, setOrdersPage] = useState(1);
+  const [strategyNamesBySymbol, setStrategyNamesBySymbol] = useState<
+    Map<string, string[]>
+  >(new Map());
   const [orderPanelOpen, setOrderPanelOpen] = useState(false);
 
   const [autoTradingEnabled, setAutoTradingEnabled] = useState(
@@ -449,40 +463,63 @@ function LiveTradingContent() {
   const fetchOrders = useCallback(async () => {
     if (!selectedAccountId) return;
     try {
-      const [res, firestoreOrders] = await Promise.all([
+      const [res, firestoreOrders, strategies] = await Promise.all([
         fetch(`/api/zerodha/orders?${apiQuery}`),
-        getFirestoreOrders(300).catch(() => []),
+        getFirestoreOrders(500).catch(() => []),
+        getActiveStrategies().catch(() => []),
       ]);
+      setStrategyNamesBySymbol(buildStrategyNamesBySymbol(strategies));
       const data = res.ok ? await res.json() : { orders: [] };
-      const kiteMapped: KiteOrder[] = (data.orders || []).map((o: any) => ({
-        orderId: String(o.order_id || ""),
-        time: normalizeKiteTimestamp(
-          String(o.order_timestamp || o.exchange_timestamp || "")
-        ),
-        symbol: o.tradingsymbol,
-        type: o.order_type,
-        side: o.transaction_type,
-        qty: o.quantity,
-        price: o.average_price || o.price || 0,
-        status: o.status,
-        fromHistory: false,
-      }));
+      const liveFs = firestoreOrders.filter((o) => o.mode === "LIVE");
+      const byOrderId = new Map(
+        liveFs
+          .filter((o) => o.orderId)
+          .map((o) => [String(o.orderId), o] as const)
+      );
+      const kiteMapped: KiteOrder[] = (data.orders || []).map((o: any) => {
+        const orderId = String(o.order_id || "");
+        const fs = orderId ? byOrderId.get(orderId) : undefined;
+        const tag = String(o.tag || "").trim();
+        return {
+          orderId,
+          time: normalizeKiteTimestamp(
+            String(o.order_timestamp || o.exchange_timestamp || "")
+          ),
+          symbol: o.tradingsymbol,
+          exchange: o.exchange || fs?.exchange || "NSE",
+          type: o.order_type,
+          side: o.transaction_type,
+          qty: o.filled_quantity || o.quantity,
+          price: o.average_price || o.price || 0,
+          status: o.status,
+          product: o.product || fs?.product || "CNC",
+          strategyName:
+            fs?.strategyName ||
+            (tag && tag.toLowerCase() !== "manual" ? tag : undefined) ||
+            "Manual",
+          reason: fs?.reason,
+          fromHistory: false,
+        };
+      });
       const kiteIds = new Set(
         kiteMapped.map((o) => o.orderId).filter(Boolean)
       );
       // Zerodha day book is today-only — keep prior LIVE fills from our history.
-      const historyMapped: KiteOrder[] = firestoreOrders
-        .filter((o) => o.mode === "LIVE")
+      const historyMapped: KiteOrder[] = liveFs
         .filter((o) => !o.orderId || !kiteIds.has(o.orderId))
         .map((o) => ({
           orderId: o.orderId || o.id || "",
           time: normalizeKiteTimestamp(o.time || o.date || ""),
           symbol: o.symbol,
+          exchange: o.exchange || "NSE",
           type: o.orderType || "MARKET",
           side: o.side,
           qty: o.qty,
           price: o.price,
           status: o.status || "COMPLETE",
+          product: o.product || "CNC",
+          strategyName: o.strategyName || "Manual",
+          reason: o.reason,
           fromHistory: true,
         }));
       const merged = [...kiteMapped, ...historyMapped].sort((a, b) => {
@@ -671,44 +708,53 @@ function LiveTradingContent() {
   const holdingsPnlPercent =
     holdingsTotals.invested > 0 ? (holdingsTotals.pnl / holdingsTotals.invested) * 100 : 0;
 
-  /** Today's Zerodha day-book only (exclude Firestore history). */
-  const todayKiteOrders = useMemo(
-    () => orders.filter((o) => !o.fromHistory),
+  const enrichOptions = useMemo(
+    () => ({ strategyNamesBySymbol }),
+    [strategyNamesBySymbol]
+  );
+
+  const livePaperTrades = useMemo(
+    () => liveOrdersToPaperTrades(orders),
     [orders]
   );
 
-  /** Aggregate live orders by symbol for Strategies Performance tab. */
-  const strategyPerfRows = useMemo(() => {
-    const map = new Map<
-      string,
-      { symbol: string; buys: number; sells: number; buyQty: number; sellQty: number; complete: number }
-    >();
-    for (const o of todayKiteOrders) {
-      const key = (o.symbol || "").toUpperCase();
-      if (!key) continue;
-      const row = map.get(key) || {
-        symbol: key,
-        buys: 0,
-        sells: 0,
-        buyQty: 0,
-        sellQty: 0,
-        complete: 0,
-      };
-      const side = (o.side || "").toUpperCase();
-      if (side === "BUY") {
-        row.buys += 1;
-        row.buyQty += o.qty || 0;
-      } else if (side === "SELL") {
-        row.sells += 1;
-        row.sellQty += o.qty || 0;
-      }
-      if ((o.status || "").toUpperCase() === "COMPLETE") row.complete += 1;
-      map.set(key, row);
-    }
-    return [...map.values()].sort(
-      (a, b) => b.buys + b.sells - (a.buys + a.sells)
-    );
-  }, [todayKiteOrders]);
+  const enrichedLiveTrades = useMemo(
+    () =>
+      enrichTradesWithStrategy(livePaperTrades, enrichOptions).map((t) => {
+        const src = orders.find(
+          (o) =>
+            (o.orderId && t.id === `live-${o.orderId}`) ||
+            (o.symbol === t.symbol &&
+              o.side === t.side &&
+              o.qty === t.qty &&
+              Math.abs((o.price || 0) - t.price) < 0.01)
+        );
+        return {
+          ...t,
+          orderId: src?.orderId,
+          status: src?.status,
+          orderType: src?.type,
+          fromHistory: src?.fromHistory,
+        };
+      }),
+    [livePaperTrades, enrichOptions, orders]
+  );
+
+  const strategyDetails = useMemo(
+    () =>
+      computeStrategyDetailBundles(
+        livePaperTrades,
+        holdings.map((h) => ({
+          symbol: h.symbol,
+          exchange: h.exchange,
+          qty: h.qty,
+          avgPrice: h.avgPrice,
+          ltp: h.ltp,
+        })),
+        enrichOptions
+      ),
+    [livePaperTrades, holdings, enrichOptions]
+  );
 
   const positionsSort = useTableSort({ key: "pnl", dir: "desc" });
   const sortedPositions = useMemo(
@@ -723,31 +769,6 @@ function LiveTradingContent() {
       }),
     [positions, positionsSort.sortRows]
   );
-
-  const ordersSort = useTableSort({ key: "when", dir: "desc" });
-  const sortedOrders = useMemo(
-    () =>
-      ordersSort.sortRows(orders, {
-        when: (o) => new Date(o.time).getTime(),
-        symbol: (o) => o.symbol,
-        type: (o) => o.type,
-        side: (o) => o.side,
-        qty: (o) => o.qty,
-        price: (o) => o.price,
-        status: (o) => o.status,
-      }),
-    [orders, ordersSort.sortRows]
-  );
-
-  useEffect(() => {
-    setOrdersPage(1);
-  }, [orders.length, ordersSort.sortKey, ordersSort.sortDir]);
-
-  const ordersPagination = useMemo(
-    () => paginateItems(sortedOrders, ordersPage, DEFAULT_PAGE_SIZE),
-    [sortedOrders, ordersPage]
-  );
-  const pagedOrders = ordersPagination.pageItems;
 
   const holdingsSort = useTableSort({ key: "pnl", dir: "desc" });
   const sortedHoldings = useMemo(
@@ -854,6 +875,23 @@ function LiveTradingContent() {
 
       const accountLabel = selectedAccount?.label || selectedAccount?.userName || selectedAccountId;
       setStatusMessage(`Order placed on ${accountLabel}! Order ID: ${data.orderId}`);
+      if (data.orderId) {
+        void saveOrder(
+          buildLiveOrderRecord({
+            orderId: String(data.orderId),
+            symbol: symbol.trim().toUpperCase(),
+            exchange,
+            side: transactionType,
+            qty: qtyNum,
+            price: refPrice > 0 ? refPrice : 0,
+            product: productType,
+            orderType,
+            status: "COMPLETE",
+            strategyName: "Manual",
+            reason: `Manual ${transactionType}`,
+          })
+        );
+      }
       setSymbol("");
       setQuantity("");
       setPrice("");
@@ -1312,8 +1350,8 @@ function LiveTradingContent() {
           counts={{
             holdings: holdings.length,
             positions: positions.length,
-            trades: todayKiteOrders.length,
-            strategies: strategyPerfRows.length,
+            trades: enrichedLiveTrades.length,
+            strategies: strategyDetails.length,
           }}
         />
 
@@ -1757,107 +1795,27 @@ function LiveTradingContent() {
                   </div>
                 )}
 
-                {/* Trades Tab (Zerodha orders) */}
                 {activeTab === "trades" && (
-                  <div className="card">
-                    <div className="mb-3">
-                      <h2 className="text-lg font-semibold text-text-primary">Trades</h2>
-                      <p className="text-xs text-text-secondary mt-0.5">
-                        Today from Zerodha · prior days from AlgoTrader live order history
-                      </p>
-                    </div>
-                    {orders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-text-tertiary">
-                        <Clock className="h-10 w-10 mb-3 text-text-tertiary" />
-                        <p className="text-sm">No live orders yet.</p>
-                        <p className="text-xs mt-1">
-                          Today&apos;s Zerodha book and saved live history will appear here.
-                        </p>
-                      </div>
-                    ) : (
-                      <div>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead>
-                            <tr className="text-text-secondary text-xs border-b border-border">
-                              <SortableTh sortKey="when" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} className={cn(tableDateTimeThClass, "py-2 px-3 font-medium")}>When</SortableTh>
-                              <SortableTh sortKey="symbol" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} className="py-2 px-3 font-medium">Symbol</SortableTh>
-                              <SortableTh sortKey="type" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} className="py-2 px-3 font-medium">Type</SortableTh>
-                              <SortableTh sortKey="side" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} className="py-2 px-3 font-medium">Side</SortableTh>
-                              <SortableTh sortKey="qty" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} align="right" className="py-2 px-3 font-medium">Qty</SortableTh>
-                              <SortableTh sortKey="price" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} align="right" className="py-2 px-3 font-medium">Price</SortableTh>
-                              <SortableTh sortKey="status" activeKey={ordersSort.sortKey} direction={ordersSort.sortDir} onSort={ordersSort.toggleSort} align="right" className="py-2 px-3 font-medium">Status</SortableTh>
-                              <th className="text-right py-2 px-3 font-medium"></th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {pagedOrders.map((order, i) => (
-                              <tr key={`${order.orderId || order.time}-${i}`} className="border-b border-border/50 hover:bg-bg-tertiary/30">
-                                <td
-                                  className={cn(tableDateTimeTdClass, "py-2.5 px-3")}
-                                  title={formatDateTimeIST(order.time)}
-                                >
-                                  <span className="block">{formatDateTimeCompactIST(order.time)}</span>
-                                  {order.fromHistory && (
-                                    <span className="text-[9px] uppercase tracking-wide text-text-tertiary">
-                                      History
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="py-2.5 px-3 font-medium">{order.symbol}</td>
-                                <td className="py-2.5 px-3 text-text-secondary text-xs">{order.type}</td>
-                                <td className="py-2.5 px-3">
-                                  <span className={cn("text-xs font-semibold", order.side === "BUY" ? "text-emerald-700" : "text-red-400")}>
-                                    {order.side}
-                                  </span>
-                                </td>
-                                <td className="text-right py-2.5 px-3 text-text-secondary">{order.qty}</td>
-                                <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(order.price)}</td>
-                                <td className="text-right py-2.5 px-3">
-                                  <span
-                                    className={cn(
-                                      "text-xs px-2 py-0.5 rounded-full font-medium",
-                                      order.status === "COMPLETE" && "bg-emerald-100 text-emerald-800",
-                                      order.status === "PENDING" && "bg-yellow-900/50 text-yellow-400",
-                                      order.status === "REJECTED" && "bg-red-900/50 text-red-400",
-                                      order.status === "CANCELLED" && "bg-bg-tertiary text-text-secondary",
-                                      order.status === "OPEN" && "bg-accent-muted text-accent"
-                                    )}
-                                  >
-                                    {order.status}
-                                  </span>
-                                </td>
-                                <td className="text-right py-2.5 px-3">
-                                  {!order.fromHistory &&
-                                    (order.status === "PENDING" || order.status === "OPEN") && (
-                                    <button
-                                      onClick={() => handleCancelOrder(order)}
-                                      disabled={isCancellingOrder === order.orderId}
-                                      className="flex items-center gap-1 text-xs font-semibold text-red-400 hover:text-red-300 bg-red-900/20 hover:bg-red-900/40 px-2 py-1 rounded transition-colors disabled:opacity-50"
-                                    >
-                                      {isCancellingOrder === order.orderId ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                      ) : (
-                                        <XCircle className="h-3 w-3" />
-                                      )}
-                                      Cancel
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                      <PaginationBar
-                        page={ordersPagination.safePage}
-                        totalPages={ordersPagination.totalPages}
-                        totalItems={sortedOrders.length}
-                        onPageChange={setOrdersPage}
-                      />
-                      </div>
-                    )}
-                  </div>
+                  <LiveTradesPanel
+                    trades={enrichedLiveTrades}
+                    openOrders={orders}
+                    cancellingOrderId={isCancellingOrder}
+                    onCancelOrder={(order) => {
+                      const full =
+                        orders.find((o) => o.orderId === order.orderId) ||
+                        ({
+                          orderId: order.orderId,
+                          time: "",
+                          symbol: "",
+                          type: "MARKET",
+                          side: "BUY",
+                          qty: 0,
+                          price: 0,
+                          status: "OPEN",
+                        } satisfies KiteOrder);
+                      void handleCancelOrder(full);
+                    }}
+                  />
                 )}
 
                 {/* Holdings Tab */}
@@ -1963,73 +1921,10 @@ function LiveTradingContent() {
                 )}
 
         {activeTab === "strategies" && (
-          <div className="card">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-text-primary">
-                  Strategies Performance
-                </h2>
-                <p className="text-xs text-text-secondary mt-0.5">
-                  Live book by symbol from today&apos;s Zerodha orders (algo + manual)
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setOrderPanelOpen(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700"
-              >
-                <PlusIcon className="h-3.5 w-3.5" />
-                Place Order
-              </button>
-            </div>
-            {strategyPerfRows.length === 0 ? (
-              <div className="py-12 text-center text-text-tertiary text-sm">
-                No live orders yet today. Place an order or wait for algo fills.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-text-secondary text-xs border-b border-border">
-                      <th className="text-left py-2 px-3 font-medium">Symbol</th>
-                      <th className="text-right py-2 px-3 font-medium">Buys</th>
-                      <th className="text-right py-2 px-3 font-medium">Buy qty</th>
-                      <th className="text-right py-2 px-3 font-medium">Sells</th>
-                      <th className="text-right py-2 px-3 font-medium">Sell qty</th>
-                      <th className="text-right py-2 px-3 font-medium">Complete</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {strategyPerfRows.map((row) => (
-                      <tr
-                        key={row.symbol}
-                        className="border-b border-border/50 hover:bg-bg-tertiary/30"
-                      >
-                        <td className="py-2.5 px-3 font-medium text-text-primary">
-                          {row.symbol}
-                        </td>
-                        <td className="py-2.5 px-3 text-right tabular-nums text-emerald-700">
-                          {row.buys}
-                        </td>
-                        <td className="py-2.5 px-3 text-right tabular-nums">
-                          {row.buyQty}
-                        </td>
-                        <td className="py-2.5 px-3 text-right tabular-nums text-red-700">
-                          {row.sells}
-                        </td>
-                        <td className="py-2.5 px-3 text-right tabular-nums">
-                          {row.sellQty}
-                        </td>
-                        <td className="py-2.5 px-3 text-right tabular-nums text-text-secondary">
-                          {row.complete}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+          <LiveStrategyPerformancePanel
+            bundles={strategyDetails}
+            onPlaceOrder={() => setOrderPanelOpen(true)}
+          />
         )}
 
         {activeTab === "health" && (

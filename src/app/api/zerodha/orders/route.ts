@@ -119,6 +119,7 @@ export async function POST(request: NextRequest) {
         orderId,
         status: "PLACED",
         accountId: accountId || undefined,
+        strategyName: "Manual",
       });
     } catch (emailErr) {
       console.error("Live manual order email failed:", emailErr);

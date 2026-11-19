@@ -12,6 +12,8 @@ import {
   loadLiveBook,
   recordLiveAlgoFill,
 } from "@/lib/live-trading/live-book";
+import { buildLiveOrderRecord } from "@/lib/live-trading/live-order-record";
+import { persistPaperOrderAdmin } from "@/lib/portfolio/paper-order-record-server";
 import { isLiveTradingEnabled } from "@/lib/core/config";
 import { sendOrderEmail } from "@/lib/email";
 import {
@@ -195,6 +197,10 @@ export async function placeLiveAlgoOrder(
     }
   }
 
+  const strategyTag = (input.strategyName || "Algo")
+    .replace(/[^a-zA-Z0-9 _-]/g, "")
+    .trim()
+    .slice(0, 20);
   const orderParams = {
     tradingsymbol: input.symbol.toUpperCase(),
     exchange: input.exchange || "NSE",
@@ -204,6 +210,7 @@ export async function placeLiveAlgoOrder(
     product,
     validity: "DAY",
     market_protection: -1,
+    ...(strategyTag ? { tag: strategyTag } : {}),
   };
 
   try {
@@ -233,6 +240,26 @@ export async function placeLiveAlgoOrder(
       price,
       kiteUserId: book.kiteUserId,
     });
+
+    try {
+      await persistPaperOrderAdmin(
+        db,
+        appUserId,
+        buildLiveOrderRecord({
+          orderId,
+          symbol: input.symbol,
+          exchange: input.exchange || "NSE",
+          side: input.side,
+          qty,
+          price,
+          product,
+          strategyName: input.strategyName || "Live algo",
+          reason: input.reason || `Algo live ${input.side}`,
+        })
+      );
+    } catch (persistErr) {
+      console.error("Live order history persist failed:", formatKiteError(persistErr));
+    }
 
     // Await email so Vercel does not freeze the lambda before Gmail accepts it.
     try {
