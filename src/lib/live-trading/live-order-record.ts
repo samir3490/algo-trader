@@ -46,6 +46,35 @@ export function buildLiveOrderRecord(input: {
   };
 }
 
+/** Infer strategy label from stored name or reason/meta text. */
+export function inferLiveStrategyName(
+  strategyName?: string,
+  reason?: string
+): string {
+  const named = strategyName?.trim();
+  if (named && named.toLowerCase() !== "manual") return named;
+
+  const r = (reason || "").trim();
+  if (!r) return named || "Manual";
+
+  // "BUY · EMA Crossover · …" / "SELL · Live risk exit · …"
+  const dotted = r.match(
+    /^(?:LIVE\s+)?(?:BUY|SELL)\s*[·•|\-]\s*([^·•|\n]+)/i
+  );
+  if (dotted?.[1]) {
+    const cand = dotted[1].trim();
+    if (
+      cand &&
+      !/^(qty|order|₹|rs\.?|manual)\b/i.test(cand) &&
+      cand.toLowerCase() !== "manual"
+    ) {
+      return cand;
+    }
+  }
+
+  return named || "Manual";
+}
+
 /** Map live order rows into PaperTrade shape for shared strategy/P&L helpers. */
 export function liveOrdersToPaperTrades(
   orders: Array<{
@@ -64,13 +93,21 @@ export function liveOrdersToPaperTrades(
 ): PaperTrade[] {
   const out: PaperTrade[] = [];
   for (const o of orders) {
-    const status = (o.status || "").toUpperCase();
-    if (status && !["COMPLETE", "EXECUTED"].includes(status)) continue;
+    const status = (o.status || "").toUpperCase().replace(/\s+/g, " ").trim();
+    const qtyNum = Number(o.qty) || 0;
+    const priceNum = Number(o.price) || 0;
+    const filledLike =
+      !status ||
+      /COMPLETE|EXECUTED|FILLED/.test(status) ||
+      (qtyNum > 0 &&
+        priceNum > 0 &&
+        !/REJECT|CANCEL|OPEN|PENDING|TRIGGER/.test(status));
+    if (!filledLike) continue;
     const side = (o.side || "").toUpperCase();
     if (side !== "BUY" && side !== "SELL") continue;
-    const qty = Number(o.qty) || 0;
-    const price = Number(o.price) || 0;
-    if (qty <= 0 || price < 0) continue;
+    const qty = qtyNum;
+    const price = priceNum;
+    if (qty <= 0 || price <= 0) continue;
     const symbol = (o.symbol || "").trim().toUpperCase();
     if (!symbol) continue;
     const ms = Date.parse(o.time || "");
@@ -84,7 +121,7 @@ export function liveOrdersToPaperTrades(
       side,
       qty,
       price,
-      strategyName: o.strategyName?.trim() || "Manual",
+      strategyName: inferLiveStrategyName(o.strategyName, o.reason),
       reason: o.reason,
       product: o.product || "CNC",
     });

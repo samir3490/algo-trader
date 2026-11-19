@@ -104,6 +104,8 @@ type Lot = {
 export interface EnrichTradesOptions {
   /** Active strategy names per symbol — used to infer missing multi-signal names. */
   strategyNamesBySymbol?: Map<string, string[]>;
+  /** Include Manual / untagged fills in strategy performance (needed for live). */
+  includeManual?: boolean;
 }
 
 /** Build lookup from active strategy instances for legacy trade backfill. */
@@ -425,7 +427,7 @@ export function computeStrategyDetailBundles(
 ): StrategyDetailBundle[] {
   const enriched = enrichTradesWithStrategy(trades, options);
   const summaryRows = computeStrategyPerformance(trades, options).filter(
-    (r) => r.strategyName !== "Manual"
+    (r) => options?.includeManual === true || r.strategyName !== "Manual"
   );
 
   const holdingByKey = new Map<string, HoldingForPnl>();

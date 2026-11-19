@@ -66,8 +66,8 @@ export default function LiveStrategyPerformancePanel({
       </div>
       {sorted.length === 0 ? (
         <div className="py-12 text-center text-sm text-text-tertiary">
-          No strategy trades yet. Enable live auto-trading and reconnect Zerodha
-          so algo fills are recorded with strategy names.
+          No live fills yet. Completed Zerodha / algo orders will appear here,
+          grouped by strategy (or Manual).
         </div>
       ) : (
         <>

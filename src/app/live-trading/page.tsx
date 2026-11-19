@@ -71,6 +71,7 @@ import {
 } from "@/lib/live-trading/capital-limits";
 import {
   buildLiveOrderRecord,
+  inferLiveStrategyName,
   liveOrdersToPaperTrades,
 } from "@/lib/live-trading/live-order-record";
 import {
@@ -479,16 +480,34 @@ function LiveTradingContent() {
           .filter((o) => o.orderId)
           .map((o) => [String(o.orderId), o] as const)
       );
+      // Latest known strategy per symbol from saved LIVE history (orderId may not match Kite).
+      const strategyBySymbol = new Map<string, string>();
+      for (const o of [...liveFs].sort((a, b) =>
+        String(b.time || b.date || "").localeCompare(String(a.time || a.date || ""))
+      )) {
+        const sym = String(o.symbol || "").toUpperCase();
+        const name = inferLiveStrategyName(o.strategyName, o.reason);
+        if (sym && name && name !== "Manual" && !strategyBySymbol.has(sym)) {
+          strategyBySymbol.set(sym, name);
+        }
+      }
       const kiteMapped: KiteOrder[] = (data.orders || []).map((o: any) => {
         const orderId = String(o.order_id || "");
         const fs = orderId ? byOrderId.get(orderId) : undefined;
         const tag = String(o.tag || "").trim();
+        const symbol = String(o.tradingsymbol || "").toUpperCase();
+        const strategyName = inferLiveStrategyName(
+          fs?.strategyName ||
+            (tag && tag.toLowerCase() !== "manual" ? tag : undefined) ||
+            strategyBySymbol.get(symbol),
+          fs?.reason
+        );
         return {
           orderId,
           time: normalizeKiteTimestamp(
             String(o.order_timestamp || o.exchange_timestamp || "")
           ),
-          symbol: o.tradingsymbol,
+          symbol,
           exchange: o.exchange || fs?.exchange || "NSE",
           type: o.order_type,
           side: o.transaction_type,
@@ -496,10 +515,7 @@ function LiveTradingContent() {
           price: o.average_price || o.price || 0,
           status: o.status,
           product: o.product || fs?.product || "CNC",
-          strategyName:
-            fs?.strategyName ||
-            (tag && tag.toLowerCase() !== "manual" ? tag : undefined) ||
-            "Manual",
+          strategyName,
           reason: fs?.reason,
           fromHistory: false,
         };
@@ -521,7 +537,7 @@ function LiveTradingContent() {
           price: o.price,
           status: o.status || "COMPLETE",
           product: o.product || "CNC",
-          strategyName: o.strategyName || "Manual",
+          strategyName: inferLiveStrategyName(o.strategyName, o.reason),
           reason: o.reason,
           fromHistory: true,
         }));
@@ -773,7 +789,7 @@ function LiveTradingContent() {
           avgPrice: h.avgPrice,
           ltp: h.ltp,
         })),
-        enrichOptions
+        { ...enrichOptions, includeManual: true }
       ),
     [livePaperTrades, holdings, enrichOptions]
   );
