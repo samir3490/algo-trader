@@ -189,6 +189,9 @@ export interface StrategyRunnerMeta {
   /** Monday week key (YYYY-MM-DD) when weekly shortlist email was last sent. */
   lastWeeklyShortlistEmailWeekKey?: string;
   lastWeeklyShortlistEmailAt?: string;
+  /** YYYY-MM of the previous month covered by the last monthly live performance email. */
+  lastMonthlyLiveEmailMonthKey?: string;
+  lastMonthlyLiveEmailAt?: string;
   /** Per-IST-day shortlist rollups (kept ~14 days) for weekly digest. */
   shortlistDayRollups?: Record<
     string,
@@ -407,6 +410,8 @@ export interface AppSettings {
   notifyPnl: boolean;
   /** Weekly shortlist digest (bought vs not bought). Default on. */
   notifyWeeklyShortlist: boolean;
+  /** Monthly live trading performance email (1st of month, previous month). Default on. */
+  notifyLiveMonthlyPerformance: boolean;
   /**
    * Settings → Rules checkboxes. When true (default), normalize/cron apply the
    * corresponding simple paper-trading rule.
@@ -531,6 +536,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   notifySignals: false,
   notifyPnl: false,
   notifyWeeklyShortlist: true,
+  notifyLiveMonthlyPerformance: true,
   ruleFixedNotional1L: true,
   ruleBasicExits2and5: true,
   ruleMaxPositions25: true,

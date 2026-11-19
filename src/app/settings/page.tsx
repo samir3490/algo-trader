@@ -91,6 +91,7 @@ interface AppSettings {
     strategySignals: boolean;
     pnlAlerts: boolean;
     weeklyShortlist: boolean;
+    liveMonthlyPerformance: boolean;
   };
   /** Checklist of paper rules — Settings → Rules. */
   paperRules: {
@@ -285,6 +286,7 @@ const defaultSettings: AppSettings = {
     strategySignals: false,
     pnlAlerts: false,
     weeklyShortlist: true,
+    liveMonthlyPerformance: true,
   },
   paperRules: {
     fixedNotional1L: true,
@@ -403,6 +405,7 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       strategySignals: fs.notifySignals === true,
       pnlAlerts: fs.notifyPnl,
       weeklyShortlist: fs.notifyWeeklyShortlist !== false,
+      liveMonthlyPerformance: fs.notifyLiveMonthlyPerformance !== false,
     },
     paperRules: {
       fixedNotional1L: fs.ruleFixedNotional1L !== false,
@@ -579,6 +582,7 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     notifySignals: s.notifications.strategySignals,
     notifyPnl: s.notifications.pnlAlerts,
     notifyWeeklyShortlist: s.paperRules.weeklyShortlistEmail,
+    notifyLiveMonthlyPerformance: s.notifications.liveMonthlyPerformance,
     ruleFixedNotional1L: s.paperRules.fixedNotional1L,
     ruleBasicExits2and5: s.paperRules.basicExits2and5,
     ruleMaxPositions25: s.paperRules.maxPositions25,
@@ -2783,6 +2787,11 @@ function SettingsContent() {
               key: "weeklyShortlist" as const,
               label: "Weekly shortlist email",
               desc: "Sunday summary of shortlisted shares — why bought and why not (18:00 IST)",
+            },
+            {
+              key: "liveMonthlyPerformance" as const,
+              label: "Monthly live performance email",
+              desc: "1st of each month — previous month live P&L, trades, and strategies used",
             },
           ].map((item) => (
             <div

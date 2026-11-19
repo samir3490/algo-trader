@@ -510,3 +510,109 @@ export async function sendWeeklyShortlistEmail(report: {
     console.error("Failed to send weekly shortlist email:", error);
   }
 }
+
+export async function sendMonthlyLivePerformanceEmail(report: {
+  monthLabel: string;
+  fromDateIST: string;
+  toDateIST: string;
+  tradeCount: number;
+  buyCount: number;
+  sellCount: number;
+  buyTurnover: number;
+  sellTurnover: number;
+  totalTurnover: number;
+  realizedPnl: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  fees: number;
+  topSymbols: { symbol: string; trades: number; buyQty: number; sellQty: number }[];
+  topStrategies: { strategyName: string; trades: number; buys: number; sells: number }[];
+}) {
+  const recipientEmail = process.env.EMAIL_RECIPIENT || process.env.EMAIL_USER;
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_APP_PASSWORD || !recipientEmail) {
+    return;
+  }
+
+  const now = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+  const pnlColor = report.realizedPnl >= 0 ? "#16a34a" : "#dc2626";
+  const pnlSign = report.realizedPnl >= 0 ? "+" : "";
+  const inr = (n: number) =>
+    `₹${n.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const subject = `📈 Live trading ${report.monthLabel}: ${pnlSign}${inr(report.realizedPnl)} realized`;
+
+  const symbolCards = report.topSymbols
+    .map((s) =>
+      stackedItemCard(
+        s.symbol,
+        `${s.trades} trades · buy qty ${s.buyQty} · sell qty ${s.sellQty}`,
+        "#059669"
+      )
+    )
+    .join("");
+
+  const strategyCards = report.topStrategies
+    .map((s) =>
+      stackedItemCard(
+        s.strategyName,
+        `${s.trades} trades · ${s.buys} buy · ${s.sells} sell`,
+        "#2563eb"
+      )
+    )
+    .join("");
+
+  const html = `
+    <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;max-width:100%;width:100%;margin:0 auto;background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;box-sizing:border-box;">
+      <div style="background:#065f46;padding:14px 16px;">
+        <h2 style="margin:0;color:#fff;font-size:17px;line-height:1.3;">Live trading — monthly performance</h2>
+        <p style="margin:8px 0 0;font-size:13px;color:#a7f3d0;line-height:1.4;">
+          ${escapeHtml(report.monthLabel)} · ${escapeHtml(report.fromDateIST)} → ${escapeHtml(report.toDateIST)} · ${escapeHtml(now)} IST
+        </p>
+      </div>
+      <div style="padding:14px 16px;box-sizing:border-box;">
+        ${detailBlock([
+          {
+            label: "Realized P&L (FIFO)",
+            value: `${pnlSign}${inr(report.realizedPnl)}`,
+            color: pnlColor,
+          },
+          {
+            label: "Win / Loss",
+            value: `${report.wins}W / ${report.losses}L${report.winRate > 0 ? ` · ${report.winRate}% win` : ""}`,
+          },
+          {
+            label: "Trades",
+            value: `${report.tradeCount} (${report.buyCount} buy · ${report.sellCount} sell)`,
+          },
+          { label: "Buy turnover", value: inr(report.buyTurnover) },
+          { label: "Sell turnover", value: inr(report.sellTurnover) },
+          { label: "Total traded", value: inr(report.totalTurnover) },
+          { label: "Est. fees", value: inr(report.fees) },
+        ])}
+
+        <h3 style="margin:18px 0 10px;font-size:15px;color:#111827;">Top symbols</h3>
+        ${symbolCards || `<p style="color:#6b7280;font-size:13px;">No live fills recorded last month.</p>`}
+
+        <h3 style="margin:18px 0 10px;font-size:15px;color:#111827;">Strategies used</h3>
+        ${strategyCards || `<p style="color:#6b7280;font-size:13px;">No strategy-tagged live fills last month.</p>`}
+
+        <p style="margin:16px 0 0;font-size:12px;color:#6b7280;line-height:1.4;">
+          AlgoTrader · Live order history · Sent on the 1st for the previous month
+        </p>
+      </div>
+    </div>
+  `;
+
+  try {
+    await transporter.sendMail({
+      from: `"AlgoTrader" <${process.env.EMAIL_USER}>`,
+      to: recipientEmail,
+      subject,
+      html,
+    });
+  } catch (error) {
+    console.error("Failed to send monthly live performance email:", error);
+    throw error;
+  }
+}

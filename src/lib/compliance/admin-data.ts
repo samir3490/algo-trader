@@ -2,6 +2,7 @@ import type { Firestore } from "firebase-admin/firestore";
 import {
   DEFAULT_SETTINGS,
   type AppSettings,
+  type OrderRecord,
   type PaperTradingState,
   type StrategyRunnerMeta,
 } from "@/lib/firebase";
@@ -73,4 +74,21 @@ export async function loadRunnerMetaAdmin(
 ): Promise<StrategyRunnerMeta> {
   const snap = await db.doc(`users/${userId}/data/strategyRunner`).get();
   return (snap.data() ?? {}) as StrategyRunnerMeta;
+}
+
+export async function loadOrdersAdmin(
+  db: Firestore,
+  userId: string,
+  max = 1000
+): Promise<OrderRecord[]> {
+  try {
+    const snap = await db
+      .collection(`users/${userId}/orders`)
+      .orderBy("createdAt", "desc")
+      .limit(max)
+      .get();
+    return snap.docs.map((d) => d.data() as OrderRecord);
+  } catch {
+    return [];
+  }
 }

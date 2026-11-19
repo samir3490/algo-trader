@@ -2,10 +2,15 @@ import { FieldValue } from "firebase-admin/firestore";
 import { getAdminFirestore, isFirebaseAdminConfigured } from "@/lib/firebase-admin";
 import { appendUserAuditLogAdmin } from "@/lib/audit/user-audit-log-server";
 import { formatTradeAuditMessage } from "@/lib/audit/trade-execution-audit";
-import { sendDailyPnlEmail, sendWeeklyShortlistEmail } from "@/lib/email";
+import {
+  sendDailyPnlEmail,
+  sendMonthlyLivePerformanceEmail,
+  sendWeeklyShortlistEmail,
+} from "@/lib/email";
 import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import {
   listStrategyUserIds,
+  loadOrdersAdmin,
   loadPaperStateAdmin,
   loadRunnerMetaAdmin,
   loadUserSettingsAdmin,
@@ -18,6 +23,11 @@ import {
   buildWeeklyShortlistReport,
   shouldSendWeeklyShortlist,
 } from "@/lib/export/weekly-shortlist";
+import {
+  buildMonthlyLivePerformanceReport,
+  previousMonthRangeIST,
+  shouldSendMonthlyLiveEmail,
+} from "@/lib/export/monthly-live-performance";
 import { applyMisSquareOffOnly } from "./mis-square-off";
 import { persistPaperStateAdmin } from "./paper-persist";
 import { persistNewPaperTradesAsOrdersAdmin } from "@/lib/portfolio/paper-order-record-server";
@@ -183,6 +193,114 @@ export async function runWeeklyShortlistForAllUsers(): Promise<ComplianceRunResu
         userId,
         action: "emailed",
         detail: `${report.shortlisted.length} shortlisted / ${report.bought.length} bought`,
+      });
+    } catch (e) {
+      results.push({
+        userId,
+        action: "error",
+        detail: e instanceof Error ? e.message : "error",
+      });
+    }
+  }
+
+  return { ok: true, ranAt, usersProcessed: userIds.length, results };
+}
+
+export async function runMonthlyLivePerformanceForAllUsers(
+  options?: { force?: boolean; now?: Date }
+): Promise<ComplianceRunResult> {
+  const now = options?.now ?? new Date();
+  const ranAt = now.toISOString();
+  const { monthKey } = previousMonthRangeIST(now);
+
+  if (!isFirebaseAdminConfigured()) {
+    return {
+      ok: false,
+      ranAt,
+      usersProcessed: 0,
+      results: [],
+      error: "FIREBASE_SERVICE_ACCOUNT_JSON not configured",
+    };
+  }
+
+  const db = getAdminFirestore();
+  const userIds = await listStrategyUserIds(db);
+  const results: ComplianceRunResult["results"] = [];
+
+  for (const userId of userIds) {
+    try {
+      const [settings, meta, orders] = await Promise.all([
+        loadUserSettingsAdmin(db, userId),
+        loadRunnerMetaAdmin(db, userId),
+        loadOrdersAdmin(db, userId, 1500),
+      ]);
+
+      if (settings.notifyLiveMonthlyPerformance === false) {
+        results.push({
+          userId,
+          action: "skipped",
+          detail: "notifyLiveMonthlyPerformance off",
+        });
+        continue;
+      }
+
+      if (
+        !options?.force &&
+        !shouldSendMonthlyLiveEmail(meta.lastMonthlyLiveEmailMonthKey, monthKey)
+      ) {
+        results.push({
+          userId,
+          action: "skipped",
+          detail: `already sent for ${monthKey}`,
+        });
+        continue;
+      }
+
+      const report = buildMonthlyLivePerformanceReport(orders, now);
+      if (report.tradeCount === 0) {
+        results.push({
+          userId,
+          action: "skipped",
+          detail: `no live trades in ${monthKey}`,
+        });
+        // Still mark sent so we don't retry empty months forever on each dispatch.
+        await db.doc(`users/${userId}/data/strategyRunner`).set(
+          {
+            lastMonthlyLiveEmailMonthKey: monthKey,
+            lastMonthlyLiveEmailAt: ranAt,
+            updatedAt: FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+        continue;
+      }
+
+      await sendMonthlyLivePerformanceEmail(report);
+
+      await db.doc(`users/${userId}/data/strategyRunner`).set(
+        {
+          lastMonthlyLiveEmailMonthKey: monthKey,
+          lastMonthlyLiveEmailAt: ranAt,
+          updatedAt: FieldValue.serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      await appendUserAuditLogAdmin(db, userId, {
+        severity: "INFO",
+        source: "MonthlyLivePerformance",
+        message: `Monthly live email — ${report.monthLabel}: ${report.tradeCount} trades, P&L ₹${report.realizedPnl.toFixed(2)}`,
+        meta: {
+          monthKey: report.monthKey,
+          tradeCount: report.tradeCount,
+          realizedPnl: report.realizedPnl,
+        },
+      });
+
+      results.push({
+        userId,
+        action: "emailed",
+        detail: `${report.monthLabel}: ${report.tradeCount} trades / ₹${report.realizedPnl}`,
       });
     } catch (e) {
       results.push({
