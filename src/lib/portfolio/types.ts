@@ -120,6 +120,8 @@ export interface TradeAuditEntry {
   ownerStrategyId: string;
   symbol: string;
   exchange: string;
+  /** Paper vs live book for this fill. */
+  mode: "PAPER" | "LIVE";
   signalReason?: string;
   signalStrength?: string;
   entryTime?: string;

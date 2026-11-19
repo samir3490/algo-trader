@@ -4,6 +4,7 @@ import {
   computePnlBreakdown,
   tradeDateKeyIST,
 } from "@/lib/portfolio/compute-portfolio";
+import { attachFifoNetPnl } from "@/lib/portfolio/trade-period";
 import { tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
 import { enrichTradesWithStrategy } from "@/lib/strategies/strategy-performance";
 import {
@@ -12,6 +13,8 @@ import {
   type RiskMetrics,
   type RoundTripPnl,
 } from "./risk-metrics";
+
+const IST = "Asia/Kolkata";
 
 export interface GroupedAnalytics {
   key: string;
@@ -120,17 +123,25 @@ export function buildPaperEquityCurve(
   return points;
 }
 
-/** Extract closed round-trip P&L from paper sells (uses netPnl when present). */
+function closedAtMs(t: PaperTrade): number {
+  const ms = tradeExecutedAtMs(t);
+  if (ms > 0) return ms;
+  if (t.date) {
+    const fallback = Date.parse(`${t.date}T12:00:00+05:30`);
+    if (!Number.isNaN(fallback)) return fallback;
+  }
+  return 0;
+}
+
+/** Extract closed round-trip P&L from sells (FIFO fills missing/stale netPnl). */
 export function extractRoundTrips(trades: PaperTrade[]): RoundTripPnl[] {
-  const enriched = enrichTradesWithStrategy(trades);
+  const withPnl = attachFifoNetPnl(trades);
+  const enriched = enrichTradesWithStrategy(withPnl);
   const trips: RoundTripPnl[] = [];
   for (const t of enriched) {
     if (t.side !== "SELL") continue;
-    const ms = tradeExecutedAtMs(t);
-    const pnl =
-      typeof t.netPnl === "number"
-        ? t.netPnl
-        : 0;
+    const ms = closedAtMs(t);
+    const pnl = typeof t.netPnl === "number" ? t.netPnl : 0;
     trips.push({
       symbol: t.symbol,
       exchange: t.exchange,
@@ -162,13 +173,94 @@ function metricsForRoundTrips(
   return computeRiskMetrics(curve, trips, startingEquity);
 }
 
-function monthKey(ms: number): string {
+export function monthKeyIST(ms: number): string {
   if (ms <= 0) return "unknown";
   return new Date(ms).toLocaleDateString("en-CA", {
-    timeZone: "Asia/Kolkata",
+    timeZone: IST,
     year: "numeric",
     month: "2-digit",
   });
+}
+
+/** Human label for `YYYY-MM` month keys (IST). */
+export function formatMonthKeyLabel(key: string): string {
+  if (!/^\d{4}-\d{2}$/.test(key)) return key;
+  return new Date(`${key}-01T12:00:00+05:30`).toLocaleDateString("en-IN", {
+    month: "short",
+    year: "numeric",
+    timeZone: IST,
+  });
+}
+
+/** Collapse equity curve to one point per calendar month (last value in month). */
+export function aggregateEquityCurveByMonth(
+  curve: EquityPoint[]
+): { label: string; month: string; equity: number; ms: number }[] {
+  const byMonth = new Map<string, { equity: number; ms: number }>();
+  for (const p of curve) {
+    const ms =
+      p.ms > 0
+        ? p.ms
+        : p.timestamp
+          ? Date.parse(p.timestamp)
+          : 0;
+    if (!Number.isFinite(ms) || ms <= 0) continue;
+    const key = monthKeyIST(ms);
+    if (key === "unknown") continue;
+    const prev = byMonth.get(key);
+    if (!prev || ms >= prev.ms) {
+      byMonth.set(key, { equity: p.equity, ms });
+    }
+  }
+  return [...byMonth.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([month, v]) => ({
+      month,
+      label: formatMonthKeyLabel(month),
+      equity: Math.round(v.equity),
+      ms: v.ms,
+    }));
+}
+
+/** Open lots from trade history as holdings (ltp defaults to avg cost). */
+export function reconstructOpenHoldings(
+  trades: PaperTrade[]
+): PortfolioHolding[] {
+  const sorted = [...trades].sort(
+    (a, b) => tradeExecutedAtMs(a) - tradeExecutedAtMs(b)
+  );
+  const lots = new Map<string, { qty: number; cost: number }>();
+  for (const t of sorted) {
+    const key = positionKey(t.symbol, t.exchange);
+    const cur = lots.get(key) ?? { qty: 0, cost: 0 };
+    if (t.side === "BUY") {
+      cur.qty += t.qty;
+      cur.cost += t.qty * t.price + (t.charges ?? 0);
+      lots.set(key, cur);
+    } else {
+      const sellQty = Math.min(t.qty, cur.qty);
+      if (sellQty <= 0) continue;
+      const avg = cur.qty > 0 ? cur.cost / cur.qty : t.price;
+      cur.qty -= sellQty;
+      cur.cost = Math.max(0, cur.cost - avg * sellQty);
+      if (cur.qty <= 0) lots.delete(key);
+      else lots.set(key, cur);
+    }
+  }
+  const out: PortfolioHolding[] = [];
+  for (const [key, lot] of lots) {
+    if (lot.qty <= 0) continue;
+    const [symbol, exchange] = key.split(":");
+    const avgPrice = lot.qty > 0 ? lot.cost / lot.qty : 0;
+    out.push({
+      symbol,
+      exchange: exchange || "NSE",
+      qty: lot.qty,
+      avgPrice,
+      ltp: avgPrice,
+    });
+  }
+  return out;
 }
 
 export function computePaperPortfolioAnalytics(
@@ -184,13 +276,29 @@ export function computePaperPortfolioAnalytics(
     startingBalance
   );
   const roundTrips = extractRoundTrips(trades);
-  const overall = computeRiskMetrics(equityCurve, roundTrips, startingBalance);
   const pnlBreakdown = computePnlBreakdown(
     trades,
     holdings,
     balance,
     startingBalance
   );
+  // Overall Net P&L / return must be realized only — equity curve ends at MTM
+  // (cash + holdings LTP), which would otherwise inflate net by unrealized P&L.
+  const overallBase = computeRiskMetrics(
+    equityCurve,
+    roundTrips,
+    startingBalance
+  );
+  const realized = pnlBreakdown.realizedPnl;
+  const overall = {
+    ...overallBase,
+    netPnl: Math.round(realized * 100) / 100,
+    endingEquity: Math.round((startingBalance + realized) * 100) / 100,
+    totalReturnPct:
+      startingBalance > 0
+        ? Math.round((realized / startingBalance) * 10000) / 100
+        : 0,
+  };
 
   const byStrategyMap = new Map<string, RoundTripPnl[]>();
   const bySymbolMap = new Map<string, RoundTripPnl[]>();
@@ -199,7 +307,7 @@ export function computePaperPortfolioAnalytics(
   for (const rt of roundTrips) {
     const strat = rt.strategyName?.trim() || "Unknown";
     const sym = rt.symbol.toUpperCase();
-    const mo = monthKey(rt.closedAtMs);
+    const mo = monthKeyIST(rt.closedAtMs);
 
     const sList = byStrategyMap.get(strat) ?? [];
     sList.push(rt);
@@ -215,12 +323,13 @@ export function computePaperPortfolioAnalytics(
   }
 
   function toGrouped(
-    map: Map<string, RoundTripPnl[]>
+    map: Map<string, RoundTripPnl[]>,
+    labelFn?: (key: string) => string
   ): GroupedAnalytics[] {
     return [...map.entries()]
       .map(([key, trips]) => ({
         key,
-        label: key,
+        label: labelFn ? labelFn(key) : key,
         metrics: metricsForRoundTrips(trips, startingBalance),
         roundTrips: trips.length,
       }))
@@ -232,15 +341,17 @@ export function computePaperPortfolioAnalytics(
     equityCurve,
     byStrategy: toGrouped(byStrategyMap),
     bySymbol: toGrouped(bySymbolMap),
-    byMonth: toGrouped(byMonthMap).sort((a, b) => a.key.localeCompare(b.key)),
+    byMonth: toGrouped(byMonthMap, formatMonthKeyLabel).sort((a, b) =>
+      a.key.localeCompare(b.key)
+    ),
     pnlBreakdown,
   };
 }
 
 /** Month label for trade (IST). */
 export function tradeMonthKeyIST(t: PaperTrade): string {
-  const ms = tradeExecutedAtMs(t);
-  if (ms > 0) return monthKey(ms);
+  const ms = closedAtMs(t);
+  if (ms > 0) return monthKeyIST(ms);
   const d = t.date ?? tradeDateKeyIST(t);
   return d.slice(0, 7);
 }

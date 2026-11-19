@@ -111,11 +111,17 @@ export function liveOrdersToPaperTrades(
     const symbol = (o.symbol || "").trim().toUpperCase();
     if (!symbol) continue;
     const ms = Date.parse(o.time || "");
+    const executedAt =
+      Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : undefined;
+    const date =
+      Number.isFinite(ms) && ms > 0
+        ? new Date(ms).toLocaleDateString("en-CA", { timeZone: IST })
+        : undefined;
     out.push({
       id: liveOrderId(o.orderId, `${symbol}-${o.time}-${side}-${qty}`),
       time: o.time,
-      executedAt:
-        Number.isFinite(ms) && ms > 0 ? new Date(ms).toISOString() : undefined,
+      executedAt,
+      date,
       symbol,
       exchange: (o.exchange || "NSE").trim().toUpperCase(),
       side,
@@ -127,4 +133,41 @@ export function liveOrdersToPaperTrades(
     });
   }
   return out;
+}
+
+/** Map Firestore LIVE OrderRecords into PaperTrade rows. */
+export function firestoreLiveOrdersToPaperTrades(
+  orders: Array<{
+    id?: string;
+    orderId?: string;
+    time: string;
+    symbol: string;
+    exchange?: string;
+    side: string;
+    qty: number;
+    price: number;
+    status?: string;
+    strategyName?: string;
+    reason?: string;
+    product?: string;
+    mode?: string;
+  }>
+) {
+  return liveOrdersToPaperTrades(
+    orders
+      .filter((o) => !o.mode || o.mode === "LIVE")
+      .map((o) => ({
+        orderId: o.orderId || o.id,
+        time: o.time,
+        symbol: o.symbol,
+        exchange: o.exchange,
+        side: o.side,
+        qty: o.qty,
+        price: o.price,
+        status: o.status || "COMPLETE",
+        strategyName: o.strategyName,
+        reason: o.reason,
+        product: o.product,
+      }))
+  );
 }

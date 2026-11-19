@@ -28,7 +28,7 @@ export default function AnalyticsPage() {
         <div>
           <h1 className="text-2xl font-bold text-text-primary">Analytics</h1>
           <p className="mt-1 text-sm text-text-secondary">
-            Portfolio metrics, benchmarks, optimization tools, and trade journal.
+            Paper and live portfolio metrics, unified P&amp;L, audit trail, and tools.
           </p>
         </div>
         <ExecutiveSummaryButton />

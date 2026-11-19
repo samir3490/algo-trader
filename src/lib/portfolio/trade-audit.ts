@@ -17,30 +17,36 @@ function strengthLabel(count?: number): string {
 }
 
 /** Build audit rows from trade history for UI and compliance export. */
-export function buildTradeAuditLog(trades: PaperTrade[]): TradeAuditEntry[] {
+export function buildTradeAuditLog(
+  trades: PaperTrade[],
+  mode: "PAPER" | "LIVE" = "PAPER"
+): TradeAuditEntry[] {
   const sorted = [...trades].sort(
     (a, b) => tradeExecutedAtMs(b) - tradeExecutedAtMs(a)
   );
 
   return sorted.map((t) => {
     const executedAt = resolveExecutedAt(t);
+    const inferredMode: "PAPER" | "LIVE" =
+      mode === "LIVE" || t.id?.startsWith("live-") ? "LIVE" : "PAPER";
     return {
-    id: t.id,
-    strategyName: t.strategyName ?? t.ownerStrategyId ?? "Manual",
-    ownerStrategyId: t.ownerStrategyId ?? t.strategyId ?? "manual",
-    symbol: t.symbol,
-    exchange: t.exchange,
-    signalReason: t.reason,
-    signalStrength: strengthLabel(t.buySignalCount),
-    entryTime: t.entryTime ?? (t.side === "BUY" ? executedAt : undefined),
-    entryPrice: t.entryPrice ?? (t.side === "BUY" ? t.price : undefined),
-    exitTime: t.exitTime ?? (t.side === "SELL" ? executedAt : undefined),
-    exitPrice: t.exitPrice ?? (t.side === "SELL" ? t.price : undefined),
-    exitReason: t.exitReason,
-    side: t.side,
-    qty: t.qty,
-    netPnl: t.netPnl,
-    executedAt,
-  };
+      id: t.id,
+      strategyName: t.strategyName ?? t.ownerStrategyId ?? "Manual",
+      ownerStrategyId: t.ownerStrategyId ?? t.strategyId ?? "manual",
+      symbol: t.symbol,
+      exchange: t.exchange,
+      mode: inferredMode,
+      signalReason: t.reason,
+      signalStrength: strengthLabel(t.buySignalCount),
+      entryTime: t.entryTime ?? (t.side === "BUY" ? executedAt : undefined),
+      entryPrice: t.entryPrice ?? (t.side === "BUY" ? t.price : undefined),
+      exitTime: t.exitTime ?? (t.side === "SELL" ? executedAt : undefined),
+      exitPrice: t.exitPrice ?? (t.side === "SELL" ? t.price : undefined),
+      exitReason: t.exitReason,
+      side: t.side,
+      qty: t.qty,
+      netPnl: t.netPnl,
+      executedAt,
+    };
   });
 }

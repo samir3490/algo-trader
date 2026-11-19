@@ -20,12 +20,18 @@ import {
 import { cn, formatCurrency, formatPercent } from "@/lib/utils";
 import { useAuth } from "@/lib/auth-context";
 import {
+  getOrders,
   getPaperTradingState,
   getSettings,
   type PaperTrade,
 } from "@/lib/firebase";
+import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
+import { attachFifoNetPnl } from "@/lib/portfolio/trade-period";
 import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
-import { computePaperPortfolioAnalytics } from "@/lib/analytics/paper-analytics";
+import {
+  aggregateEquityCurveByMonth,
+  computePaperPortfolioAnalytics,
+} from "@/lib/analytics/paper-analytics";
 import type { GroupedAnalytics } from "@/lib/analytics/paper-analytics";
 import type { BenchmarkComparison } from "@/lib/analytics/benchmark";
 import { buildTradeJournalCsv } from "@/lib/export/trade-journal";
@@ -62,7 +68,7 @@ function MetricsGrid({
     { label: "Win rate", value: `${metrics.winRate.toFixed(1)}%` },
     { label: "Round trips", value: String(metrics.closedRoundTrips) },
     {
-      label: "Net P&L",
+      label: "Net P&L (realized)",
       value: formatCurrency(metrics.netPnl),
       positive: metrics.netPnl >= 0,
     },
@@ -201,12 +207,16 @@ export default function AnalyticsPanel() {
     (async () => {
       setLoading(true);
       try {
-        const [paper, settings] = await Promise.all([
+        const [paper, settings, orders] = await Promise.all([
           getPaperTradingState(),
           getSettings(),
+          getOrders(1000),
         ]);
         if (cancelled) return;
-        setTrades(paper.trades ?? []);
+        const merged = attachFifoNetPnl(
+          normalizePaperTrades(paper.trades ?? [], orders)
+        );
+        setTrades(merged);
         setHoldings(paper.holdings ?? []);
         setBalance(paper.balance ?? 0);
         setPositions((paper.positions ?? []) as PaperPosition[]);
@@ -232,15 +242,10 @@ export default function AnalyticsPanel() {
 
   const chartData = useMemo(() => {
     if (!analytics) return [];
-    return analytics.equityCurve.map((p, i) => ({
+    return aggregateEquityCurveByMonth(analytics.equityCurve).map((p, i) => ({
       i,
-      label: p.timestamp
-        ? new Date(p.timestamp).toLocaleDateString("en-IN", {
-            day: "2-digit",
-            month: "short",
-          })
-        : String(i),
-      equity: Math.round(p.equity),
+      label: p.label,
+      equity: p.equity,
     }));
   }, [analytics]);
 
@@ -352,7 +357,9 @@ export default function AnalyticsPanel() {
 
       {chartData.length > 1 && (
         <div className="card">
-          <h3 className="text-sm font-semibold text-text-primary mb-3">Equity curve</h3>
+          <h3 className="text-sm font-semibold text-text-primary mb-3">
+            Equity curve (by month)
+          </h3>
           <div className="h-56">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={chartData}>

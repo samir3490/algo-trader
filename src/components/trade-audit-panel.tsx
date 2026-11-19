@@ -15,14 +15,30 @@ import { useTableSort } from "@/hooks/use-table-sort";
 import SortableTh from "@/components/ui/sortable-th";
 import { buildTradeAuditCsv } from "@/lib/export/trade-audit-export";
 import { downloadCsv, exportDateStamp } from "@/lib/export/csv";
-import { getPaperTradingState } from "@/lib/firebase";
-import type { PaperTrade } from "@/lib/firebase";
+import { getOrders, getPaperTradingState } from "@/lib/firebase";
+import { firestoreLiveOrdersToPaperTrades } from "@/lib/live-trading/live-order-record";
+import { attachFifoNetPnl } from "@/lib/portfolio/trade-period";
 import type { TradeAuditEntry } from "@/lib/portfolio/types";
 
 function formatAuditWhen(r: TradeAuditEntry): string {
   const raw = r.executedAt ?? (r.side === "SELL" ? r.exitTime : r.entryTime);
   if (!raw) return "—";
   return formatDateTimeCompactIST(raw);
+}
+
+function ModeBadge({ mode }: { mode: "PAPER" | "LIVE" }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide",
+        mode === "LIVE"
+          ? "bg-emerald-100 text-emerald-800"
+          : "bg-sky-100 text-sky-800"
+      )}
+    >
+      {mode === "LIVE" ? "Live" : "Paper"}
+    </span>
+  );
 }
 
 function AuditCard({ r }: { r: TradeAuditEntry }) {
@@ -42,17 +58,20 @@ function AuditCard({ r }: { r: TradeAuditEntry }) {
           >
             {whenLabel}
           </p>
-          <p className="text-sm font-semibold text-text-primary">
-            {r.symbol}{" "}
-            <span
-              className={cn(
-                "text-xs font-medium",
-                r.side === "BUY" ? "text-profit" : "text-loss"
-              )}
-            >
-              {r.side}
-            </span>
-          </p>
+          <div className="flex items-center gap-2 mb-0.5">
+            <ModeBadge mode={r.mode} />
+            <p className="text-sm font-semibold text-text-primary">
+              {r.symbol}{" "}
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  r.side === "BUY" ? "text-profit" : "text-loss"
+                )}
+              >
+                {r.side}
+              </span>
+            </p>
+          </div>
           <p className="text-xs text-text-tertiary">{r.strategyName}</p>
         </div>
         {r.netPnl != null && (
@@ -81,16 +100,32 @@ function AuditCard({ r }: { r: TradeAuditEntry }) {
 }
 
 export default function TradeAuditPanel() {
-  const [trades, setTrades] = useState<PaperTrade[]>([]);
+  const [rows, setRows] = useState<TradeAuditEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [modeFilter, setModeFilter] = useState<"ALL" | "PAPER" | "LIVE">("ALL");
 
   async function load() {
     setLoading(true);
     try {
-      const state = await getPaperTradingState();
-      setTrades(state?.trades ?? []);
+      const [state, orders] = await Promise.all([
+        getPaperTradingState(),
+        getOrders(1000),
+      ]);
+      const paperRows = buildTradeAuditLog(state?.trades ?? [], "PAPER");
+      const liveTrades = attachFifoNetPnl(
+        firestoreLiveOrdersToPaperTrades(
+          orders.filter((o) => o.mode === "LIVE")
+        )
+      );
+      const liveRows = buildTradeAuditLog(liveTrades, "LIVE");
+      const merged = [...paperRows, ...liveRows].sort((a, b) => {
+        const ta = a.executedAt ? Date.parse(a.executedAt) : 0;
+        const tb = b.executedAt ? Date.parse(b.executedAt) : 0;
+        return tb - ta;
+      });
+      setRows(merged);
     } catch {
-      setTrades([]);
+      setRows([]);
     } finally {
       setLoading(false);
     }
@@ -102,7 +137,10 @@ export default function TradeAuditPanel() {
     return () => clearInterval(t);
   }, []);
 
-  const rows = useMemo(() => buildTradeAuditLog(trades), [trades]);
+  const filtered = useMemo(() => {
+    if (modeFilter === "ALL") return rows;
+    return rows.filter((r) => r.mode === modeFilter);
+  }, [rows, modeFilter]);
 
   const { sortKey, sortDir, toggleSort, sortRows } = useTableSort({
     key: "when",
@@ -110,7 +148,8 @@ export default function TradeAuditPanel() {
   });
   const sortedRows = useMemo(
     () =>
-      sortRows(rows, {
+      sortRows(filtered, {
+        mode: (r) => r.mode,
         strategy: (r) => r.strategyName,
         symbol: (r) => r.symbol,
         side: (r) => r.side,
@@ -122,11 +161,11 @@ export default function TradeAuditPanel() {
         pnl: (r) => r.netPnl ?? 0,
         when: (r) => (r.executedAt ? Date.parse(r.executedAt) : 0),
       }),
-    [rows, sortRows]
+    [filtered, sortRows]
   );
 
   function exportCsv() {
-    downloadCsv(`trade-audit-${exportDateStamp()}.csv`, buildTradeAuditCsv(rows));
+    downloadCsv(`trade-audit-${exportDateStamp()}.csv`, buildTradeAuditCsv(filtered));
   }
 
   return (
@@ -139,15 +178,32 @@ export default function TradeAuditPanel() {
           <div>
             <h2 className="text-lg font-semibold text-text-primary">Trade audit log</h2>
             <p className="text-xs text-text-secondary">
-              Full trail: strategy, signal strength, entry/exit, and exit reason
+              Paper and live fills with strategy, signal, entry/exit, and P&amp;L
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1 rounded-lg bg-bg-tertiary p-1">
+            {(["ALL", "PAPER", "LIVE"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setModeFilter(m)}
+                className={cn(
+                  "px-2.5 py-1 rounded-md text-[11px] font-semibold",
+                  modeFilter === m
+                    ? "bg-accent text-brand"
+                    : "text-text-tertiary hover:bg-bg-hover"
+                )}
+              >
+                {m === "ALL" ? "All" : m === "LIVE" ? "Live" : "Paper"}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             onClick={exportCsv}
-            disabled={rows.length === 0}
+            disabled={filtered.length === 0}
             className="btn-secondary text-xs flex items-center gap-1.5 disabled:opacity-50"
           >
             <Download className="h-3.5 w-3.5" />
@@ -165,7 +221,7 @@ export default function TradeAuditPanel() {
         </div>
       </div>
 
-      {rows.length === 0 ? (
+      {sortedRows.length === 0 ? (
         <p className="py-8 text-center text-sm text-text-tertiary">
           {loading ? "Loading…" : "No trades yet"}
         </p>
@@ -173,15 +229,16 @@ export default function TradeAuditPanel() {
         <>
           <div className="md:hidden space-y-2 max-h-[min(70vh,560px)] overflow-y-auto">
             {sortedRows.map((r) => (
-              <AuditCard key={r.id} r={r} />
+              <AuditCard key={`${r.mode}-${r.id}`} r={r} />
             ))}
           </div>
 
           <div className="hidden md:block overflow-x-auto max-h-[min(70vh,560px)] overflow-y-auto">
-            <table className="w-full text-xs min-w-[900px]">
+            <table className="w-full text-xs min-w-[980px]">
               <thead className="sticky top-0 z-10 bg-bg-secondary">
                 <tr className="border-b border-border text-text-tertiary text-left">
                   <SortableTh sortKey="when" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className={cn(tableDateTimeThClass, "py-2 pr-2 font-semibold uppercase tracking-wider")}>When</SortableTh>
+                  <SortableTh sortKey="mode" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Book</SortableTh>
                   <SortableTh sortKey="strategy" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Strategy</SortableTh>
                   <SortableTh sortKey="symbol" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Symbol</SortableTh>
                   <SortableTh sortKey="side" activeKey={sortKey} direction={sortDir} onSort={toggleSort} className="py-2 pr-3 font-semibold uppercase tracking-wider">Side</SortableTh>
@@ -195,7 +252,7 @@ export default function TradeAuditPanel() {
               </thead>
               <tbody>
                 {sortedRows.map((r) => (
-                  <tr key={r.id} className="border-b border-border/40">
+                  <tr key={`${r.mode}-${r.id}`} className="border-b border-border/40">
                     <td
                       className={cn(tableDateTimeTdClass, "py-2 pr-2")}
                       title={
@@ -207,6 +264,9 @@ export default function TradeAuditPanel() {
                       }
                     >
                       {formatAuditWhen(r)}
+                    </td>
+                    <td className="py-2 pr-3">
+                      <ModeBadge mode={r.mode} />
                     </td>
                     <td className="py-2 pr-3 text-text-primary font-medium">
                       {r.strategyName}

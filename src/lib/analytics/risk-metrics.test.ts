@@ -37,5 +37,21 @@ describe("risk-metrics", () => {
     assert.equal(metrics.closedRoundTrips, 2);
     assert.ok(metrics.profitFactor > 1);
     assert.equal(metrics.winRate, 50);
+    // Equity rose +10 (MTM), but net P&L is realized trips only (300).
+    assert.equal(metrics.netPnl, 300);
+  });
+
+  it("does not treat mark-to-market equity as net P&L when trips exist", () => {
+    const curve: EquityPoint[] = [
+      { timestamp: "1", ms: 1, equity: 1_000_000 },
+      { timestamp: "2", ms: 2, equity: 1_050_000 }, // includes unrealized
+    ];
+    const metrics = computeRiskMetrics(
+      curve,
+      [{ symbol: "SBIN", exchange: "NSE", pnl: 2_500, closedAtMs: 2 }],
+      1_000_000
+    );
+    assert.equal(metrics.netPnl, 2_500);
+    assert.equal(metrics.totalReturnPct, 0.25);
   });
 });

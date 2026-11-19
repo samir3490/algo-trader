@@ -13,10 +13,13 @@ import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
 import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
 import {
+  attachFifoNetPnl,
   computeTradePeriodTotals,
   resolveTradeDateRange,
   type TradePeriodPreset,
 } from "@/lib/portfolio/trade-period";
+import { firestoreLiveOrdersToPaperTrades } from "@/lib/live-trading/live-order-record";
+import { reconstructOpenHoldings } from "@/lib/analytics/paper-analytics";
 
 type Book = "paper" | "live";
 
@@ -42,8 +45,15 @@ export default function UnifiedPnlPanel() {
   } | null>(null);
   const [live, setLive] = useState<{
     dayPnl: number;
+    holdingsPnl: number;
     available: number;
-    openQty: number;
+    periodPnl: number;
+    periodFees: number;
+    trades: number;
+    realized: number;
+    unrealized: number;
+    openNames: number;
+    connected: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -54,7 +64,7 @@ export default function UnifiedPnlPanel() {
       try {
         const [state, orders, settings, accountsRes] = await Promise.all([
           getPaperTradingState(),
-          getOrders(),
+          getOrders(1000),
           getSettings(),
           fetch("/api/zerodha/accounts"),
         ]);
@@ -78,33 +88,70 @@ export default function UnifiedPnlPanel() {
           trades: totals.tradeCount,
         });
 
+        const liveOrders = orders.filter((o) => o.mode === "LIVE");
+        const liveTrades = attachFifoNetPnl(
+          firestoreLiveOrdersToPaperTrades(liveOrders)
+        );
+        const liveTotals = computeTradePeriodTotals(liveTrades, range);
+        const liveHoldings = reconstructOpenHoldings(liveTrades);
+        const liveInvested = liveHoldings.reduce(
+          (s, h) => s + h.qty * h.avgPrice,
+          0
+        );
+        const liveBreakdown = computePnlBreakdown(
+          liveTrades,
+          liveHoldings,
+          0,
+          Math.max(1, liveInvested)
+        );
+
         const accountsJson = await accountsRes.json().catch(() => ({}));
         const account =
-          (accountsJson.accounts || []).find((a: { connected?: boolean }) => a.connected !== false) ||
-          (accountsJson.accounts || [])[0];
+          (accountsJson.accounts || []).find(
+            (a: { connected?: boolean }) => a.connected !== false
+          ) || (accountsJson.accounts || [])[0];
+
+        let dayPnl = 0;
+        let holdingsPnl = 0;
+        let available = 0;
+        let connected = false;
         if (account?.kiteUserId) {
-          const [marginsRes, positionsRes] = await Promise.all([
+          connected = true;
+          const [marginsRes, positionsRes, holdingsRes] = await Promise.all([
             fetch(`/api/zerodha/margins?accountId=${account.kiteUserId}`),
             fetch(`/api/zerodha/positions?accountId=${account.kiteUserId}`),
+            fetch(`/api/zerodha/holdings?accountId=${account.kiteUserId}`),
           ]);
           const margins = marginsRes.ok ? await marginsRes.json() : {};
-          const positionsJson = positionsRes.ok ? await positionsRes.json() : {};
+          const positionsJson = positionsRes.ok
+            ? await positionsRes.json()
+            : {};
+          const holdingsJson = holdingsRes.ok ? await holdingsRes.json() : {};
           const positions = positionsJson.positions || [];
-          let dayPnl = 0;
-          let openQty = 0;
-          for (const p of positions) {
-            dayPnl += Number(p.pnl || 0);
-            openQty += Math.abs(Number(p.qty || p.quantity || 0));
-          }
-          setLive({
-            dayPnl,
-            available:
-              Number(margins.available?.cash ?? margins.available?.live_balance ?? 0) || 0,
-            openQty,
-          });
-        } else {
-          setLive(null);
+          const holdings = holdingsJson.holdings || [];
+          for (const p of positions) dayPnl += Number(p.pnl || 0);
+          for (const h of holdings) holdingsPnl += Number(h.pnl || 0);
+          available =
+            Number(
+              margins.available?.cash ?? margins.available?.live_balance ?? 0
+            ) || 0;
         }
+
+        setLive({
+          dayPnl,
+          holdingsPnl,
+          available,
+          periodPnl: liveTotals.realizedPnl,
+          periodFees: liveTotals.fees,
+          trades: liveTotals.tradeCount,
+          realized: liveBreakdown.realizedPnl,
+          unrealized:
+            connected && holdingsPnl !== 0
+              ? holdingsPnl
+              : liveBreakdown.unrealizedPnl,
+          openNames: liveHoldings.length,
+          connected,
+        });
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -126,9 +173,12 @@ export default function UnifiedPnlPanel() {
     }
     if (book === "live" && live) {
       return [
+        { label: "Period realized", value: live.periodPnl },
+        { label: "Period fees", value: -live.periodFees },
         { label: "Day P&L (positions)", value: live.dayPnl },
+        { label: "Holdings P&L", value: live.holdingsPnl },
         { label: "Cash available", value: live.available },
-        { label: "Open names", value: live.openQty, plain: true },
+        { label: "Open names", value: live.openNames, plain: true },
       ];
     }
     return [];
@@ -159,25 +209,23 @@ export default function UnifiedPnlPanel() {
         </div>
       </div>
 
-      {book === "paper" && (
-        <div className="flex gap-1 mb-2 overflow-x-auto">
-          {PERIODS.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => setPeriod(p.key)}
-              className={cn(
-                "px-2 py-1 rounded text-[11px] font-medium min-h-7",
-                period === p.key
-                  ? "bg-accent text-brand"
-                  : "bg-bg-tertiary text-text-secondary"
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex gap-1 mb-2 overflow-x-auto">
+        {PERIODS.map((p) => (
+          <button
+            key={p.key}
+            type="button"
+            onClick={() => setPeriod(p.key)}
+            className={cn(
+              "px-2 py-1 rounded text-[11px] font-medium min-h-7",
+              period === p.key
+                ? "bg-accent text-brand"
+                : "bg-bg-tertiary text-text-secondary"
+            )}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
 
       {loading ? (
         <div className="flex items-center gap-2 py-3 text-xs text-text-tertiary">
@@ -185,7 +233,9 @@ export default function UnifiedPnlPanel() {
         </div>
       ) : rows.length === 0 ? (
         <p className="text-xs text-text-tertiary py-2">
-          {book === "live" ? "Connect Zerodha to see live P&L." : "No paper data yet."}
+          {book === "live"
+            ? "No live fills yet. Connect Zerodha and place live trades."
+            : "No paper data yet."}
         </p>
       ) : (
         <div className="flex flex-wrap gap-x-5 gap-y-2">
@@ -210,7 +260,15 @@ export default function UnifiedPnlPanel() {
       )}
       {book === "paper" && paper && (
         <p className="text-[10px] text-text-tertiary mt-1.5">
-          {paper.trades} trade(s) in period · realized {formatCurrency(paper.realized)} all-time closed
+          {paper.trades} trade(s) in period · realized{" "}
+          {formatCurrency(paper.realized)} all-time closed
+        </p>
+      )}
+      {book === "live" && live && (
+        <p className="text-[10px] text-text-tertiary mt-1.5">
+          {live.trades} live fill(s) in period · FIFO realized{" "}
+          {formatCurrency(live.realized)}
+          {!live.connected ? " · Zerodha not connected (history only)" : ""}
         </p>
       )}
     </section>
