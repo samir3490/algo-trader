@@ -19,6 +19,8 @@ describe("risk-metrics", () => {
     assert.ok(metrics.sharpeRatio >= 0);
     assert.ok(metrics.maxDrawdownPct >= 0);
     assert.equal(metrics.endingEquity, 110);
+    // No closed trips → net P&L is 0 even if MTM equity rose.
+    assert.equal(metrics.netPnl, 0);
   });
 
   it("computes profit factor from round trips", () => {

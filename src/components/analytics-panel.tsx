@@ -349,9 +349,14 @@ export default function AnalyticsPanel() {
         <h3 className="text-sm font-semibold text-text-primary">Overall</h3>
         <MetricsGrid metrics={analytics.overall} />
         <p className="text-[10px] text-text-tertiary">
-          Realized {formatCurrency(analytics.pnlBreakdown.realizedPnl)} · Unrealized{" "}
-          {formatCurrency(analytics.pnlBreakdown.unrealizedPnl)} · All-time{" "}
-          {formatCurrency(analytics.pnlBreakdown.allTimePnl)}
+          Closed (FIFO) {formatCurrency(analytics.pnlBreakdown.realizedPnl)} ·
+          Open unrealized{" "}
+          {formatCurrency(analytics.pnlBreakdown.unrealizedPnl)} · All-time
+          (closed + open){" "}
+          {formatCurrency(
+            analytics.pnlBreakdown.realizedPnl +
+              analytics.pnlBreakdown.unrealizedPnl
+          )}
         </p>
       </div>
 

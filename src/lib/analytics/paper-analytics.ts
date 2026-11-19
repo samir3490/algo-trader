@@ -1,6 +1,7 @@
 import type { PaperTrade } from "@/lib/firebase";
 import type { PortfolioHolding } from "@/lib/portfolio/compute-portfolio";
 import {
+  computeFifoRealizedPnl,
   computePnlBreakdown,
   tradeDateKeyIST,
 } from "@/lib/portfolio/compute-portfolio";
@@ -282,22 +283,34 @@ export function computePaperPortfolioAnalytics(
     balance,
     startingBalance
   );
-  // Overall Net P&L / return must be realized only — equity curve ends at MTM
-  // (cash + holdings LTP), which would otherwise inflate net by unrealized P&L.
+  // Net P&L = FIFO closed-trade P&L only. Do NOT use:
+  // - MTM equity curve (includes open holdings mark)
+  // - cash−start+invested identity (drifts if cash/avgPrice are off and can
+  //   look like realized+unrealized)
+  const fifoRealized = computeFifoRealizedPnl(trades);
+  const tripRealized = roundTrips.reduce((sum, r) => sum + r.pnl, 0);
+  const realized =
+    Math.round(
+      (roundTrips.length > 0 ? tripRealized : fifoRealized) * 100
+    ) / 100;
   const overallBase = computeRiskMetrics(
     equityCurve,
     roundTrips,
     startingBalance
   );
-  const realized = pnlBreakdown.realizedPnl;
   const overall = {
     ...overallBase,
-    netPnl: Math.round(realized * 100) / 100,
+    netPnl: realized,
     endingEquity: Math.round((startingBalance + realized) * 100) / 100,
     totalReturnPct:
       startingBalance > 0
         ? Math.round((realized / startingBalance) * 10000) / 100
         : 0,
+  };
+  // Keep footer Realized in sync with Overall Net P&L (FIFO), not cash identity.
+  const pnlBreakdownFixed = {
+    ...pnlBreakdown,
+    realizedPnl: realized,
   };
 
   const byStrategyMap = new Map<string, RoundTripPnl[]>();
@@ -344,7 +357,7 @@ export function computePaperPortfolioAnalytics(
     byMonth: toGrouped(byMonthMap, formatMonthKeyLabel).sort((a, b) =>
       a.key.localeCompare(b.key)
     ),
-    pnlBreakdown,
+    pnlBreakdown: pnlBreakdownFixed,
   };
 }
 

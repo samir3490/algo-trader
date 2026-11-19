@@ -98,13 +98,10 @@ export function computeRiskMetrics(
 ): RiskMetrics {
   const endingEquity =
     curve.length > 0 ? curve[curve.length - 1].equity : startingEquity;
-  // Net P&L is realized only (closed round-trips). Do not use mark-to-market
-  // ending equity here — that would fold unrealized holdings P&L into "net".
+  // Net P&L is realized only (closed round-trips). Never use mark-to-market
+  // ending equity — that folds unrealized holdings P&L into "net".
   const realizedFromTrips = roundTrips.reduce((sum, r) => sum + r.pnl, 0);
-  const netPnl =
-    roundTrips.length > 0
-      ? realizedFromTrips
-      : endingEquity - startingEquity;
+  const netPnl = realizedFromTrips;
   const totalReturnPct =
     startingEquity > 0 ? round2((netPnl / startingEquity) * 100) : 0;
   const returns = computeReturnsFromEquity(curve);

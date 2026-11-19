@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import type { PaperTrade } from "@/lib/firebase";
 import {
   aggregateEquityCurveByMonth,
+  computePaperPortfolioAnalytics,
   extractRoundTrips,
   formatMonthKeyLabel,
 } from "./paper-analytics";
@@ -93,5 +94,57 @@ describe("aggregateEquityCurveByMonth", () => {
     assert.equal(months[0].equity, 1_010_000);
     assert.equal(months[1].month, "2026-10");
     assert.equal(formatMonthKeyLabel("2026-07"), "Jul 2026");
+  });
+});
+
+describe("computePaperPortfolioAnalytics net P&L", () => {
+  it("excludes open unrealized mark-to-market from overall net P&L", () => {
+    const trades = [
+      trade({
+        id: "b1",
+        side: "BUY",
+        symbol: "TCS",
+        qty: 10,
+        price: 1000,
+        date: "2026-06-01",
+      }),
+      trade({
+        id: "s1",
+        side: "SELL",
+        symbol: "TCS",
+        qty: 10,
+        price: 1100,
+        date: "2026-06-15",
+        netPnl: 1000,
+      }),
+      trade({
+        id: "b2",
+        side: "BUY",
+        symbol: "INFY",
+        qty: 10,
+        price: 1500,
+        date: "2026-07-01",
+      }),
+    ];
+    // Open INFY is +₹5,000 unrealized; closed TCS realized is +₹1,000.
+    const holdings = [
+      { symbol: "INFY", exchange: "NSE", qty: 10, avgPrice: 1500, ltp: 2000 },
+    ];
+    // Cash identity would be: 985_000 - 1_000_000 + 15_000 = 0, or if cash
+    // were wrongly marked it could absorb the +5k — Net must stay at FIFO 1000.
+    const analytics = computePaperPortfolioAnalytics(
+      trades,
+      holdings,
+      985_000,
+      1_000_000
+    );
+    assert.equal(analytics.overall.netPnl, 1000);
+    assert.equal(analytics.pnlBreakdown.realizedPnl, 1000);
+    assert.equal(analytics.pnlBreakdown.unrealizedPnl, 5000);
+    // Must not equal all-time (realized + unrealized).
+    assert.notEqual(
+      analytics.overall.netPnl,
+      analytics.pnlBreakdown.realizedPnl + analytics.pnlBreakdown.unrealizedPnl
+    );
   });
 });
