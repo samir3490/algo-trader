@@ -767,14 +767,24 @@ export async function saveOrder(order: OrderRecord): Promise<void> {
 export async function getOrders(
   maxCount = PAPER_TRADE_HISTORY_LIMIT
 ): Promise<OrderRecord[]> {
+  const ref = collection(db, "users", getUserId(), "orders");
   try {
-    const ref = collection(db, "users", getUserId(), "orders");
     const q = query(ref, orderBy("createdAt", "desc"), limit(maxCount));
     const snap = await getDocs(q);
     return snap.docs.map((d) => d.data() as OrderRecord);
   } catch (e) {
-    console.error("Error loading orders:", e);
-    return [];
+    // Missing createdAt / index — fall back so LIVE history still loads.
+    console.error("Error loading orders (createdAt query):", e);
+    try {
+      const snap = await getDocs(query(ref, limit(maxCount)));
+      const rows = snap.docs.map((d) => d.data() as OrderRecord);
+      return rows.sort((a, b) =>
+        String(b.time || b.date || "").localeCompare(String(a.time || a.date || ""))
+      );
+    } catch (e2) {
+      console.error("Error loading orders (fallback):", e2);
+      return [];
+    }
   }
 }
 

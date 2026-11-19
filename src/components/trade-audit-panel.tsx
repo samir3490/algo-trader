@@ -15,9 +15,8 @@ import { useTableSort } from "@/hooks/use-table-sort";
 import SortableTh from "@/components/ui/sortable-th";
 import { buildTradeAuditCsv } from "@/lib/export/trade-audit-export";
 import { downloadCsv, exportDateStamp } from "@/lib/export/csv";
-import { getOrders, getPaperTradingState } from "@/lib/firebase";
-import { firestoreLiveOrdersToPaperTrades } from "@/lib/live-trading/live-order-record";
-import { attachFifoNetPnl } from "@/lib/portfolio/trade-period";
+import { getPaperTradingState } from "@/lib/firebase";
+import { loadLiveFillsClient } from "@/lib/live-trading/load-live-fills";
 import type { TradeAuditEntry } from "@/lib/portfolio/types";
 
 function formatAuditWhen(r: TradeAuditEntry): string {
@@ -99,33 +98,44 @@ function AuditCard({ r }: { r: TradeAuditEntry }) {
   );
 }
 
+function isLikelyLivePaperTradeId(id?: string): boolean {
+  if (!id) return false;
+  return id.startsWith("live-") || id.startsWith("LIVE-");
+}
+
 export default function TradeAuditPanel() {
   const [rows, setRows] = useState<TradeAuditEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [modeFilter, setModeFilter] = useState<"ALL" | "PAPER" | "LIVE">("ALL");
+  const [stats, setStats] = useState({ paper: 0, live: 0 });
 
   async function load() {
     setLoading(true);
     try {
-      const [state, orders] = await Promise.all([
+      const [state, liveBundle] = await Promise.all([
         getPaperTradingState(),
-        getOrders(1000),
+        loadLiveFillsClient(1000),
       ]);
-      const paperRows = buildTradeAuditLog(state?.trades ?? [], "PAPER");
-      const liveTrades = attachFifoNetPnl(
-        firestoreLiveOrdersToPaperTrades(
-          orders.filter((o) => o.mode === "LIVE")
-        )
+      const paperTrades = (state?.trades ?? []).filter(
+        (t) => !isLikelyLivePaperTradeId(t.id)
       );
-      const liveRows = buildTradeAuditLog(liveTrades, "LIVE");
+      const paperRows = buildTradeAuditLog(paperTrades, "PAPER");
+      const liveRows = buildTradeAuditLog(liveBundle.trades, "LIVE").map(
+        (r) => ({ ...r, mode: "LIVE" as const })
+      );
       const merged = [...paperRows, ...liveRows].sort((a, b) => {
         const ta = a.executedAt ? Date.parse(a.executedAt) : 0;
         const tb = b.executedAt ? Date.parse(b.executedAt) : 0;
         return tb - ta;
       });
       setRows(merged);
+      setStats({
+        paper: paperRows.length,
+        live: liveRows.length,
+      });
     } catch {
       setRows([]);
+      setStats({ paper: 0, live: 0 });
     } finally {
       setLoading(false);
     }
@@ -178,7 +188,7 @@ export default function TradeAuditPanel() {
           <div>
             <h2 className="text-lg font-semibold text-text-primary">Trade audit log</h2>
             <p className="text-xs text-text-secondary">
-              Paper and live fills with strategy, signal, entry/exit, and P&amp;L
+              Paper and live fills · {stats.paper} paper · {stats.live} live
             </p>
           </div>
         </div>
@@ -196,7 +206,11 @@ export default function TradeAuditPanel() {
                     : "text-text-tertiary hover:bg-bg-hover"
                 )}
               >
-                {m === "ALL" ? "All" : m === "LIVE" ? "Live" : "Paper"}
+                {m === "ALL"
+                  ? `All (${stats.paper + stats.live})`
+                  : m === "LIVE"
+                    ? `Live (${stats.live})`
+                    : `Paper (${stats.paper})`}
               </button>
             ))}
           </div>
@@ -223,7 +237,11 @@ export default function TradeAuditPanel() {
 
       {sortedRows.length === 0 ? (
         <p className="py-8 text-center text-sm text-text-tertiary">
-          {loading ? "Loading…" : "No trades yet"}
+          {loading
+            ? "Loading…"
+            : modeFilter === "LIVE"
+              ? "No live fills yet — connect Zerodha or place a live order."
+              : "No trades yet"}
         </p>
       ) : (
         <>

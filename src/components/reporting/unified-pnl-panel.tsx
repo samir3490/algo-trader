@@ -13,12 +13,11 @@ import { normalizePaperTrades } from "@/lib/paper-trades/normalize";
 import { resolvePaperStartingBalance } from "@/lib/paper-trading/balance";
 import { computePnlBreakdown } from "@/lib/portfolio/compute-portfolio";
 import {
-  attachFifoNetPnl,
   computeTradePeriodTotals,
   resolveTradeDateRange,
   type TradePeriodPreset,
 } from "@/lib/portfolio/trade-period";
-import { firestoreLiveOrdersToPaperTrades } from "@/lib/live-trading/live-order-record";
+import { loadLiveFillsClient } from "@/lib/live-trading/load-live-fills";
 import { reconstructOpenHoldings } from "@/lib/analytics/paper-analytics";
 
 type Book = "paper" | "live";
@@ -54,6 +53,8 @@ export default function UnifiedPnlPanel() {
     unrealized: number;
     openNames: number;
     connected: boolean;
+    kiteOrders: number;
+    savedLive: number;
   } | null>(null);
 
   useEffect(() => {
@@ -62,13 +63,14 @@ export default function UnifiedPnlPanel() {
     async function load() {
       setLoading(true);
       try {
-        const [state, orders, settings, accountsRes] = await Promise.all([
+        const [state, orders, settings, liveBundle] = await Promise.all([
           getPaperTradingState(),
           getOrders(1000),
           getSettings(),
-          fetch("/api/zerodha/accounts"),
+          loadLiveFillsClient(1000),
         ]);
         if (cancelled) return;
+
         const trades = normalizePaperTrades(state.trades ?? [], orders);
         const starting = resolvePaperStartingBalance(settings);
         const breakdown = computePnlBreakdown(
@@ -88,10 +90,7 @@ export default function UnifiedPnlPanel() {
           trades: totals.tradeCount,
         });
 
-        const liveOrders = orders.filter((o) => o.mode === "LIVE");
-        const liveTrades = attachFifoNetPnl(
-          firestoreLiveOrdersToPaperTrades(liveOrders)
-        );
+        const liveTrades = liveBundle.trades;
         const liveTotals = computeTradePeriodTotals(liveTrades, range);
         const liveHoldings = reconstructOpenHoldings(liveTrades);
         const liveInvested = liveHoldings.reduce(
@@ -101,56 +100,27 @@ export default function UnifiedPnlPanel() {
         const liveBreakdown = computePnlBreakdown(
           liveTrades,
           liveHoldings,
-          0,
-          Math.max(1, liveInvested)
+          liveBundle.broker.available,
+          Math.max(1, liveBundle.broker.available + liveInvested)
         );
 
-        const accountsJson = await accountsRes.json().catch(() => ({}));
-        const account =
-          (accountsJson.accounts || []).find(
-            (a: { connected?: boolean }) => a.connected !== false
-          ) || (accountsJson.accounts || [])[0];
-
-        let dayPnl = 0;
-        let holdingsPnl = 0;
-        let available = 0;
-        let connected = false;
-        if (account?.kiteUserId) {
-          connected = true;
-          const [marginsRes, positionsRes, holdingsRes] = await Promise.all([
-            fetch(`/api/zerodha/margins?accountId=${account.kiteUserId}`),
-            fetch(`/api/zerodha/positions?accountId=${account.kiteUserId}`),
-            fetch(`/api/zerodha/holdings?accountId=${account.kiteUserId}`),
-          ]);
-          const margins = marginsRes.ok ? await marginsRes.json() : {};
-          const positionsJson = positionsRes.ok
-            ? await positionsRes.json()
-            : {};
-          const holdingsJson = holdingsRes.ok ? await holdingsRes.json() : {};
-          const positions = positionsJson.positions || [];
-          const holdings = holdingsJson.holdings || [];
-          for (const p of positions) dayPnl += Number(p.pnl || 0);
-          for (const h of holdings) holdingsPnl += Number(h.pnl || 0);
-          available =
-            Number(
-              margins.available?.cash ?? margins.available?.live_balance ?? 0
-            ) || 0;
-        }
-
         setLive({
-          dayPnl,
-          holdingsPnl,
-          available,
+          dayPnl: liveBundle.broker.dayPnl,
+          holdingsPnl: liveBundle.broker.holdingsPnl,
+          available: liveBundle.broker.available,
           periodPnl: liveTotals.realizedPnl,
           periodFees: liveTotals.fees,
           trades: liveTotals.tradeCount,
           realized: liveBreakdown.realizedPnl,
           unrealized:
-            connected && holdingsPnl !== 0
-              ? holdingsPnl
+            liveBundle.broker.connected && liveBundle.broker.holdingsPnl !== 0
+              ? liveBundle.broker.holdingsPnl
               : liveBreakdown.unrealizedPnl,
-          openNames: liveHoldings.length,
-          connected,
+          openNames:
+            liveBundle.broker.holdingsCount || liveHoldings.length,
+          connected: liveBundle.broker.connected,
+          kiteOrders: liveBundle.kiteOrderCount,
+          savedLive: liveBundle.firestoreLiveCount,
         });
       } finally {
         if (!cancelled) setLoading(false);
@@ -234,7 +204,7 @@ export default function UnifiedPnlPanel() {
       ) : rows.length === 0 ? (
         <p className="text-xs text-text-tertiary py-2">
           {book === "live"
-            ? "No live fills yet. Connect Zerodha and place live trades."
+            ? "Connect Zerodha or place live trades to see live P&L."
             : "No paper data yet."}
         </p>
       ) : (
@@ -266,9 +236,9 @@ export default function UnifiedPnlPanel() {
       )}
       {book === "live" && live && (
         <p className="text-[10px] text-text-tertiary mt-1.5">
-          {live.trades} live fill(s) in period · FIFO realized{" "}
-          {formatCurrency(live.realized)}
-          {!live.connected ? " · Zerodha not connected (history only)" : ""}
+          {live.trades} fill(s) in period · {live.kiteOrders} Kite today ·{" "}
+          {live.savedLive} saved LIVE
+          {!live.connected ? " · Zerodha not connected" : ""}
         </p>
       )}
     </section>
