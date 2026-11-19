@@ -244,9 +244,11 @@ export function computeTodayPnl(
   return { pnl: 0, tradeCount: 0, mode: "none" };
 }
 
-export type PortfolioChartPeriod = "week" | "month" | "year";
+export type PortfolioChartPeriod = "week" | "month" | "year" | "all";
 
-export function portfolioChartWindowDays(period: PortfolioChartPeriod): number {
+export function portfolioChartWindowDays(
+  period: Exclude<PortfolioChartPeriod, "all">
+): number {
   if (period === "week") return 7;
   if (period === "month") return 30;
   return 365;
@@ -255,7 +257,8 @@ export function portfolioChartWindowDays(period: PortfolioChartPeriod): number {
 export function portfolioChartPeriodLabel(period: PortfolioChartPeriod): string {
   if (period === "week") return "Last 7 days (IST)";
   if (period === "month") return "Last 30 days (IST)";
-  return "Last 12 months (IST)";
+  if (period === "year") return "Last 12 months (IST)";
+  return "Full paper trade history (IST)";
 }
 
 function shiftDateKeyIST(dateKey: string, days: number): string {
@@ -263,19 +266,27 @@ function shiftDateKeyIST(dateKey: string, days: number): string {
   return new Date(ms).toLocaleDateString("en-CA", { timeZone: IST });
 }
 
-function listDateKeysInclusive(fromKey: string, toKey: string): string[] {
+function listDateKeysInclusive(
+  fromKey: string,
+  toKey: string,
+  maxDays = 400
+): string[] {
   const keys: string[] = [];
   let key = fromKey;
-  for (let i = 0; i < 400 && key <= toKey; i++) {
+  for (let i = 0; i < maxDays && key <= toKey; i++) {
     keys.push(key);
     key = shiftDateKeyIST(key, 1);
   }
   return keys;
 }
 
-function formatChartLabel(dateKey: string, period: PortfolioChartPeriod): string {
+function formatChartLabel(
+  dateKey: string,
+  period: PortfolioChartPeriod,
+  useMonthly = false
+): string {
   const d = new Date(`${dateKey}T12:00:00+05:30`);
-  if (period === "year") {
+  if (period === "year" || useMonthly) {
     return d.toLocaleDateString("en-IN", {
       month: "short",
       year: "2-digit",
@@ -295,7 +306,7 @@ export function buildPortfolioChart(
   balance: number,
   holdings: PortfolioHolding[],
   startingBalance: number,
-  period: PortfolioChartPeriod = "week",
+  period: PortfolioChartPeriod = "all",
   now = new Date()
 ): { date: string; value: number }[] {
   const sorted = [...trades].sort(
@@ -356,32 +367,45 @@ export function buildPortfolioChart(
     Math.round(computePortfolio(holdings, balance).portfolioValue)
   );
 
-  const windowDays = portfolioChartWindowDays(period);
-  const windowStart = shiftDateKeyIST(today, -(windowDays - 1));
   const sortedKeys = [...daily.keys()].sort();
+  const windowStart =
+    period === "all"
+      ? sortedKeys[0] ?? today
+      : shiftDateKeyIST(today, -(portfolioChartWindowDays(period) - 1));
   let lastKnown = Math.round(startingBalance);
   for (const key of sortedKeys) {
     if (key < windowStart) lastKnown = daily.get(key) ?? lastKnown;
   }
 
+  const spanDays =
+    Math.round(
+      (new Date(`${today}T12:00:00+05:30`).getTime() -
+        new Date(`${windowStart}T12:00:00+05:30`).getTime()) /
+        86_400_000
+    ) + 1;
+  const useMonthly = period === "year" || (period === "all" && spanDays > 90);
   const series: { date: string; value: number; dateKey: string }[] = [];
-  for (const dateKey of listDateKeysInclusive(windowStart, today)) {
+  for (const dateKey of listDateKeysInclusive(
+    windowStart,
+    today,
+    Math.max(400, spanDays + 5)
+  )) {
     if (daily.has(dateKey)) lastKnown = daily.get(dateKey) ?? lastKnown;
     series.push({
       dateKey,
-      date: formatChartLabel(dateKey, period),
+      date: formatChartLabel(dateKey, period, useMonthly),
       value: lastKnown,
     });
   }
 
-  if (period !== "year") {
+  if (!useMonthly) {
     return series.map(({ date, value }) => ({ date, value }));
   }
 
   const byMonth = new Map<string, { date: string; value: number }>();
   for (const point of series) {
     byMonth.set(point.dateKey.slice(0, 7), {
-      date: formatChartLabel(point.dateKey, "year"),
+      date: formatChartLabel(point.dateKey, period, true),
       value: point.value,
     });
   }

@@ -117,7 +117,7 @@ export default function DashboardPage() {
 
   const [paperState, setPaperState] = useState<PaperState>({ balance: INITIAL_BALANCE, holdings: [], trades: [] });
   const [startingBalance, setStartingBalance] = useState(INITIAL_BALANCE);
-  const [chartPeriod, setChartPeriod] = useState<PortfolioChartPeriod>("week");
+  const [chartPeriod, setChartPeriod] = useState<PortfolioChartPeriod>("all");
 
   useEffect(() => {
     if (!user) return;
@@ -403,6 +403,7 @@ export default function DashboardPage() {
             aria-label="Portfolio performance period"
           >
             {([
+              ["all", "All"],
               ["week", "Week"],
               ["month", "Month"],
               ["year", "Year"],

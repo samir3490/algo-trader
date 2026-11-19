@@ -10,7 +10,7 @@ import {
 
 const IST = "Asia/Kolkata";
 
-export type TradePeriodPreset = PortfolioChartPeriod | "all" | "custom";
+export type TradePeriodPreset = PortfolioChartPeriod | "custom";
 
 export interface TradeDateRange {
   /** Inclusive IST date key YYYY-MM-DD, or null for open start. */

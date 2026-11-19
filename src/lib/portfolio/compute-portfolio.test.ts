@@ -301,7 +301,7 @@ describe("buildPortfolioChart", () => {
     };
   }
 
-  it("defaults to a 7-day week window", () => {
+  it("week window is 7 daily points", () => {
     const trades = [
       trade("b1", "2026-07-01", "BUY", 10, 1000),
       trade("s1", "2026-08-03", "SELL", 10, 1100, { netPnl: 1000 }),
@@ -310,6 +310,18 @@ describe("buildPortfolioChart", () => {
     const week = buildPortfolioChart(trades, 1_001_000, [], 1_000_000, "week", now);
     assert.equal(week.length, 7);
     assert.equal(week[week.length - 1].value, 1_001_000);
+  });
+
+  it("defaults to full history (all) from first trade", () => {
+    const trades = [
+      trade("b1", "2026-07-01", "BUY", 10, 1000),
+      trade("s1", "2026-08-03", "SELL", 10, 1100, { netPnl: 1000 }),
+    ];
+    const now = new Date("2026-08-05T12:00:00+05:30");
+    const all = buildPortfolioChart(trades, 1_001_000, [], 1_000_000, "all", now);
+    // 2026-07-01 → 2026-08-05 inclusive = 36 days
+    assert.equal(all.length, 36);
+    assert.equal(all[all.length - 1].value, 1_001_000);
   });
 
   it("uses daily points for month and monthly points for year", () => {
