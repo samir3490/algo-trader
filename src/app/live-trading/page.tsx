@@ -37,6 +37,7 @@ import {
   cn,
   formatCurrency,
   formatDateTimeIST,
+  formatNumber,
   formatPercent,
   isMarketOpen,
   getMarketStatus,
@@ -45,6 +46,8 @@ import {
   tableDateTimeThClass,
   tableDateTimeTdClass,
 } from "@/lib/utils";
+import StrategyBadges from "@/components/strategy-badges";
+import { tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
 import { useAuth } from "@/lib/auth-context";
 import {
   getSettings,
@@ -537,18 +540,30 @@ function LiveTradingContent() {
       const res = await fetch(`/api/zerodha/holdings?${apiQuery}`);
       if (!res.ok) return;
       const data = await res.json();
-      const mapped: Holding[] = (data.holdings || []).map((h: any) => ({
-        symbol: h.tradingsymbol,
-        exchange: h.exchange || "NSE",
-        qty: h.quantity ?? 0,
-        avgPrice: h.average_price ?? 0,
-        ltp: h.last_price ?? 0,
-        pnl: h.pnl ?? 0,
-        invested: h.invested ?? (h.quantity ?? 0) * (h.average_price ?? 0),
-        currentValue: h.currentValue ?? (h.quantity ?? 0) * (h.last_price ?? 0),
-        pnlPercent: h.pnlPercent ?? 0,
-        dayChange: h.day_change_percentage || 0,
-      }));
+      const mapped: Holding[] = (data.holdings || [])
+        .map((h: any) => {
+          const qty = Number(h.quantity) || 0;
+          const avgPrice = Number(h.average_price) || 0;
+          const ltp = Number(h.last_price) || 0;
+          const mark = ltp > 0 ? ltp : avgPrice;
+          const invested = qty * avgPrice;
+          const currentValue = qty * mark;
+          const pnl = currentValue - invested;
+          const pnlPercent = invested > 0 ? (pnl / invested) * 100 : 0;
+          return {
+            symbol: String(h.tradingsymbol || "").toUpperCase(),
+            exchange: h.exchange || "NSE",
+            qty,
+            avgPrice,
+            ltp: mark,
+            pnl,
+            invested,
+            currentValue,
+            pnlPercent,
+            dayChange: Number(h.day_change_percentage) || 0,
+          } satisfies Holding;
+        })
+        .filter((h: Holding) => h.qty > 0);
       setHoldings(mapped);
     } catch { /* ignore */ }
   }, [selectedAccountId, apiQuery]);
@@ -697,14 +712,21 @@ function LiveTradingContent() {
   }, [connected, selectedAccountId, fetchPositions, fetchOrders, fetchHoldings]);
 
   const netPnl = positions.reduce((sum, p) => sum + p.pnl, 0);
-  const holdingsTotals = holdings.reduce(
-    (acc, h) => ({
-      invested: acc.invested + h.invested,
-      currentValue: acc.currentValue + h.currentValue,
-      pnl: acc.pnl + h.pnl,
-    }),
-    { invested: 0, currentValue: 0, pnl: 0 }
-  );
+  const holdingsTotals = useMemo(() => {
+    return holdings.reduce(
+      (acc, h) => {
+        const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
+        const invested = h.qty * h.avgPrice;
+        const currentValue = h.qty * mark;
+        return {
+          invested: acc.invested + invested,
+          currentValue: acc.currentValue + currentValue,
+          pnl: acc.pnl + (currentValue - invested),
+        };
+      },
+      { invested: 0, currentValue: 0, pnl: 0 }
+    );
+  }, [holdings]);
   const holdingsPnlPercent =
     holdingsTotals.invested > 0 ? (holdingsTotals.pnl / holdingsTotals.invested) * 100 : 0;
 
@@ -756,6 +778,25 @@ function LiveTradingContent() {
     [livePaperTrades, holdings, enrichOptions]
   );
 
+  /** Latest BUY strategy labels per symbol (for Holdings Strategies column). */
+  const buyStrategiesBySymbol = useMemo(() => {
+    const map = new Map<string, { names: string[]; unknown: number }>();
+    const chronological = [...enrichedLiveTrades].sort(
+      (a, b) => tradeExecutedAtMs(a) - tradeExecutedAtMs(b)
+    );
+    for (const t of chronological) {
+      if (t.side !== "BUY") continue;
+      map.set(
+        `${t.symbol.toUpperCase()}:${(t.exchange || "NSE").toUpperCase()}`,
+        {
+          names: t.displayStrategyNames,
+          unknown: t.unknownStrategyCount ?? 0,
+        }
+      );
+    }
+    return map;
+  }, [enrichedLiveTrades]);
+
   const positionsSort = useTableSort({ key: "pnl", dir: "desc" });
   const sortedPositions = useMemo(
     () =>
@@ -778,10 +819,20 @@ function LiveTradingContent() {
         qty: (h) => h.qty,
         avg: (h) => h.avgPrice,
         ltp: (h) => h.ltp,
-        invested: (h) => h.invested,
-        value: (h) => h.currentValue,
-        pnl: (h) => h.pnl,
-        pnlPct: (h) => h.pnlPercent,
+        invested: (h) => h.qty * h.avgPrice,
+        value: (h) => {
+          const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
+          return h.qty * mark;
+        },
+        pnl: (h) => {
+          const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
+          return h.qty * mark - h.qty * h.avgPrice;
+        },
+        pnlPct: (h) => {
+          const invested = h.qty * h.avgPrice;
+          const mark = h.ltp > 0 ? h.ltp : h.avgPrice;
+          return invested > 0 ? ((h.qty * mark - invested) / invested) * 100 : 0;
+        },
         dayPct: (h) => h.dayChange,
       }),
     [holdings, holdingsSort.sortRows]
@@ -1818,70 +1869,257 @@ function LiveTradingContent() {
                   />
                 )}
 
-                {/* Holdings Tab */}
                 {activeTab === "holdings" && (
                   <div className="card">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-4">
+                      <h2 className="text-lg font-semibold text-text-primary">
+                        Holdings
+                        {holdings.length > 0 && (
+                          <span className="ml-2 text-xs bg-accent/10 text-accent px-2 py-0.5 rounded-full">
+                            {holdings.length}
+                          </span>
+                        )}
+                      </h2>
+                      {holdings.length > 0 && (
+                        <div className="rounded-lg border border-border bg-bg-tertiary/50 px-3 py-2 text-xs text-text-secondary space-y-1">
+                          <div className="flex flex-wrap gap-x-3 gap-y-1">
+                            <span>
+                              Invested:{" "}
+                              <span className="font-semibold text-text-primary tabular-nums">
+                                {formatCurrency(holdingsTotals.invested)}
+                              </span>
+                            </span>
+                            <span>
+                              Mkt value:{" "}
+                              <span className="font-semibold text-text-primary tabular-nums">
+                                {formatCurrency(holdingsTotals.currentValue)}
+                              </span>
+                            </span>
+                          </div>
+                          <span
+                            className={
+                              holdingsTotals.pnl >= 0 ? "text-profit" : "text-loss"
+                            }
+                          >
+                            Unrealized: {holdingsTotals.pnl >= 0 ? "+" : ""}
+                            {formatCurrency(holdingsTotals.pnl)} (
+                            {formatPercent(holdingsPnlPercent)})
+                          </span>
+                        </div>
+                      )}
+                    </div>
                     {holdings.length === 0 ? (
                       <div className="flex flex-col items-center justify-center py-16 text-text-tertiary">
                         <Link2 className="h-10 w-10 mb-3 text-text-tertiary" />
                         <p className="text-sm">No holdings found.</p>
                         <p className="text-xs text-text-tertiary mt-1">
-                          {connected ? "You don't have any holdings in this account." : "Connect a Zerodha account to view holdings."}
+                          {connected
+                            ? "You don't have any holdings in this account."
+                            : "Connect a Zerodha account to view holdings."}
                         </p>
                       </div>
                     ) : (
-                      <>
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm min-w-[720px]">
-                            <thead>
-                              <tr className="text-text-secondary text-xs border-b border-border">
-                                <SortableTh sortKey="symbol" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} className="py-2 px-3 font-medium">Symbol</SortableTh>
-                                <SortableTh sortKey="qty" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Qty</SortableTh>
-                                <SortableTh sortKey="avg" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Avg Price</SortableTh>
-                                <SortableTh sortKey="ltp" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">LTP</SortableTh>
-                                <SortableTh sortKey="invested" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Invested</SortableTh>
-                                <SortableTh sortKey="value" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Current Value</SortableTh>
-                                <SortableTh sortKey="pnl" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">P&amp;L</SortableTh>
-                                <SortableTh sortKey="pnlPct" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">P&amp;L %</SortableTh>
-                                <SortableTh sortKey="dayPct" activeKey={holdingsSort.sortKey} direction={holdingsSort.sortDir} onSort={holdingsSort.toggleSort} align="right" className="py-2 px-3 font-medium">Day %</SortableTh>
-                                <th className="text-right py-2 px-3 font-medium">Actions</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {sortedHoldings.map((holding, i) => (
-                                <tr key={i} className="border-b border-border/50 hover:bg-bg-tertiary/30">
-                                  <td className="py-2.5 px-3 font-medium">
-                                    {holding.symbol}
-                                    <span className="text-xs text-text-tertiary ml-1">{holding.exchange}</span>
+                      <div className="overflow-x-auto -mx-5">
+                        <table className="w-full text-sm min-w-[760px]">
+                          <thead>
+                            <tr className="border-b border-border">
+                              <SortableTh
+                                sortKey="symbol"
+                                activeKey={holdingsSort.sortKey}
+                                direction={holdingsSort.sortDir}
+                                onSort={holdingsSort.toggleSort}
+                                className="py-3 pl-5 pr-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                              >
+                                Symbol
+                              </SortableTh>
+                              <th className="py-3 px-2 text-left text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                                Strategies
+                              </th>
+                              <SortableTh
+                                sortKey="qty"
+                                activeKey={holdingsSort.sortKey}
+                                direction={holdingsSort.sortDir}
+                                onSort={holdingsSort.toggleSort}
+                                align="right"
+                                className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                              >
+                                Qty
+                              </SortableTh>
+                              <SortableTh
+                                sortKey="avg"
+                                activeKey={holdingsSort.sortKey}
+                                direction={holdingsSort.sortDir}
+                                onSort={holdingsSort.toggleSort}
+                                align="right"
+                                className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                              >
+                                Avg
+                              </SortableTh>
+                              <SortableTh
+                                sortKey="ltp"
+                                activeKey={holdingsSort.sortKey}
+                                direction={holdingsSort.sortDir}
+                                onSort={holdingsSort.toggleSort}
+                                align="right"
+                                className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                              >
+                                LTP
+                              </SortableTh>
+                              <SortableTh
+                                sortKey="invested"
+                                activeKey={holdingsSort.sortKey}
+                                direction={holdingsSort.sortDir}
+                                onSort={holdingsSort.toggleSort}
+                                align="right"
+                                className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                              >
+                                Invested
+                              </SortableTh>
+                              <SortableTh
+                                sortKey="value"
+                                activeKey={holdingsSort.sortKey}
+                                direction={holdingsSort.sortDir}
+                                onSort={holdingsSort.toggleSort}
+                                align="right"
+                                className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                              >
+                                Value
+                              </SortableTh>
+                              <SortableTh
+                                sortKey="pnl"
+                                activeKey={holdingsSort.sortKey}
+                                direction={holdingsSort.sortDir}
+                                onSort={holdingsSort.toggleSort}
+                                align="right"
+                                className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                              >
+                                P&amp;L
+                              </SortableTh>
+                              <SortableTh
+                                sortKey="pnlPct"
+                                activeKey={holdingsSort.sortKey}
+                                direction={holdingsSort.sortDir}
+                                onSort={holdingsSort.toggleSort}
+                                align="right"
+                                className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                              >
+                                P&amp;L %
+                              </SortableTh>
+                              <SortableTh
+                                sortKey="dayPct"
+                                activeKey={holdingsSort.sortKey}
+                                direction={holdingsSort.sortDir}
+                                onSort={holdingsSort.toggleSort}
+                                align="right"
+                                className="py-3 px-2 text-xs font-semibold uppercase tracking-wider text-text-tertiary"
+                              >
+                                Day %
+                              </SortableTh>
+                              <th className="py-3 pl-2 pr-5 text-center text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                                Action
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {sortedHoldings.map((holding) => {
+                              const mark =
+                                holding.ltp > 0 ? holding.ltp : holding.avgPrice;
+                              const investedVal = holding.qty * holding.avgPrice;
+                              const currentVal = holding.qty * mark;
+                              const pnl = currentVal - investedVal;
+                              const pnlPct =
+                                investedVal > 0 ? (pnl / investedVal) * 100 : 0;
+                              const isProfit = pnl >= 0;
+                              const symKey = `${holding.symbol.toUpperCase()}:${(
+                                holding.exchange || "NSE"
+                              ).toUpperCase()}`;
+                              const stratInfo = buyStrategiesBySymbol.get(symKey);
+                              return (
+                                <tr
+                                  key={`${holding.symbol}-${holding.exchange}`}
+                                  className="border-b border-border/50 hover:bg-bg-hover/50"
+                                >
+                                  <td className="py-3 pl-5 pr-2">
+                                    <span className="font-medium text-text-primary">
+                                      {holding.symbol}
+                                    </span>
+                                    <span className="ml-1 text-xs text-text-tertiary">
+                                      {holding.exchange}
+                                    </span>
                                   </td>
-                                  <td className="text-right py-2.5 px-3 text-text-secondary">{holding.qty}</td>
-                                  <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(holding.avgPrice)}</td>
-                                  <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(holding.ltp)}</td>
-                                  <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(holding.invested)}</td>
-                                  <td className="text-right py-2.5 px-3 text-text-secondary">{formatCurrency(holding.currentValue)}</td>
-                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnl >= 0 ? "text-emerald-700" : "text-red-400")}>
-                                    {holding.pnl >= 0 ? "+" : ""}{formatCurrency(holding.pnl)}
+                                  <td className="py-3 px-2 max-w-[140px]">
+                                    {stratInfo && stratInfo.names.length > 0 ? (
+                                      <StrategyBadges
+                                        names={stratInfo.names}
+                                        unknownCount={stratInfo.unknown}
+                                        size="sm"
+                                      />
+                                    ) : (
+                                      <span className="text-xs text-text-tertiary">
+                                        —
+                                      </span>
+                                    )}
                                   </td>
-                                  <td className={cn("text-right py-2.5 px-3 font-medium", holding.pnlPercent >= 0 ? "text-emerald-700" : "text-red-400")}>
-                                    {formatPercent(holding.pnlPercent)}
+                                  <td className="py-3 px-2 text-right text-text-secondary tabular-nums">
+                                    {formatNumber(holding.qty)}
                                   </td>
-                                  <td className="text-right py-2.5 px-3">
-                                    <span className={cn("text-xs font-medium", holding.dayChange >= 0 ? "text-emerald-700" : "text-red-400")}>
+                                  <td className="py-3 px-2 text-right text-text-secondary tabular-nums whitespace-nowrap">
+                                    {formatCurrency(holding.avgPrice)}
+                                  </td>
+                                  <td className="py-3 px-2 text-right text-text-secondary tabular-nums whitespace-nowrap">
+                                    {formatCurrency(mark)}
+                                  </td>
+                                  <td className="py-3 px-2 text-right text-text-secondary tabular-nums whitespace-nowrap">
+                                    {formatCurrency(investedVal)}
+                                  </td>
+                                  <td className="py-3 px-2 text-right text-text-secondary tabular-nums whitespace-nowrap">
+                                    {formatCurrency(currentVal)}
+                                  </td>
+                                  <td
+                                    className={cn(
+                                      "py-3 px-2 text-right font-medium tabular-nums whitespace-nowrap",
+                                      isProfit ? "text-profit" : "text-loss"
+                                    )}
+                                  >
+                                    {isProfit ? "+" : ""}
+                                    {formatCurrency(pnl)}
+                                  </td>
+                                  <td
+                                    className={cn(
+                                      "py-3 px-2 text-right font-medium tabular-nums",
+                                      isProfit ? "text-profit" : "text-loss"
+                                    )}
+                                  >
+                                    {formatPercent(pnlPct)}
+                                  </td>
+                                  <td className="py-3 px-2 text-right">
+                                    <span
+                                      className={cn(
+                                        "text-xs font-medium",
+                                        holding.dayChange >= 0
+                                          ? "text-profit"
+                                          : "text-loss"
+                                      )}
+                                    >
                                       {formatPercent(holding.dayChange)}
                                     </span>
                                   </td>
-                                  <td className="text-right py-2.5 px-3">
-                                    <div className="flex items-center justify-end gap-1.5">
+                                  <td className="py-3 pl-2 pr-5">
+                                    <div className="flex items-center justify-center gap-1.5">
                                       <button
                                         type="button"
-                                        onClick={() => handleHoldingTrade(holding, "BUY")}
+                                        onClick={() =>
+                                          handleHoldingTrade(holding, "BUY")
+                                        }
                                         className="text-xs font-semibold text-accent hover:text-brand bg-accent-muted hover:bg-accent/30 px-2 py-1 rounded transition-colors"
                                       >
                                         Buy more
                                       </button>
                                       <button
                                         type="button"
-                                        onClick={() => handleHoldingTrade(holding, "SELL")}
+                                        onClick={() =>
+                                          handleHoldingTrade(holding, "SELL")
+                                        }
                                         className="text-xs font-semibold text-orange-400 hover:text-orange-300 bg-orange-900/20 hover:bg-orange-900/40 px-2 py-1 rounded transition-colors"
                                       >
                                         Sell
@@ -1889,33 +2127,11 @@ function LiveTradingContent() {
                                     </div>
                                   </td>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                        <div className="mt-4 pt-3 border-t border-border grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-                          <div>
-                            <p className="text-xs text-text-tertiary">Total Invested</p>
-                            <p className="font-semibold text-text-primary">{formatCurrency(holdingsTotals.invested)}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-text-tertiary">Current Value</p>
-                            <p className="font-semibold text-text-primary">{formatCurrency(holdingsTotals.currentValue)}</p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-text-tertiary">Total P&L</p>
-                            <p className={cn("font-semibold", holdingsTotals.pnl >= 0 ? "text-emerald-700" : "text-red-400")}>
-                              {holdingsTotals.pnl >= 0 ? "+" : ""}{formatCurrency(holdingsTotals.pnl)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-xs text-text-tertiary">Overall P&L %</p>
-                            <p className={cn("font-semibold", holdingsPnlPercent >= 0 ? "text-emerald-700" : "text-red-400")}>
-                              {formatPercent(holdingsPnlPercent)}
-                            </p>
-                          </div>
-                        </div>
-                      </>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
                     )}
                   </div>
                 )}
@@ -1953,16 +2169,4 @@ function Plus({ className }: { className?: string }) {
 function SettingsIcon({ className }: { className?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
-      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-      <circle cx="12" cy="12" r="3" />
-    </svg>
-  );
-}
-
-export default function LiveTradingPage() {
-  return (
-    <Suspense>
-      <LiveTradingContent />
-    </Suspense>
-  );
-}
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 
