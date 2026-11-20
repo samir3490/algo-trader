@@ -15,6 +15,7 @@ import {
   collection,
   getDocs,
   query,
+  where,
   orderBy,
   limit,
   serverTimestamp,
@@ -771,18 +772,56 @@ export async function getOrders(
   try {
     const q = query(ref, orderBy("createdAt", "desc"), limit(maxCount));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => d.data() as OrderRecord);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as OrderRecord) }));
   } catch (e) {
     // Missing createdAt / index — fall back so LIVE history still loads.
     console.error("Error loading orders (createdAt query):", e);
     try {
       const snap = await getDocs(query(ref, limit(maxCount)));
-      const rows = snap.docs.map((d) => d.data() as OrderRecord);
+      const rows = snap.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as OrderRecord),
+      }));
       return rows.sort((a, b) =>
         String(b.time || b.date || "").localeCompare(String(a.time || a.date || ""))
       );
     } catch (e2) {
       console.error("Error loading orders (fallback):", e2);
+      return [];
+    }
+  }
+}
+
+/**
+ * LIVE fills only — avoids paper order history crowding out older live trades
+ * when both share users/{uid}/orders ordered by createdAt.
+ */
+export async function getLiveOrders(
+  maxCount = PAPER_TRADE_HISTORY_LIMIT
+): Promise<OrderRecord[]> {
+  const ref = collection(db, "users", getUserId(), "orders");
+  try {
+    const q = query(
+      ref,
+      where("mode", "==", "LIVE"),
+      orderBy("createdAt", "desc"),
+      limit(maxCount)
+    );
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as OrderRecord) }));
+  } catch (e) {
+    console.error("Error loading LIVE orders (mode query):", e);
+    try {
+      // No composite index yet — pull a wide newest window and filter.
+      const wide = await getOrders(Math.max(maxCount, PAPER_TRADE_HISTORY_LIMIT));
+      return wide.filter((o) => {
+        const mode = String(o.mode || "").toUpperCase();
+        if (mode === "LIVE") return true;
+        if (mode === "PAPER") return false;
+        return Boolean(o.id?.startsWith("live-"));
+      });
+    } catch (e2) {
+      console.error("Error loading LIVE orders (fallback):", e2);
       return [];
     }
   }

@@ -106,8 +106,10 @@ export function liveOrdersToPaperTrades(
     const side = (o.side || "").toUpperCase();
     if (side !== "BUY" && side !== "SELL") continue;
     const qty = qtyNum;
+    // Keep COMPLETE history rows even when avg price was saved as 0 (pre-fill).
     const price = priceNum;
-    if (qty <= 0 || price <= 0) continue;
+    if (qty <= 0) continue;
+    if (price <= 0 && !/COMPLETE|EXECUTED|FILLED/.test(status)) continue;
     const symbol = (o.symbol || "").trim().toUpperCase();
     if (!symbol) continue;
     const ms = Date.parse(o.time || "");

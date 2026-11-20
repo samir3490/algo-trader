@@ -55,6 +55,7 @@ import {
   saveSettings,
   getZerodhaAccounts,
   getLiveAlgoQuota,
+  getLiveOrders as getFirestoreLiveOrders,
   getOrders as getFirestoreOrders,
   getActiveStrategies,
   saveOrder,
@@ -482,14 +483,21 @@ function LiveTradingContent() {
   const fetchOrders = useCallback(async () => {
     if (!selectedAccountId) return;
     try {
-      const [res, firestoreOrders, strategies] = await Promise.all([
+      const [res, liveFsRaw, strategies] = await Promise.all([
         zerodhaFetch(user, `/api/zerodha/orders?${apiQuery}`),
-        getFirestoreOrders(500).catch(() => []),
+        // Dedicated LIVE query — paper fills must not crowd out older live history.
+        getFirestoreLiveOrders(2000).catch(() =>
+          getFirestoreOrders(2000)
+            .then((rows) => rows.filter((o) => o.mode === "LIVE"))
+            .catch(() => [])
+        ),
         getActiveStrategies().catch(() => []),
       ]);
       setStrategyNamesBySymbol(buildStrategyNamesBySymbol(strategies));
       const data = res.ok ? await res.json() : { orders: [] };
-      const liveFs = firestoreOrders.filter((o) => o.mode === "LIVE");
+      const liveFs = liveFsRaw.filter(
+        (o) => String(o.mode || "LIVE").toUpperCase() !== "PAPER"
+      );
       const byOrderId = new Map(
         liveFs
           .filter((o) => o.orderId)

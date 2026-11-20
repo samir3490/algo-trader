@@ -1,5 +1,5 @@
 import type { OrderRecord, PaperTrade } from "@/lib/firebase";
-import { getOrders } from "@/lib/firebase";
+import { getLiveOrders, getOrders } from "@/lib/firebase";
 import { attachFifoNetPnl } from "@/lib/portfolio/trade-period";
 import {
   inferLiveStrategyName,
@@ -103,12 +103,15 @@ export async function loadLiveFillsClient(
   options?: { getIdToken?: () => Promise<string | null> }
 ): Promise<LiveFillsBundle> {
   const headers = await authHeaders(options?.getIdToken);
-  const [firestoreOrders, accountsRes] = await Promise.all([
-    getOrders(maxFirestore).catch(() => [] as OrderRecord[]),
+  const [liveFsRaw, accountsRes] = await Promise.all([
+    getLiveOrders(maxFirestore).catch(async () => {
+      const all = await getOrders(maxFirestore).catch(() => [] as OrderRecord[]);
+      return all.filter(isLiveOrderRecord);
+    }),
     fetch("/api/zerodha/accounts", { headers }).catch(() => null),
   ]);
 
-  const liveFs = firestoreOrders.filter(isLiveOrderRecord);
+  const liveFs = liveFsRaw.filter(isLiveOrderRecord);
   const byOrderId = new Map(
     liveFs
       .filter((o) => o.orderId)
