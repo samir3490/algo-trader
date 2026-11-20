@@ -49,6 +49,7 @@ import {
 import StrategyBadges from "@/components/strategy-badges";
 import { tradeExecutedAtMs } from "@/lib/paper-trades/normalize";
 import { useAuth } from "@/lib/auth-context";
+import { zerodhaFetch } from "@/lib/zerodha/client-fetch";
 import {
   getSettings,
   saveSettings,
@@ -358,14 +359,14 @@ function LiveTradingContent() {
     setLoadingAccounts(true);
     try {
       const firestoreAccounts = await getZerodhaAccounts();
-      const res = await fetch("/api/zerodha/accounts");
+      const res = await zerodhaFetch(user, "/api/zerodha/accounts");
       const data = await res.json();
       const serverAccounts: { kiteUserId: string; userName?: string; email?: string; broker?: string; connected: boolean }[] = data.accounts || [];
       const serverMap = new Map(serverAccounts.map((a) => [a.kiteUserId, a]));
 
       const merged: ConnectedAccount[] = firestoreAccounts.map((fa) => ({
         ...fa,
-        connected: serverMap.has(fa.kiteUserId),
+        connected: serverMap.get(fa.kiteUserId)?.connected === true,
         userName: serverMap.get(fa.kiteUserId)?.userName || fa.userName,
       }));
 
@@ -378,7 +379,7 @@ function LiveTradingContent() {
             email: sa.email || "",
             broker: sa.broker || "",
             connectedAt: new Date().toISOString(),
-            connected: true,
+            connected: sa.connected === true,
           });
         }
       }
@@ -405,7 +406,10 @@ function LiveTradingContent() {
       const results = await Promise.all(
         accountIds.map(async (id) => {
           try {
-            const res = await fetch(`/api/zerodha/margins?accountId=${id}`);
+            const res = await zerodhaFetch(
+              user,
+              `/api/zerodha/margins?accountId=${id}`
+            );
             if (!res.ok) return null;
             const data = await res.json();
             return {
@@ -430,7 +434,7 @@ function LiveTradingContent() {
     } finally {
       setLoadingFunds(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     const connectedIds = accounts.filter((a) => a.connected).map((a) => a.kiteUserId);
@@ -452,7 +456,7 @@ function LiveTradingContent() {
   const fetchPositions = useCallback(async () => {
     if (!selectedAccountId) return;
     try {
-      const res = await fetch(`/api/zerodha/positions?${apiQuery}`);
+      const res = await zerodhaFetch(user, `/api/zerodha/positions?${apiQuery}`);
       if (!res.ok) return;
       const data = await res.json();
       const mapped: Position[] = (data.positions?.net || []).map((p: any) => {
@@ -473,13 +477,13 @@ function LiveTradingContent() {
       });
       setPositions(mapped.filter((p) => p.qty !== 0));
     } catch { /* ignore */ }
-  }, [selectedAccountId, apiQuery]);
+  }, [selectedAccountId, apiQuery, user]);
 
   const fetchOrders = useCallback(async () => {
     if (!selectedAccountId) return;
     try {
       const [res, firestoreOrders, strategies] = await Promise.all([
-        fetch(`/api/zerodha/orders?${apiQuery}`),
+        zerodhaFetch(user, `/api/zerodha/orders?${apiQuery}`),
         getFirestoreOrders(500).catch(() => []),
         getActiveStrategies().catch(() => []),
       ]);
@@ -559,12 +563,12 @@ function LiveTradingContent() {
       });
       setOrders(merged);
     } catch { /* ignore */ }
-  }, [selectedAccountId, apiQuery]);
+  }, [selectedAccountId, apiQuery, user]);
 
   const fetchHoldings = useCallback(async () => {
     if (!selectedAccountId) return;
     try {
-      const res = await fetch(`/api/zerodha/holdings?${apiQuery}`);
+      const res = await zerodhaFetch(user, `/api/zerodha/holdings?${apiQuery}`);
       if (!res.ok) return;
       const data = await res.json();
       const mapped: Holding[] = (data.holdings || [])
@@ -593,7 +597,7 @@ function LiveTradingContent() {
         .filter((h: Holding) => h.qty > 0);
       setHoldings(mapped);
     } catch { /* ignore */ }
-  }, [selectedAccountId, apiQuery]);
+  }, [selectedAccountId, apiQuery, user]);
 
   const buildQuoteFromHolding = useCallback(
     (sym: string, ex: Exchange): StockQuote | null => {

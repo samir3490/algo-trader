@@ -81,16 +81,31 @@ function holdingsList(raw: unknown): any[] {
   return [];
 }
 
+async function authHeaders(
+  getIdToken?: () => Promise<string | null>
+): Promise<HeadersInit> {
+  if (!getIdToken) return {};
+  try {
+    const token = await getIdToken();
+    if (token) return { Authorization: `Bearer ${token}` };
+  } catch {
+    /* ignore */
+  }
+  return {};
+}
+
 /**
  * Load LIVE fills the same way Live Trading does:
  * today's Kite day-book + Firestore LIVE history, merged by order id.
  */
 export async function loadLiveFillsClient(
-  maxFirestore = 1000
+  maxFirestore = 1000,
+  options?: { getIdToken?: () => Promise<string | null> }
 ): Promise<LiveFillsBundle> {
+  const headers = await authHeaders(options?.getIdToken);
   const [firestoreOrders, accountsRes] = await Promise.all([
     getOrders(maxFirestore).catch(() => [] as OrderRecord[]),
-    fetch("/api/zerodha/accounts").catch(() => null),
+    fetch("/api/zerodha/accounts", { headers }).catch(() => null),
   ]);
 
   const liveFs = firestoreOrders.filter(isLiveOrderRecord);
@@ -135,10 +150,10 @@ export async function loadLiveFillsClient(
       const q = `accountId=${encodeURIComponent(id)}`;
       const [ordersRes, marginsRes, positionsRes, holdingsRes] =
         await Promise.all([
-          fetch(`/api/zerodha/orders?${q}`).catch(() => null),
-          fetch(`/api/zerodha/margins?${q}`).catch(() => null),
-          fetch(`/api/zerodha/positions?${q}`).catch(() => null),
-          fetch(`/api/zerodha/holdings?${q}`).catch(() => null),
+          fetch(`/api/zerodha/orders?${q}`, { headers }).catch(() => null),
+          fetch(`/api/zerodha/margins?${q}`, { headers }).catch(() => null),
+          fetch(`/api/zerodha/positions?${q}`, { headers }).catch(() => null),
+          fetch(`/api/zerodha/holdings?${q}`, { headers }).catch(() => null),
         ]);
 
       if (ordersRes?.ok) {

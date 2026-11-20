@@ -15,20 +15,22 @@ import {
 
 export async function GET(request: NextRequest) {
   const accountId = request.nextUrl.searchParams.get("accountId");
-  const accessToken = getAccountToken(request, accountId);
-  const apiKey = getAccountApiKey(request, accountId);
-  if (!accessToken || !apiKey) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  try {
-    const kite = new KiteConnect({ api_key: apiKey });
-    kite.setAccessToken(accessToken);
+  const { jsonWithOptionalHeal, withKiteCredsRetry } = await import(
+    "@/lib/zerodha/resolve-session"
+  );
+  const result = await withKiteCredsRetry(request, accountId, async (creds) => {
+    const kite = new KiteConnect({ api_key: creds.apiKey });
+    kite.setAccessToken(creds.accessToken);
     const orders = await kite.getOrders();
-    return NextResponse.json({ orders });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return { orders };
+  });
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: result.error },
+      { status: result.status }
+    );
   }
+  return jsonWithOptionalHeal(result.data, result.responseInit?.heal);
 }
 
 export async function POST(request: NextRequest) {

@@ -16,6 +16,7 @@ import SortableTh from "@/components/ui/sortable-th";
 import { buildTradeAuditCsv } from "@/lib/export/trade-audit-export";
 import { downloadCsv, exportDateStamp } from "@/lib/export/csv";
 import { getPaperTradingState } from "@/lib/firebase";
+import { useAuth } from "@/lib/auth-context";
 import { loadLiveFillsClient } from "@/lib/live-trading/load-live-fills";
 import type { TradeAuditEntry } from "@/lib/portfolio/types";
 
@@ -104,6 +105,7 @@ function isLikelyLivePaperTradeId(id?: string): boolean {
 }
 
 export default function TradeAuditPanel() {
+  const { user } = useAuth();
   const [rows, setRows] = useState<TradeAuditEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [modeFilter, setModeFilter] = useState<"ALL" | "PAPER" | "LIVE">("ALL");
@@ -114,7 +116,11 @@ export default function TradeAuditPanel() {
     try {
       const [state, liveBundle] = await Promise.all([
         getPaperTradingState(),
-        loadLiveFillsClient(1000),
+        loadLiveFillsClient(1000, {
+          getIdToken: user
+            ? () => user.getIdToken().catch(() => null)
+            : undefined,
+        }),
       ]);
       const paperTrades = (state?.trades ?? []).filter(
         (t) => !isLikelyLivePaperTradeId(t.id)
@@ -145,7 +151,8 @@ export default function TradeAuditPanel() {
     void load();
     const t = setInterval(() => void load(), 30_000);
     return () => clearInterval(t);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload when auth user arrives
+  }, [user?.uid]);
 
   const filtered = useMemo(() => {
     if (modeFilter === "ALL") return rows;

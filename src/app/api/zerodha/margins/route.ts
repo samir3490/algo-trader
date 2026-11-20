@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { KiteConnect } from "kiteconnect";
-import { getAccountToken, getAccountApiKey } from "@/lib/zerodha/account-token";
+import {
+  jsonWithOptionalHeal,
+  withKiteCredsRetry,
+} from "@/lib/zerodha/resolve-session";
 
 function parseEquityMargins(equity: any) {
   const available = equity?.available || {};
@@ -24,24 +27,22 @@ function parseEquityMargins(equity: any) {
 
 export async function GET(request: NextRequest) {
   const accountId = request.nextUrl.searchParams.get("accountId");
-  const accessToken = getAccountToken(request, accountId);
-  const apiKey = getAccountApiKey(request, accountId);
-
-  if (!accessToken || !apiKey) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  try {
-    const kite = new KiteConnect({ api_key: apiKey });
-    kite.setAccessToken(accessToken);
+  const result = await withKiteCredsRetry(request, accountId, async (creds) => {
+    const kite = new KiteConnect({ api_key: creds.apiKey });
+    kite.setAccessToken(creds.accessToken);
     const margins = await kite.getMargins();
     const equity = parseEquityMargins((margins as any)?.equity);
-
-    return NextResponse.json({
-      accountId: accountId || request.cookies.get("kite_user_id")?.value,
+    return {
+      accountId: accountId || creds.kiteUserId,
       ...equity,
-    });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    };
+  });
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: result.error },
+      { status: result.status }
+    );
   }
+  return jsonWithOptionalHeal(result.data, result.responseInit?.heal);
 }

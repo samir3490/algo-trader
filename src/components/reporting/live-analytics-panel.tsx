@@ -160,12 +160,15 @@ export default function LiveAnalyticsPanel() {
 
   useEffect(() => {
     if (!user) return;
+    const authUser = user;
     let cancelled = false;
     async function load() {
       setLoading(true);
       setError("");
       try {
-        const next = await loadLiveFillsClient(1000);
+        const next = await loadLiveFillsClient(1000, {
+          getIdToken: () => authUser.getIdToken().catch(() => null),
+        });
         if (!cancelled) setBundle(next);
       } catch (e) {
         if (!cancelled) {

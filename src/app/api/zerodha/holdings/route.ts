@@ -1,26 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { KiteConnect } from "kiteconnect";
-import { getAccountToken, getAccountApiKey } from "@/lib/zerodha/account-token";
 import { enrichHoldingRow } from "@/lib/market-data/enrich-holdings";
+import {
+  jsonWithOptionalHeal,
+  withKiteCredsRetry,
+} from "@/lib/zerodha/resolve-session";
 
 export async function GET(request: NextRequest) {
   const accountId = request.nextUrl.searchParams.get("accountId");
-  const accessToken = getAccountToken(request, accountId);
-  const apiKey = getAccountApiKey(request, accountId);
-  if (!accessToken || !apiKey) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-  }
-
-  try {
-    const kite = new KiteConnect({ api_key: apiKey });
-    kite.setAccessToken(accessToken);
+  const result = await withKiteCredsRetry(request, accountId, async (creds) => {
+    const kite = new KiteConnect({ api_key: creds.apiKey });
+    kite.setAccessToken(creds.accessToken);
     const rawHoldings = await kite.getHoldings();
-    const kiteCreds = { apiKey, accessToken };
+    const kiteCreds = {
+      apiKey: creds.apiKey,
+      accessToken: creds.accessToken,
+    };
 
     const holdings = (
       await Promise.all(
         (rawHoldings || []).map((h: Record<string, unknown>) => {
-          // CNC buys settle T+1 — Zerodha puts today's qty in t1_quantity while quantity is 0.
           const settled = Number(h.quantity) || 0;
           const t1 = Number(h.t1_quantity) || 0;
           const qty = settled + t1;
@@ -40,9 +39,14 @@ export async function GET(request: NextRequest) {
       )
     ).filter((h) => h.quantity > 0);
 
-    return NextResponse.json({ holdings });
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Failed to fetch holdings";
-    return NextResponse.json({ error: message }, { status: 500 });
+    return { holdings };
+  });
+
+  if (!result.ok) {
+    return NextResponse.json(
+      { error: result.error },
+      { status: result.status }
+    );
   }
+  return jsonWithOptionalHeal(result.data, result.responseInit?.heal);
 }

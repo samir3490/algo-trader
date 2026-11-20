@@ -30,6 +30,7 @@ import {
   type LiveRuleKey,
 } from "@/lib/settings/live-rules";
 import { useAuth } from "@/lib/auth-context";
+import { zerodhaFetch } from "@/lib/zerodha/client-fetch";
 import {
   getSettings as getFirestoreSettings,
   saveSettings as saveFirestoreSettings,
@@ -718,20 +719,23 @@ function SettingsContent() {
       // Load from Firestore (persistent metadata)
       const firestoreAccounts = await getZerodhaAccounts();
 
-      // Check which ones have active sessions (cookies)
-      const res = await fetch("/api/zerodha/accounts");
+      // Check which ones have active sessions (cookies + server token fallback)
+      const res = await zerodhaFetch(user, "/api/zerodha/accounts");
       const data = await res.json();
       const serverAccounts: ServerAccount[] = data.accounts || [];
 
       const serverMap = new Map(serverAccounts.map((a) => [a.kiteUserId, a]));
 
-      // Merge: Firestore has metadata, server has connection status
-      const merged = firestoreAccounts.map((fa) => ({
-        ...fa,
-        connected: serverMap.has(fa.kiteUserId),
-        userName: serverMap.get(fa.kiteUserId)?.userName || fa.userName,
-        email: serverMap.get(fa.kiteUserId)?.email || fa.email,
-      }));
+      // Merge: Firestore has metadata; only mark connected when Kite profile works.
+      const merged = firestoreAccounts.map((fa) => {
+        const sa = serverMap.get(fa.kiteUserId);
+        return {
+          ...fa,
+          connected: sa?.connected === true,
+          userName: sa?.userName || fa.userName,
+          email: sa?.email || fa.email,
+        };
+      });
 
       // Add any server accounts not in Firestore (legacy)
       for (const sa of serverAccounts) {
@@ -742,7 +746,7 @@ function SettingsContent() {
             email: sa.email || "",
             broker: sa.broker || "",
             connectedAt: new Date().toISOString(),
-            connected: true,
+            connected: sa.connected === true,
           });
           // Save to Firestore for persistence
           await saveZerodhaAccount({
@@ -766,7 +770,10 @@ function SettingsContent() {
         const fundResults = await Promise.all(
           connectedIds.map(async (id) => {
             try {
-              const mRes = await fetch(`/api/zerodha/margins?accountId=${id}`);
+              const mRes = await zerodhaFetch(
+                user,
+                `/api/zerodha/margins?accountId=${id}`
+              );
               if (!mRes.ok) return null;
               const mData = await mRes.json();
               return { id, available: mData.available ?? 0, used: mData.used ?? 0, net: mData.net ?? 0 };

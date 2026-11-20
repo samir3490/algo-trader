@@ -67,7 +67,9 @@ export default function UnifiedPnlPanel() {
           getPaperTradingState(),
           getOrders(1000),
           getSettings(),
-          loadLiveFillsClient(1000),
+          loadLiveFillsClient(1000, {
+            getIdToken: () => user!.getIdToken().catch(() => null),
+          }),
         ]);
         if (cancelled) return;
 
