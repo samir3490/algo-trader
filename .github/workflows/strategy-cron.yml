@@ -60,6 +60,11 @@ jobs:
             -H "Authorization: Bearer ${SECRET}" \
             "${URL}")
           echo "HTTP ${HTTP}"
+          # Compact diagnostics first (survives log truncation); then a short raw preview
+          if command -v jq >/dev/null 2>&1; then
+            jq -c '{ok,ranAt,totalTrades,results:[.results[]?|{userId,tradesExecuted,diagnostics:(.diagnostics|{paperBalance,openPositions,maxPositions,paperSignals,liveSignals,buyDecisions,sellDecisions})}]}' \
+              /tmp/cron-body.json || true
+          fi
           cat /tmp/cron-body.json | head -c 2000 || true
           echo ""
 
