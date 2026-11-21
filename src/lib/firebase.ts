@@ -788,15 +788,15 @@ export async function getOrders(
   try {
     const q = query(ref, orderBy("createdAt", "desc"), limit(maxCount));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as OrderRecord) }));
+    return snap.docs.map((d) => ({ ...(d.data() as OrderRecord), id: d.id }));
   } catch (e) {
     // Missing createdAt / index — fall back so LIVE history still loads.
     console.error("Error loading orders (createdAt query):", e);
     try {
       const snap = await getDocs(query(ref, limit(maxCount)));
       const rows = snap.docs.map((d) => ({
-        id: d.id,
         ...(d.data() as OrderRecord),
+        id: d.id,
       }));
       return rows.sort((a, b) =>
         String(b.time || b.date || "").localeCompare(String(a.time || a.date || ""))
@@ -824,7 +824,7 @@ export async function getLiveOrders(
       limit(maxCount)
     );
     const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...(d.data() as OrderRecord) }));
+    return snap.docs.map((d) => ({ ...(d.data() as OrderRecord), id: d.id }));
   } catch (e) {
     console.error("Error loading LIVE orders (mode query):", e);
     try {
