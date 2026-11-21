@@ -557,8 +557,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   atrRiskPct: 0.5,
   atrPeriod: 14,
   atrStopMultiplier: 2,
-  autoTrailingStop: false,
-  trailingStopPercent: 2,
+  autoTrailingStop: true,
+  trailingStopPercent: 1.5,
+  liveAutoTrailingStop: true,
+  liveTrailingStopPercent: 1.5,
   maxHoldDays: 0,
   noProgressDays: 0,
   noProgressMinPct: 0.5,
@@ -595,6 +597,20 @@ export async function getSettings(): Promise<AppSettings> {
         patch.ruleMinBuySignals2 = false;
         patch.liveRuleMinBuySignals3 = false;
         patch.minBuySignalsRelaxedV1 = true;
+      }
+      // One-shot: ensure trailing stop is ON for paper + live.
+      if (raw.trailingStopForcedV1 !== true) {
+        after.autoTrailingStop = true;
+        after.liveAutoTrailingStop = true;
+        if (!(after.trailingStopPercent > 0)) after.trailingStopPercent = 1.5;
+        if (!(Number(after.liveTrailingStopPercent) > 0)) {
+          after.liveTrailingStopPercent = 1.5;
+        }
+        patch.autoTrailingStop = true;
+        patch.liveAutoTrailingStop = true;
+        patch.trailingStopPercent = after.trailingStopPercent;
+        patch.liveTrailingStopPercent = after.liveTrailingStopPercent ?? 1.5;
+        patch.trailingStopForcedV1 = true;
       }
       if (Object.keys(patch).length > 0) {
         void saveSettings(patch).catch(() => {});

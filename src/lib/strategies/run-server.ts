@@ -344,11 +344,35 @@ async function loadUserSettings(
     after.liveRuleMinBuySignals3 = false;
   }
 
+  // One-shot: trailing stop ON for paper + live risk exits.
+  const forceTrailing =
+    raw.trailingStopForcedV1 !== true
+      ? {
+          autoTrailingStop: true,
+          liveAutoTrailingStop: true,
+          trailingStopPercent:
+            after.trailingStopPercent > 0 ? after.trailingStopPercent : 1.5,
+          liveTrailingStopPercent:
+            Number(after.liveTrailingStopPercent) > 0
+              ? after.liveTrailingStopPercent
+              : 1.5,
+          trailingStopForcedV1: true,
+        }
+      : null;
+  if (forceTrailing) {
+    after.autoTrailingStop = true;
+    after.liveAutoTrailingStop = true;
+    after.trailingStopPercent = forceTrailing.trailingStopPercent as number;
+    after.liveTrailingStopPercent =
+      forceTrailing.liveTrailingStopPercent as number;
+  }
+
   const antiChurn = antiChurnSettingsPersistPatch(before, after);
   const patch: Record<string, unknown> = {
     ...(antiChurn ?? {}),
     ...(bootstrapPatch ?? {}),
     ...(relaxMinSignals ?? {}),
+    ...(forceTrailing ?? {}),
   };
   if (Object.keys(patch).length > 0) {
     try {

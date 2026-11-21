@@ -146,6 +146,14 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     next.liveAutoTrailingStop = true;
     next.liveTrailingStopPercent = 1.5;
   }
+
+  // Trailing stop always on for paper + live (user-requested default).
+  next.autoTrailingStop = true;
+  if (!(next.trailingStopPercent > 0)) next.trailingStopPercent = 1.5;
+  next.liveAutoTrailingStop = true;
+  if (!(Number(next.liveTrailingStopPercent) > 0)) {
+    next.liveTrailingStopPercent = 1.5;
+  }
   if (isLiveRuleOn(next, "liveRuleMaxPositions10")) {
     next.liveMaxPositions = SIMPLE_PAPER_MAX_POSITIONS;
   }
