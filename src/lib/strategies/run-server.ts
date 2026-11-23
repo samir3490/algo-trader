@@ -53,6 +53,7 @@ import {
 import { isPaperRuleOn } from "@/lib/settings/paper-rules";
 import { isLiveRuleOn } from "@/lib/settings/live-rules";
 import { placeLiveAlgoOrder } from "@/lib/live-trading/place-live-algo-order";
+import { applyLiveRiskExits } from "@/lib/live-trading/live-risk-exits";
 import { isLiveTradingEnabled } from "@/lib/core/config";
 import { todayDateKeyIST } from "@/lib/portfolio/compute-portfolio";
 import {
@@ -592,6 +593,8 @@ export async function runStrategiesForUser(
       : existingDedupeKeys
   );
   const soldThisRun = new Set<string>();
+  /** Live symbols already sold this scan (paper-mirror or independent live risk). */
+  const liveRiskSoldThisRun = new Set<string>();
   const digestLines: ScanDigestLine[] = [];
   const digestMode = useScanDigestEmail(userSettings);
   const diagnostics: ScanDiagnostics = {
@@ -760,7 +763,7 @@ export async function runStrategiesForUser(
       await logTradeExecutionAudit(db, userId, t, "RiskExit");
     }
 
-    // Mirror risk exits to live Zerodha when auto-live is on.
+    // Mirror paper risk exits to live Zerodha when auto-live is on.
     if (isLiveRuleOn(userSettings, "liveAutoTradingEnabled")) {
       for (const exit of riskResult.exits) {
         const liveSell = await placeLiveAlgoOrder(db, userId, {
@@ -783,11 +786,12 @@ export async function runStrategiesForUser(
         });
         if (liveSell.ok) {
           diagnostics.liveSignals += 1;
+          liveRiskSoldThisRun.add(exit.symbol.toUpperCase());
           addScanDetail(
             diagnostics,
             "liveExec",
             exit.symbol,
-            `SELL · Live risk exit · ${exit.message || "Risk exit"} · qty ${liveSell.qty ?? "?"}`
+            `SELL · Live risk exit (paper mirror) · ${exit.message || "Risk exit"} · qty ${liveSell.qty ?? "?"}`
           );
         } else if (liveSell.message) {
           addScanDetail(
@@ -850,6 +854,58 @@ export async function runStrategiesForUser(
           status: riskReason,
           reason: riskReason,
         }
+      );
+    }
+  }
+
+  // Independent live risk exits (stop/trail/TP) — do not rely on paper holdings.
+  // Fixes cases like AXISBANK where paper hit −2% but live sell failed or books diverged.
+  if (
+    isLiveTradingEnabled() &&
+    isLiveRuleOn(userSettings, "liveAutoTradingEnabled")
+  ) {
+    const liveAutomation = resolveAutomationSettings(userSettings, "live");
+    const liveRiskSettings = automationAsAppSettings(
+      userSettings,
+      liveAutomation
+    );
+    try {
+      const liveRisk = await applyLiveRiskExits(db, userId, liveRiskSettings, {
+        alreadySold: liveRiskSoldThisRun,
+      });
+      for (const exit of liveRisk.exits) {
+        diagnostics.liveSignals += 1;
+        liveRiskSoldThisRun.add(exit.symbol.toUpperCase());
+        addScanDetail(
+          diagnostics,
+          "liveExec",
+          exit.symbol,
+          `SELL · Live risk exit · ${exit.message} · qty ${exit.qty ?? "?"}`
+        );
+        queueEmail(
+          "risk_exit",
+          {
+            symbol: exit.symbol,
+            exchange: exit.exchange,
+            side: "SELL",
+            quantity: exit.qty ?? 1,
+            price: exit.price ?? 0,
+            status: `LIVE · ${exit.message}`,
+            reason: exit.message,
+          }
+        );
+      }
+      for (const skip of liveRisk.skips) {
+        if (skip.symbol === "*") {
+          bumpReason(diagnostics.skipReasons, skip.message);
+        } else {
+          addScanDetail(diagnostics, "liveSkip", skip.symbol, skip.message);
+        }
+      }
+    } catch (e) {
+      bumpReason(
+        diagnostics.skipReasons,
+        `Live risk exits error — ${e instanceof Error ? e.message.slice(0, 120) : "unknown"}`
       );
     }
   }
@@ -1658,6 +1714,7 @@ export async function runStrategiesForUser(
           });
           if (liveSell.ok) {
             diagnostics.liveSignals += 1;
+            liveRiskSoldThisRun.add(decision.symbol.toUpperCase());
             addScanDetail(
               diagnostics,
               "liveExec",

@@ -21,6 +21,11 @@ import {
   isZerodhaProxyConfigured,
   placeOrderViaZerodhaProxy,
 } from "@/lib/zerodha/place-order-proxy";
+import {
+  findSellLot,
+  lotsFromKiteHoldings,
+  lotsFromKitePositions,
+} from "@/lib/live-trading/broker-lots";
 
 export interface LiveAlgoOrderResult {
   ok: boolean;
@@ -33,55 +38,21 @@ export interface LiveAlgoOrderResult {
 async function resolveLiveSellQty(
   kite: NonNullable<Awaited<ReturnType<typeof loadLiveBook>>["kite"]>,
   symbol: string,
-  product?: string,
-  book?: Awaited<ReturnType<typeof loadLiveBook>>
+  product?: string
 ): Promise<number> {
-  const sym = symbol.toUpperCase();
-  const prod = (product || "CNC").toUpperCase();
-
-  if (book?.ok) {
-    // Prefer fresh book quantities when available (already aggregated).
-    for (const p of book.positions) {
-      if ((p.qty ?? 0) > 0 && book.openSymbols.has(sym)) {
-        /* positions list has no symbol — fall through to kite */
-        break;
-      }
-    }
-  }
-
+  const lots = [];
   try {
-    const positions = await kite.getPositions();
-    const net = (positions as { net?: any[] })?.net ?? [];
-    for (const p of net) {
-      if (String(p.tradingsymbol || "").toUpperCase() !== sym) continue;
-      if (prod && String(p.product || "").toUpperCase() !== prod) continue;
-      const q = Number(p.quantity ?? 0);
-      if (q > 0) return Math.floor(q);
-    }
-    for (const p of net) {
-      if (String(p.tradingsymbol || "").toUpperCase() !== sym) continue;
-      const q = Number(p.quantity ?? 0);
-      if (q > 0) return Math.floor(q);
-    }
+    lots.push(...lotsFromKitePositions(await kite.getPositions()));
   } catch {
-    /* try holdings */
+    /* holdings may still work */
   }
   try {
-    const holdings = await kite.getHoldings();
-    const list = Array.isArray(holdings) ? holdings : [];
-    for (const h of list) {
-      if (String(h.tradingsymbol || "").toUpperCase() !== sym) continue;
-      const q = Number(
-        (h as { quantity?: number; qty?: number }).quantity ??
-          (h as { quantity?: number; qty?: number }).qty ??
-          0
-      );
-      if (q > 0) return Math.floor(q);
-    }
+    lots.push(...lotsFromKiteHoldings(await kite.getHoldings()));
   } catch {
     /* ignore */
   }
-  return 0;
+  const lot = findSellLot(lots, symbol, product);
+  return lot?.qty ?? 0;
 }
 
 /** Place a live MARKET order for the first stored Kite account (algo path). */
@@ -159,12 +130,12 @@ export async function placeLiveAlgoOrder(
       qty = qtyForLiveNotional(notional, price);
     }
   } else if (qty <= 0) {
-    qty = await resolveLiveSellQty(kite, input.symbol, product, book);
+    qty = await resolveLiveSellQty(kite, input.symbol, product);
     if (qty <= 0) {
       return {
         ok: false,
         skipped: true,
-        message: `No live position/holding to sell for ${input.symbol.toUpperCase()}`,
+        message: `No live position/holding to sell for ${input.symbol.toUpperCase()} (checked positions + holdings incl. T1)`,
       };
     }
   }
