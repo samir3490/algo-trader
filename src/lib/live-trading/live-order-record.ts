@@ -21,6 +21,8 @@ export function buildLiveOrderRecord(input: {
   strategyName?: string;
   reason?: string;
   time?: string;
+  entryPrice?: number;
+  netPnl?: number;
 }): OrderRecord {
   const now = input.time?.trim() || new Date().toISOString();
   const date = new Date(now).toLocaleDateString("en-CA", { timeZone: IST });
@@ -43,7 +45,34 @@ export function buildLiveOrderRecord(input: {
     reason:
       input.reason?.trim() ||
       `${input.side} · ${strategyName}`,
+    ...(typeof input.entryPrice === "number" && input.entryPrice > 0
+      ? { entryPrice: input.entryPrice }
+      : {}),
+    ...(typeof input.netPnl === "number" && Number.isFinite(input.netPnl)
+      ? { netPnl: input.netPnl }
+      : {}),
   };
+}
+
+/**
+ * Infer buy avg from risk-exit reason text when FIFO history is missing.
+ * e.g. "Stop loss hit (-2.31% ≤ -2%)" + sell ₹1170 → avg ≈ 1170 / 0.9769
+ */
+export function inferEntryPriceFromRiskReason(
+  sellPrice: number,
+  reason?: string
+): number | undefined {
+  if (!(sellPrice > 0) || !reason) return undefined;
+  const m = reason.match(
+    /\(([+-]?\d+(?:\.\d+)?)\s*%\s*[≤<=≥>=]/
+  );
+  if (!m) return undefined;
+  const pct = Number(m[1]);
+  if (!Number.isFinite(pct) || pct <= -100) return undefined;
+  const avg = sellPrice / (1 + pct / 100);
+  return avg > 0 && Number.isFinite(avg)
+    ? Math.round(avg * 100) / 100
+    : undefined;
 }
 
 /** Infer strategy label from stored name or reason/meta text. */
@@ -89,6 +118,8 @@ export function liveOrdersToPaperTrades(
     strategyName?: string;
     reason?: string;
     product?: string;
+    entryPrice?: number;
+    netPnl?: number;
   }>
 ): PaperTrade[] {
   const out: PaperTrade[] = [];
@@ -119,6 +150,25 @@ export function liveOrdersToPaperTrades(
       Number.isFinite(ms) && ms > 0
         ? new Date(ms).toLocaleDateString("en-CA", { timeZone: IST })
         : undefined;
+
+    let entryPrice =
+      typeof o.entryPrice === "number" && o.entryPrice > 0
+        ? o.entryPrice
+        : undefined;
+    let netPnl =
+      typeof o.netPnl === "number" && Number.isFinite(o.netPnl)
+        ? o.netPnl
+        : undefined;
+
+    if (side === "SELL" && price > 0 && qty > 0) {
+      if (!entryPrice) {
+        entryPrice = inferEntryPriceFromRiskReason(price, o.reason);
+      }
+      if (netPnl == null && entryPrice != null && entryPrice > 0) {
+        netPnl = Math.round((price - entryPrice) * qty * 100) / 100;
+      }
+    }
+
     out.push({
       id: liveOrderId(o.orderId, `${symbol}-${o.time}-${side}-${qty}`),
       time: o.time,
@@ -132,6 +182,8 @@ export function liveOrdersToPaperTrades(
       strategyName: inferLiveStrategyName(o.strategyName, o.reason),
       reason: o.reason,
       product: o.product || "CNC",
+      ...(entryPrice != null ? { entryPrice } : {}),
+      ...(netPnl != null ? { netPnl } : {}),
     });
   }
   return out;
@@ -153,6 +205,8 @@ export function firestoreLiveOrdersToPaperTrades(
     reason?: string;
     product?: string;
     mode?: string;
+    entryPrice?: number;
+    netPnl?: number;
   }>
 ) {
   return liveOrdersToPaperTrades(
@@ -170,6 +224,8 @@ export function firestoreLiveOrdersToPaperTrades(
         strategyName: o.strategyName,
         reason: o.reason,
         product: o.product,
+        entryPrice: o.entryPrice,
+        netPnl: o.netPnl,
       }))
   );
 }

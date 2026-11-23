@@ -76,6 +76,7 @@ import {
   inferLiveStrategyName,
   liveOrdersToPaperTrades,
 } from "@/lib/live-trading/live-order-record";
+import { attachFifoNetPnl } from "@/lib/portfolio/trade-period";
 import {
   enrichTradesWithStrategy,
   computeStrategyDetailBundles,
@@ -113,6 +114,8 @@ interface KiteOrder {
   product?: string;
   strategyName?: string;
   reason?: string;
+  entryPrice?: number;
+  netPnl?: number;
   /** From Firestore history (prior days) — not on today's Kite book. */
   fromHistory?: boolean;
 }
@@ -525,6 +528,8 @@ function LiveTradingContent() {
             strategyBySymbol.get(symbol),
           fs?.reason
         );
+        const kitePx = Number(o.average_price || o.price) || 0;
+        const fsPx = Number(fs?.price) || 0;
         return {
           orderId,
           time: normalizeKiteTimestamp(
@@ -535,11 +540,15 @@ function LiveTradingContent() {
           type: o.order_type,
           side: o.transaction_type,
           qty: o.filled_quantity || o.quantity,
-          price: o.average_price || o.price || 0,
+          // Prefer real fill price; fall back to our saved hint when Kite avg is 0.
+          price: kitePx > 0 ? kitePx : fsPx,
           status: o.status,
           product: o.product || fs?.product || "CNC",
           strategyName,
           reason: fs?.reason,
+          entryPrice:
+            typeof fs?.entryPrice === "number" ? fs.entryPrice : undefined,
+          netPnl: typeof fs?.netPnl === "number" ? fs.netPnl : undefined,
           fromHistory: false,
         };
       });
@@ -562,6 +571,9 @@ function LiveTradingContent() {
           product: o.product || "CNC",
           strategyName: inferLiveStrategyName(o.strategyName, o.reason),
           reason: o.reason,
+          entryPrice:
+            typeof o.entryPrice === "number" ? o.entryPrice : undefined,
+          netPnl: typeof o.netPnl === "number" ? o.netPnl : undefined,
           fromHistory: true,
         }));
       const merged = [...kiteMapped, ...historyMapped].sort((a, b) => {
@@ -778,6 +790,15 @@ function LiveTradingContent() {
     () => liveOrdersToPaperTrades(orders),
     [orders]
   );
+
+  const liveRealizedPnl = useMemo(() => {
+    const withPnl = attachFifoNetPnl(livePaperTrades);
+    return withPnl.reduce(
+      (sum, t) =>
+        t.side === "SELL" && typeof t.netPnl === "number" ? sum + t.netPnl : sum,
+      0
+    );
+  }, [livePaperTrades]);
 
   const enrichedLiveTrades = useMemo(
     () =>
@@ -1177,7 +1198,7 @@ function LiveTradingContent() {
           </Link>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
           <StatCard
             label="Available cash"
             primary={formatCurrency(selectedFunds?.available ?? 0)}
@@ -1192,6 +1213,16 @@ function LiveTradingContent() {
             hint={`Net ${formatCurrency(selectedFunds?.net ?? 0)}`}
             icon={Wallet}
             colorClass="text-text-primary"
+            className="border-emerald-200 bg-white"
+          />
+          <StatCard
+            label="Realized P&L (algo)"
+            primary={formatCurrency(liveRealizedPnl)}
+            hint="Closed LIVE fills (FIFO / stored cost)"
+            icon={liveRealizedPnl >= 0 ? TrendingUp : TrendingDown}
+            colorClass={
+              liveRealizedPnl >= 0 ? "text-emerald-700" : "text-red-700"
+            }
             className="border-emerald-200 bg-white"
           />
           <StatCard

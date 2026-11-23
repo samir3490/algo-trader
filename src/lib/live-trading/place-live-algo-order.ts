@@ -25,6 +25,7 @@ import {
   findSellLot,
   lotsFromKiteHoldings,
   lotsFromKitePositions,
+  type BrokerLot,
 } from "@/lib/live-trading/broker-lots";
 
 export interface LiveAlgoOrderResult {
@@ -35,12 +36,12 @@ export interface LiveAlgoOrderResult {
   qty?: number;
 }
 
-async function resolveLiveSellQty(
+async function resolveLiveSellLot(
   kite: NonNullable<Awaited<ReturnType<typeof loadLiveBook>>["kite"]>,
   symbol: string,
   product?: string
-): Promise<number> {
-  const lots = [];
+): Promise<BrokerLot | null> {
+  const lots: BrokerLot[] = [];
   try {
     lots.push(...lotsFromKitePositions(await kite.getPositions()));
   } catch {
@@ -51,8 +52,7 @@ async function resolveLiveSellQty(
   } catch {
     /* ignore */
   }
-  const lot = findSellLot(lots, symbol, product);
-  return lot?.qty ?? 0;
+  return findSellLot(lots, symbol, product);
 }
 
 /** Place a live MARKET order for the first stored Kite account (algo path). */
@@ -124,13 +124,19 @@ export async function placeLiveAlgoOrder(
 
   let qty =
     input.qty != null && input.qty > 0 ? Math.floor(input.qty) : 0;
+  /** Broker avg before SELL — persisted so Trades/Analytics FIFO can show P&L. */
+  let sellEntryPrice = 0;
 
   if (input.side === "BUY") {
     if (qty <= 0) {
       qty = qtyForLiveNotional(notional, price);
     }
-  } else if (qty <= 0) {
-    qty = await resolveLiveSellQty(kite, input.symbol, product);
+  } else {
+    const lot = await resolveLiveSellLot(kite, input.symbol, product);
+    if (lot) {
+      sellEntryPrice = lot.avgPrice > 0 ? lot.avgPrice : 0;
+      if (qty <= 0) qty = lot.qty;
+    }
     if (qty <= 0) {
       return {
         ok: false,
@@ -143,6 +149,11 @@ export async function placeLiveAlgoOrder(
   if (qty <= 0 || (input.side === "BUY" && price <= 0)) {
     return { ok: false, message: "Invalid live qty/price" };
   }
+
+  const sellNetPnl =
+    input.side === "SELL" && sellEntryPrice > 0 && price > 0
+      ? Math.round((price - sellEntryPrice) * qty * 100) / 100
+      : undefined;
 
   if (input.side === "BUY" && input.settings.liveRuleEnforceCapitalLimits !== false) {
     const gate = evaluateLiveBuyLimits({
@@ -226,6 +237,8 @@ export async function placeLiveAlgoOrder(
           product,
           strategyName: input.strategyName || "Live algo",
           reason: input.reason || `Algo live ${input.side}`,
+          entryPrice: sellEntryPrice > 0 ? sellEntryPrice : undefined,
+          netPnl: sellNetPnl,
         })
       );
     } catch (persistErr) {

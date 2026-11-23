@@ -63,6 +63,8 @@ type RawLiveRow = {
   strategyName?: string;
   reason?: string;
   product?: string;
+  entryPrice?: number;
+  netPnl?: number;
 };
 
 function netPositions(raw: unknown): any[] {
@@ -166,6 +168,8 @@ export async function loadLiveFillsClient(
           const fs = orderId ? byOrderId.get(orderId) : undefined;
           const tag = String(o.tag || "").trim();
           const symbol = String(o.tradingsymbol || "").toUpperCase();
+          const kitePx = Number(o.average_price || o.price) || 0;
+          const fsPx = Number(fs?.price) || 0;
           kiteRows.push({
             orderId,
             time: normalizeKiteTimestamp(
@@ -175,7 +179,7 @@ export async function loadLiveFillsClient(
             exchange: o.exchange || fs?.exchange || "NSE",
             side: o.transaction_type,
             qty: Number(o.filled_quantity || o.quantity) || 0,
-            price: Number(o.average_price || o.price) || 0,
+            price: kitePx > 0 ? kitePx : fsPx,
             status: o.status,
             strategyName: inferLiveStrategyName(
               fs?.strategyName ||
@@ -185,6 +189,9 @@ export async function loadLiveFillsClient(
             ),
             reason: fs?.reason,
             product: o.product || fs?.product || "CNC",
+            entryPrice:
+              typeof fs?.entryPrice === "number" ? fs.entryPrice : undefined,
+            netPnl: typeof fs?.netPnl === "number" ? fs.netPnl : undefined,
           });
         }
       }
@@ -230,6 +237,8 @@ export async function loadLiveFillsClient(
       strategyName: inferLiveStrategyName(o.strategyName, o.reason),
       reason: o.reason,
       product: o.product || "CNC",
+      entryPrice: typeof o.entryPrice === "number" ? o.entryPrice : undefined,
+      netPnl: typeof o.netPnl === "number" ? o.netPnl : undefined,
     }));
 
   const merged = [...kiteRows, ...historyRows];

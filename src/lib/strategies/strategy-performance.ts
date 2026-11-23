@@ -497,6 +497,28 @@ export function computeStrategyDetailBundles(
             if (lot.qty <= 0) lots.shift();
           }
 
+          // Live history often lacks the matching BUY — use stored cost / P&L.
+          if (matchedQty <= 0) {
+            if (typeof t.netPnl === "number" && Number.isFinite(t.netPnl)) {
+              sellPnl = t.netPnl;
+              matchedQty = t.qty;
+              if (
+                typeof t.entryPrice === "number" &&
+                t.entryPrice > 0
+              ) {
+                matchedBuy = t.entryPrice * t.qty;
+              }
+            } else if (
+              typeof t.entryPrice === "number" &&
+              t.entryPrice > 0 &&
+              t.price > 0
+            ) {
+              sellPnl = (t.price - t.entryPrice) * t.qty;
+              matchedBuy = t.entryPrice * t.qty;
+              matchedQty = t.qty;
+            }
+          }
+
           const avgBuy = matchedQty > 0 ? matchedBuy / matchedQty : undefined;
           realizedPnl += sellPnl;
           events.push({

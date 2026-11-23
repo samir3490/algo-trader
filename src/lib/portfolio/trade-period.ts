@@ -164,6 +164,32 @@ export function computeFifoRealizedPnlInRange(
     }
     lots.set(key, list);
 
+    // Live sells often lack prior BUY rows (Kite day-book is today-only).
+    // Fall back to stored netPnl / entryPrice so realized totals still move.
+    if (matched <= 0) {
+      if (typeof t.netPnl === "number" && Number.isFinite(t.netPnl)) {
+        sellPnl = t.netPnl;
+        matched = Math.floor(t.qty);
+      } else if (
+        typeof t.entryPrice === "number" &&
+        t.entryPrice > 0 &&
+        t.price > 0
+      ) {
+        sellPnl = (t.price - t.entryPrice) * Math.floor(t.qty);
+        matched = Math.floor(t.qty);
+      }
+    } else if (rem > 0) {
+      // Partial match — attribute leftover with entryPrice/netPnl if present.
+      if (
+        typeof t.entryPrice === "number" &&
+        t.entryPrice > 0 &&
+        t.price > 0
+      ) {
+        sellPnl += (t.price - t.entryPrice) * rem;
+        matched += rem;
+      }
+    }
+
     if (matched > 0 && isTradeInDateRange(t, range)) {
       realized += sellPnl;
       if (sellPnl > 0) wins += 1;
@@ -218,6 +244,29 @@ export function buildFifoNetPnlByTradeId(
       if (lot.qty <= 0) list.shift();
     }
     lots.set(key, list);
+
+    if (matched <= 0) {
+      if (typeof t.netPnl === "number" && Number.isFinite(t.netPnl)) {
+        sellPnl = t.netPnl;
+        matched = Math.floor(t.qty);
+      } else if (
+        typeof t.entryPrice === "number" &&
+        t.entryPrice > 0 &&
+        t.price > 0
+      ) {
+        sellPnl = (t.price - t.entryPrice) * Math.floor(t.qty);
+        matched = Math.floor(t.qty);
+      }
+    } else if (
+      rem > 0 &&
+      typeof t.entryPrice === "number" &&
+      t.entryPrice > 0 &&
+      t.price > 0
+    ) {
+      sellPnl += (t.price - t.entryPrice) * rem;
+      matched += rem;
+    }
+
     if (matched > 0 && t.id) {
       byId.set(t.id, round2(sellPnl));
     }
@@ -234,6 +283,17 @@ export function attachFifoNetPnl<T extends PaperTrade>(trades: T[]): T[] {
     const fifo = t.id ? byId.get(t.id) : undefined;
     if (fifo != null) return { ...t, netPnl: fifo };
     if (typeof t.netPnl === "number") return t;
+    if (
+      typeof t.entryPrice === "number" &&
+      t.entryPrice > 0 &&
+      t.price > 0 &&
+      t.qty > 0
+    ) {
+      return {
+        ...t,
+        netPnl: round2((t.price - t.entryPrice) * Math.floor(t.qty)),
+      };
+    }
     return t;
   });
 }

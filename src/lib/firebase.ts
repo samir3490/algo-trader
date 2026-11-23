@@ -770,6 +770,10 @@ export interface OrderRecord {
   strategyId?: string;
   strategyName?: string;
   reason?: string;
+  /** Buy avg used for this SELL (live risk / broker lot). */
+  entryPrice?: number;
+  /** Realized P&L for SELL fills when FIFO history is incomplete. */
+  netPnl?: number;
 }
 
 export async function saveOrder(order: OrderRecord): Promise<void> {
