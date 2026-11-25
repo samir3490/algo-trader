@@ -37,9 +37,9 @@ export const PAPER_RULE_CATALOG: PaperRuleDefinition[] = [
   {
     key: "ruleBasicExits2and5",
     category: "Exits",
-    label: "Basic exits (−2% stop / +5% target + trail)",
+    label: "Basic exits (−2% stop / +2% & +5% trailing)",
     description:
-      "Stop at −2%, hard target at +5%, and a 1.5% trailing stop that arms after about +2% so winners are not given back. Turn off to use Risk fields on the Paper tab.",
+      "Stop at −2%. Trailing arms at ~+2% (2% from peak) and again at ~+5% (2% from peak) — no hard +5% exit so winners keep running under a trail. Turn off to use Risk fields on the Paper tab.",
     defaultOn: true,
   },
   {

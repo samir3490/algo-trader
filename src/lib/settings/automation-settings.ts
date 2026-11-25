@@ -20,6 +20,7 @@ export interface ResolvedAutomationSettings {
   strategySellMinSignals: number;
   autoTrailingStop: boolean;
   trailingStopPercent: number;
+  trailingStopAfterTargetPercent: number;
   minHoldMinutesBeforeSell: number;
   maxHoldDays: number;
   noProgressDays: number;
@@ -57,6 +58,10 @@ export function resolveAutomationSettings(
       strategySellMinSignals: settings.strategySellMinSignals ?? 2,
       autoTrailingStop: settings.autoTrailingStop === true,
       trailingStopPercent: settings.trailingStopPercent ?? 2,
+      trailingStopAfterTargetPercent:
+        settings.trailingStopAfterTargetPercent ??
+        settings.trailingStopPercent ??
+        2,
       minHoldMinutesBeforeSell: settings.minHoldMinutesBeforeSell ?? 60,
       maxHoldDays: settings.maxHoldDays ?? 0,
       noProgressDays: settings.noProgressDays ?? 0,
@@ -132,6 +137,13 @@ export function resolveAutomationSettings(
       false,
       settings.liveTrailingStopPercent,
       settings.trailingStopPercent ?? 2
+    ),
+    trailingStopAfterTargetPercent: liveOrPaper(
+      false,
+      settings.liveTrailingStopAfterTargetPercent,
+      settings.trailingStopAfterTargetPercent ??
+        settings.trailingStopPercent ??
+        2
     ),
     minHoldMinutesBeforeSell: liveOrPaper(
       false,

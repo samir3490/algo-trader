@@ -27,12 +27,12 @@ describe("evaluateHoldingRiskExit", () => {
     assert.equal(sig?.reason, "stop_loss");
   });
 
-  it("triggers take profit at +5% when auto take profit enabled", () => {
+  it("does not hard-exit holdings at +5% (trailing owns winners)", () => {
     const sig = evaluateHoldingRiskExit(
       { ...holding, ltp: 106 },
-      { ...baseSettings, autoTakeProfit: true }
+      { ...baseSettings, autoTakeProfit: true, autoStopLoss: false }
     );
-    assert.equal(sig?.reason, "take_profit");
+    assert.equal(sig, null);
   });
 
   it("does not trigger when auto flags off", () => {
@@ -91,7 +91,7 @@ describe("evaluatePositionRiskExit", () => {
     assert.equal(sig, null);
   });
 
-  it("triggers trailing stop after ~+2% peak when basic barriers are asymmetric", () => {
+  it("triggers stage-1 trailing after ~+2% peak (no hard +5%)", () => {
     const sig = evaluatePositionRiskExit(
       {
         id: "p1",
@@ -99,7 +99,7 @@ describe("evaluatePositionRiskExit", () => {
         exchange: "NSE",
         quantity: 10,
         entryPrice: 100,
-        ltp: 101.2,
+        ltp: 100.9,
         peakPrice: 103,
         state: "OPEN",
         ownerStrategyId: "s1",
@@ -108,13 +108,72 @@ describe("evaluatePositionRiskExit", () => {
       {
         ...baseSettings,
         autoTrailingStop: true,
-        trailingStopPercent: 1.5,
+        trailingStopPercent: 2,
+        trailingStopAfterTargetPercent: 2,
         takeProfitPercent: 5,
         stopLossPercent: 2,
         autoTakeProfit: true,
       }
     );
     assert.equal(sig?.reason, "trailing_stop");
+    assert.match(sig?.message ?? "", /stage-1/);
+  });
+
+  it("does not hard-exit at +5% — keeps position when above trail floor", () => {
+    const sig = evaluatePositionRiskExit(
+      {
+        id: "p1",
+        symbol: "TCS",
+        exchange: "NSE",
+        quantity: 10,
+        entryPrice: 100,
+        ltp: 105.5,
+        peakPrice: 106,
+        state: "OPEN",
+        ownerStrategyId: "s1",
+        entryTime: new Date().toISOString(),
+      },
+      {
+        ...baseSettings,
+        autoTrailingStop: true,
+        trailingStopPercent: 2,
+        trailingStopAfterTargetPercent: 2,
+        takeProfitPercent: 5,
+        stopLossPercent: 2,
+        autoTakeProfit: true,
+        autoStopLoss: true,
+      }
+    );
+    assert.equal(sig, null);
+  });
+
+  it("triggers stage-2 trailing after +5% peak pullback", () => {
+    const sig = evaluatePositionRiskExit(
+      {
+        id: "p1",
+        symbol: "TCS",
+        exchange: "NSE",
+        quantity: 10,
+        entryPrice: 100,
+        ltp: 106.8,
+        peakPrice: 110,
+        state: "OPEN",
+        ownerStrategyId: "s1",
+        entryTime: new Date().toISOString(),
+      },
+      {
+        ...baseSettings,
+        autoTrailingStop: true,
+        trailingStopPercent: 2,
+        trailingStopAfterTargetPercent: 2,
+        takeProfitPercent: 5,
+        stopLossPercent: 2,
+        autoTakeProfit: true,
+      }
+    );
+    // Peak +10%, trail 2% → floor 107.8; ltp 106.8 ≤ floor → stage-2 trail
+    assert.equal(sig?.reason, "trailing_stop");
+    assert.match(sig?.message ?? "", /stage-2/);
   });
 
   it("triggers trailing stop from peak after min profit armed", () => {

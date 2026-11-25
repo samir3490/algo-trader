@@ -143,6 +143,7 @@ interface AppSettings {
     strategySellMinSignals: number;
     autoTrailingStop: boolean;
     trailingStopPercent: number;
+    trailingStopAfterTargetPercent: number;
     maxHoldDays: number;
     noProgressDays: number;
     noProgressMinPct: number;
@@ -170,6 +171,7 @@ interface AppSettings {
     strategySellMinSignals: number;
     autoTrailingStop: boolean;
     trailingStopPercent: number;
+    trailingStopAfterTargetPercent: number;
     minHoldMinutesBeforeSell: number;
     /** Max ₹ for one live BUY. */
     orderNotional: number;
@@ -336,6 +338,7 @@ const defaultSettings: AppSettings = {
     strategySellMinSignals: 2,
     autoTrailingStop: false,
     trailingStopPercent: 2,
+    trailingStopAfterTargetPercent: 2,
     maxHoldDays: 0,
     noProgressDays: 0,
     noProgressMinPct: 0.5,
@@ -362,6 +365,7 @@ const defaultSettings: AppSettings = {
     strategySellMinSignals: 2,
     autoTrailingStop: false,
     trailingStopPercent: 2,
+    trailingStopAfterTargetPercent: 2,
     minHoldMinutesBeforeSell: 60,
     orderNotional: 5_000,
     capitalLimit: 50_000,
@@ -455,6 +459,8 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
       strategySellMinSignals: fs.strategySellMinSignals ?? 2,
       autoTrailingStop: fs.autoTrailingStop === true,
       trailingStopPercent: fs.trailingStopPercent ?? 2,
+      trailingStopAfterTargetPercent:
+        fs.trailingStopAfterTargetPercent ?? fs.trailingStopPercent ?? 2,
       maxHoldDays: fs.maxHoldDays ?? 0,
       noProgressDays: fs.noProgressDays ?? 0,
       noProgressMinPct: fs.noProgressMinPct ?? 0.5,
@@ -489,6 +495,12 @@ function firestoreToLocal(fs: FirestoreAppSettings): AppSettings {
         fs.liveAutoTrailingStop ?? fs.autoTrailingStop !== false,
       trailingStopPercent:
         fs.liveTrailingStopPercent ?? fs.trailingStopPercent ?? 2,
+      trailingStopAfterTargetPercent:
+        fs.liveTrailingStopAfterTargetPercent ??
+        fs.trailingStopAfterTargetPercent ??
+        fs.liveTrailingStopPercent ??
+        fs.trailingStopPercent ??
+        2,
       minHoldMinutesBeforeSell:
         fs.liveMinHoldMinutesBeforeSell ?? fs.minHoldMinutesBeforeSell ?? 60,
       orderNotional: fs.liveOrderNotional ?? fs.maxOrderValue ?? 5_000,
@@ -531,6 +543,8 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     strategySellMinSignals: s.riskManagement.strategySellMinSignals,
     autoTrailingStop: s.riskManagement.autoTrailingStop,
     trailingStopPercent: s.riskManagement.trailingStopPercent,
+    trailingStopAfterTargetPercent:
+      s.riskManagement.trailingStopAfterTargetPercent,
     maxHoldDays: s.riskManagement.maxHoldDays,
     noProgressDays: s.riskManagement.noProgressDays,
     noProgressMinPct: s.riskManagement.noProgressMinPct,
@@ -575,6 +589,8 @@ function localToFirestore(s: AppSettings): Partial<FirestoreAppSettings> {
     liveStrategySellMinSignals: s.liveTrading.strategySellMinSignals,
     liveAutoTrailingStop: s.liveTrading.autoTrailingStop,
     liveTrailingStopPercent: s.liveTrading.trailingStopPercent,
+    liveTrailingStopAfterTargetPercent:
+      s.liveTrading.trailingStopAfterTargetPercent,
     liveMinHoldMinutesBeforeSell: s.liveTrading.minHoldMinutesBeforeSell,
     notifyOrders: s.notifications.orderExecution,
     notifyEmailDigest: s.paperRules.emailDigest,
@@ -1738,7 +1754,8 @@ function SettingsContent() {
                 </h2>
                 <p className="text-xs text-text-secondary">
                   Same layout as paper risk — values are live-only. Live Rules basic
-                  exits (−2% / +5%) override these when that rule is on.
+                  exits (−2% stop / +2% &amp; +5% trailing) override these when that
+                  rule is on.
                 </p>
               </div>
             </div>
@@ -1750,8 +1767,8 @@ function SettingsContent() {
                     Auto trailing stop
                   </p>
                   <p className="text-xs text-text-tertiary">
-                    Trail after min profit ({settings.liveTrading.takeProfitPercent}%
-                    gate)
+                    Stage 1 ~+{settings.liveTrading.stopLossPercent}% · stage 2 +
+                    {settings.liveTrading.takeProfitPercent}% (no hard take-profit)
                   </p>
                 </div>
                 <label className="relative inline-flex cursor-pointer items-center">
@@ -1813,7 +1830,7 @@ function SettingsContent() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Min profit % (strategy sells &amp; trail)
+                  Stage-2 arm % (was take-profit)
                 </label>
                 <input
                   type="number"
@@ -1846,7 +1863,7 @@ function SettingsContent() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                  Trailing stop (%)
+                  Stage-1 trail (%)
                 </label>
                 <input
                   type="number"
@@ -1856,6 +1873,23 @@ function SettingsContent() {
                   onChange={(e) =>
                     updateSettings("liveTrading", {
                       trailingStopPercent: Number(e.target.value),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Stage-2 trail (%)
+                </label>
+                <input
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={settings.liveTrading.trailingStopAfterTargetPercent}
+                  onChange={(e) =>
+                    updateSettings("liveTrading", {
+                      trailingStopAfterTargetPercent: Number(e.target.value),
                     })
                   }
                   className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
@@ -2336,8 +2370,8 @@ function SettingsContent() {
             },
             {
               key: "autoTakeProfit" as const,
-              label: "Auto Take Profit (fixed exit)",
-              desc: `Optional: sell immediately at min profit ${settings.riskManagement.takeProfitPercent}% — off = strategy sells + trailing only`,
+              label: "Stage-2 trailing at take-profit %",
+              desc: `When peak reaches ${settings.riskManagement.takeProfitPercent}%, use stage-2 trail (no hard +${settings.riskManagement.takeProfitPercent}% exit)`,
             },
           ].map((item) => (
             <div
@@ -2597,29 +2631,52 @@ function SettingsContent() {
             <div>
               <p className="text-sm font-medium text-text-primary">Trailing stop-loss</p>
               <p className="text-xs text-text-tertiary">
-                After min profit %, exit when price falls this % from the peak (ratchets up as price rises).
+                Stage 1 after ~+{settings.riskManagement.stopLossPercent}% peak; stage 2 after +
+                {settings.riskManagement.takeProfitPercent}% peak — exit when price falls the trail % from peak (no hard take-profit sell).
               </p>
             </div>
           </div>
 
           {settings.riskManagement.autoTrailingStop && (
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1.5">
-                Trailing stop (%)
-              </label>
-              <input
-                type="number"
-                min={0.5}
-                step={0.5}
-                value={settings.riskManagement.trailingStopPercent}
-                onChange={(e) =>
-                  updateSettings("riskManagement", {
-                    trailingStopPercent: Math.max(0.5, Number(e.target.value) || 2),
-                  })
-                }
-                className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
-              />
-            </div>
+            <>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Stage-1 trail after ~+{settings.riskManagement.stopLossPercent}% (%)
+                </label>
+                <input
+                  type="number"
+                  min={0.5}
+                  step={0.5}
+                  value={settings.riskManagement.trailingStopPercent}
+                  onChange={(e) =>
+                    updateSettings("riskManagement", {
+                      trailingStopPercent: Math.max(0.5, Number(e.target.value) || 2),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1.5">
+                  Stage-2 trail after +{settings.riskManagement.takeProfitPercent}% (%)
+                </label>
+                <input
+                  type="number"
+                  min={0.5}
+                  step={0.5}
+                  value={settings.riskManagement.trailingStopAfterTargetPercent}
+                  onChange={(e) =>
+                    updateSettings("riskManagement", {
+                      trailingStopAfterTargetPercent: Math.max(
+                        0.5,
+                        Number(e.target.value) || 2
+                      ),
+                    })
+                  }
+                  className="w-full rounded-lg border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+                />
+              </div>
+            </>
           )}
 
           <div>

@@ -49,7 +49,7 @@ describe("normalizeAppSettings", () => {
     assert.equal(out.paperMaxOrderValue, 500_000);
   });
 
-  it("enables basic 2% stop / 5% take-profit when rule is on", () => {
+  it("enables basic 2% stop / dual trailing at +2% and +5% when rule is on", () => {
     const out = normalizeAppSettings({
       ...DEFAULT_SETTINGS,
       ruleBasicExits2and5: true,
@@ -70,7 +70,8 @@ describe("normalizeAppSettings", () => {
     assert.equal(out.stopLossPercent, 2);
     assert.equal(out.takeProfitPercent, 5);
     assert.equal(out.autoTrailingStop, true);
-    assert.equal(out.trailingStopPercent, 1.5);
+    assert.equal(out.trailingStopPercent, 2);
+    assert.equal(out.trailingStopAfterTargetPercent, 2);
     assert.equal(out.enableStrategySellSignals, false);
     assert.equal(out.rebuyCooldownMinutes, 0);
     assert.equal(out.noSameDayRebuyAfterSell, false);

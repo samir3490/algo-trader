@@ -104,17 +104,7 @@ export function evaluateHoldingRiskExit(
     }
   }
 
-  if (settings.autoTakeProfit && settings.takeProfitPercent > 0) {
-    if (pnlPercent >= settings.takeProfitPercent) {
-      return {
-        symbol: holding.symbol,
-        exchange: holding.exchange,
-        reason: "take_profit",
-        message: `Take profit hit (${pnlPercent.toFixed(2)}% ≥ ${settings.takeProfitPercent}%)`,
-        pnlPercent,
-      };
-    }
-  }
+  // No hard take-profit exit — winners use trailing stop (stage 1 ~+2%, stage 2 ~+5%).
 
   if (
     isMisProduct(settings.paperDefaultProduct, settings) &&
@@ -153,23 +143,73 @@ export function evaluateStopLossExit(
   return null;
 }
 
-/** Whether peak price has reached the min-profit % (arms trailing stop). */
+/** Peak P&L % used for trail arming (high-water mark vs entry). */
+export function peakProfitPercent(
+  position: Pick<PaperPosition, "entryPrice" | "ltp" | "peakPrice">
+): number {
+  const peak = Math.max(
+    position.peakPrice ?? position.entryPrice,
+    position.ltp
+  );
+  return holdingPnlPercent(position.entryPrice, peak);
+}
+
+/**
+ * Stage-1 trail arms once peak ≥ ~+2% (stopLoss % or 2).
+ * Stage-2 trail arms once peak ≥ take-profit % (default +5%) — not a hard exit.
+ */
+export function trailingArmThresholdPercent(
+  settings: Pick<AppSettings, "takeProfitPercent" | "stopLossPercent">
+): number {
+  const stopLoss = settings.stopLossPercent ?? 0;
+  if (stopLoss > 0) return Math.max(stopLoss, 1);
+  const takeProfit = settings.takeProfitPercent ?? 0;
+  return takeProfit > 0 ? takeProfit : 0;
+}
+
+/** Whether peak price has reached the stage-1 min-profit % (arms trailing stop). */
 export function isTrailingStopArmed(
   position: Pick<PaperPosition, "entryPrice" | "ltp" | "peakPrice">,
   settings: Pick<AppSettings, "takeProfitPercent" | "stopLossPercent">
 ): boolean {
-  const takeProfit = settings.takeProfitPercent ?? 0;
-  const stopLoss = settings.stopLossPercent ?? 0;
-  // Arm after a real move — never wait for full take-profit (that made trailing useless).
-  const armAt =
-    takeProfit > 0 && stopLoss > 0
-      ? Math.min(takeProfit, Math.max(stopLoss, 1))
-      : takeProfit > 0
-        ? takeProfit
-        : 0;
+  const armAt = trailingArmThresholdPercent(settings);
   if (armAt <= 0) return true;
-  const peak = Math.max(position.peakPrice ?? position.entryPrice, position.ltp);
-  return holdingPnlPercent(position.entryPrice, peak) >= armAt;
+  return peakProfitPercent(position) >= armAt;
+}
+
+/**
+ * Trail distance from peak:
+ * - peak ≥ takeProfit% (e.g. +5%): trailingStopAfterTargetPercent (stage 2)
+ * - else peak ≥ stage-1 arm (~+2%): trailingStopPercent (stage 1)
+ */
+export function resolveTrailingStopPercent(
+  position: Pick<PaperPosition, "entryPrice" | "ltp" | "peakPrice">,
+  settings: Pick<
+    AppSettings,
+    | "takeProfitPercent"
+    | "stopLossPercent"
+    | "trailingStopPercent"
+    | "trailingStopAfterTargetPercent"
+    | "autoTakeProfit"
+  >
+): number {
+  const stage1 = settings.trailingStopPercent ?? 0;
+  const stage2 =
+    settings.trailingStopAfterTargetPercent ??
+    settings.trailingStopPercent ??
+    0;
+  const target = settings.takeProfitPercent ?? 0;
+  const peakPct = peakProfitPercent(position);
+  // Stage 2: once peak has cleared the old hard-TP level, keep trailing (no hard exit).
+  if (
+    settings.autoTakeProfit !== false &&
+    target > 0 &&
+    peakPct >= target &&
+    stage2 > 0
+  ) {
+    return stage2;
+  }
+  return stage1;
 }
 
 /** Whether a held position has reached the min-profit % gate for strategy SELL signals. */
@@ -197,35 +237,33 @@ export function evaluatePositionRiskExit(
     position.ltp
   );
 
+  const trailPct = resolveTrailingStopPercent(position, settings);
   if (
     settings.autoTrailingStop &&
-    (settings.trailingStopPercent ?? 0) > 0 &&
+    trailPct > 0 &&
     peak > 0 &&
     isTrailingStopArmed(position, settings)
   ) {
-    const floor = peak * (1 - (settings.trailingStopPercent ?? 2) / 100);
+    const floor = peak * (1 - trailPct / 100);
     if (position.ltp > 0 && position.ltp <= floor) {
+      const peakPct = peakProfitPercent(position);
+      const stage =
+        settings.autoTakeProfit !== false &&
+        (settings.takeProfitPercent ?? 0) > 0 &&
+        peakPct >= (settings.takeProfitPercent ?? 0)
+          ? `stage-2 ≥+${settings.takeProfitPercent}%`
+          : `stage-1 ≥+${trailingArmThresholdPercent(settings)}%`;
       return {
         symbol: position.symbol,
         exchange: position.exchange,
         reason: "trailing_stop",
-        message: `Trailing stop (${settings.trailingStopPercent}% from peak ₹${peak.toFixed(2)})`,
+        message: `Trailing stop (${trailPct}% from peak ₹${peak.toFixed(2)}, ${stage})`,
         pnlPercent,
       };
     }
   }
 
-  if (settings.autoTakeProfit && settings.takeProfitPercent > 0) {
-    if (pnlPercent >= settings.takeProfitPercent) {
-      return {
-        symbol: position.symbol,
-        exchange: position.exchange,
-        reason: "take_profit",
-        message: `Take profit hit (${pnlPercent.toFixed(2)}% ≥ ${settings.takeProfitPercent}%)`,
-        pnlPercent,
-      };
-    }
-  }
+  // No hard take-profit exit at +5% — stage-2 trailing locks gains instead.
 
   if (
     isMisProduct(position.product, settings) &&

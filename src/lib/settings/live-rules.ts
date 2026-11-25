@@ -82,9 +82,9 @@ export const LIVE_RULE_CATALOG: LiveRuleDefinition[] = [
   {
     key: "liveRuleBasicExits2and5",
     category: "Exits",
-    label: "Basic exits (−2% stop / +5% target + trail)",
+    label: "Basic exits (−2% stop / +2% & +5% trailing)",
     description:
-      "Live stop at −2%, hard target at +5%, 1.5% trail arming ~+2%. Same default as paper. Turn off to use Live Trading risk fields.",
+      "Live stop at −2%. Trailing arms at ~+2% and again at ~+5% (2% from peak each) — no hard +5% exit. Same as paper. Turn off to use Live Trading risk fields.",
     defaultOn: paperDefault("ruleBasicExits2and5"),
     paperKey: "ruleBasicExits2and5",
   },

@@ -450,7 +450,13 @@ export interface AppSettings {
   atrStopMultiplier: number;
   /** Ratchet stop from position high-water mark. */
   autoTrailingStop: boolean;
+  /** Stage-1 trail % from peak after ~+2% profit. */
   trailingStopPercent: number;
+  /**
+   * Stage-2 trail % from peak after takeProfitPercent (default +5%).
+   * Replaces hard take-profit exit — winners keep trailing instead of flat +5% sell.
+   */
+  trailingStopAfterTargetPercent: number;
   /** Close positions held longer than N days (0 = off). */
   maxHoldDays: number;
   /** Close if held N days without min gain (0 = off). */
@@ -487,6 +493,7 @@ export interface AppSettings {
   liveStrategySellMinSignals?: number;
   liveAutoTrailingStop?: boolean;
   liveTrailingStopPercent?: number;
+  liveTrailingStopAfterTargetPercent?: number;
   liveMinHoldMinutesBeforeSell?: number;
   liveMaxHoldDays?: number;
   liveNoProgressDays?: number;
@@ -558,9 +565,11 @@ export const DEFAULT_SETTINGS: AppSettings = {
   atrPeriod: 14,
   atrStopMultiplier: 2,
   autoTrailingStop: true,
-  trailingStopPercent: 1.5,
+  trailingStopPercent: 2,
+  trailingStopAfterTargetPercent: 2,
   liveAutoTrailingStop: true,
-  liveTrailingStopPercent: 1.5,
+  liveTrailingStopPercent: 2,
+  liveTrailingStopAfterTargetPercent: 2,
   maxHoldDays: 0,
   noProgressDays: 0,
   noProgressMinPct: 0.5,
@@ -602,14 +611,25 @@ export async function getSettings(): Promise<AppSettings> {
       if (raw.trailingStopForcedV1 !== true) {
         after.autoTrailingStop = true;
         after.liveAutoTrailingStop = true;
-        if (!(after.trailingStopPercent > 0)) after.trailingStopPercent = 1.5;
+        if (!(after.trailingStopPercent > 0)) after.trailingStopPercent = 2;
+        if (!(after.trailingStopAfterTargetPercent > 0)) {
+          after.trailingStopAfterTargetPercent = after.trailingStopPercent;
+        }
         if (!(Number(after.liveTrailingStopPercent) > 0)) {
-          after.liveTrailingStopPercent = 1.5;
+          after.liveTrailingStopPercent = 2;
+        }
+        if (!(Number(after.liveTrailingStopAfterTargetPercent) > 0)) {
+          after.liveTrailingStopAfterTargetPercent =
+            after.liveTrailingStopPercent ?? 2;
         }
         patch.autoTrailingStop = true;
         patch.liveAutoTrailingStop = true;
         patch.trailingStopPercent = after.trailingStopPercent;
-        patch.liveTrailingStopPercent = after.liveTrailingStopPercent ?? 1.5;
+        patch.trailingStopAfterTargetPercent =
+          after.trailingStopAfterTargetPercent;
+        patch.liveTrailingStopPercent = after.liveTrailingStopPercent ?? 2;
+        patch.liveTrailingStopAfterTargetPercent =
+          after.liveTrailingStopAfterTargetPercent ?? 2;
         patch.trailingStopForcedV1 = true;
       }
       if (Object.keys(patch).length > 0) {

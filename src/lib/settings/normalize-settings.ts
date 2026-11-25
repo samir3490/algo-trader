@@ -77,12 +77,13 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
 
   if (isPaperRuleOn(settings, "ruleBasicExits2and5")) {
     next.autoStopLoss = true;
+    // autoTakeProfit = enable stage-2 trailing at +5% (not a hard +5% exit).
     next.autoTakeProfit = true;
     next.stopLossPercent = 2;
     next.takeProfitPercent = 5;
-    // Lock gains once price has moved ~+2%; don't wait for full +5% or fall back to stop.
     next.autoTrailingStop = true;
-    next.trailingStopPercent = 1.5;
+    next.trailingStopPercent = 2;
+    next.trailingStopAfterTargetPercent = 2;
     next.maxHoldDays = 0;
     next.noProgressDays = 0;
     next.autoPauseEnabled = false;
@@ -144,15 +145,23 @@ export function normalizeAppSettings(settings: AppSettings): AppSettings {
     next.liveStopLossPercent = 2;
     next.liveTakeProfitPercent = 5;
     next.liveAutoTrailingStop = true;
-    next.liveTrailingStopPercent = 1.5;
+    next.liveTrailingStopPercent = 2;
+    next.liveTrailingStopAfterTargetPercent = 2;
   }
 
   // Trailing stop always on for paper + live (user-requested default).
   next.autoTrailingStop = true;
-  if (!(next.trailingStopPercent > 0)) next.trailingStopPercent = 1.5;
+  if (!(next.trailingStopPercent > 0)) next.trailingStopPercent = 2;
+  if (!(next.trailingStopAfterTargetPercent > 0)) {
+    next.trailingStopAfterTargetPercent = next.trailingStopPercent;
+  }
   next.liveAutoTrailingStop = true;
   if (!(Number(next.liveTrailingStopPercent) > 0)) {
-    next.liveTrailingStopPercent = 1.5;
+    next.liveTrailingStopPercent = 2;
+  }
+  if (!(Number(next.liveTrailingStopAfterTargetPercent) > 0)) {
+    next.liveTrailingStopAfterTargetPercent =
+      next.liveTrailingStopPercent ?? next.trailingStopAfterTargetPercent;
   }
   if (isLiveRuleOn(next, "liveRuleMaxPositions10")) {
     next.liveMaxPositions = SIMPLE_PAPER_MAX_POSITIONS;
