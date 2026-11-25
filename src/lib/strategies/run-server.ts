@@ -345,18 +345,26 @@ async function loadUserSettings(
     after.liveRuleMinBuySignals3 = false;
   }
 
-  // One-shot: trailing stop ON for paper + live risk exits.
+  // One-shot: trailing stop ON for paper + live (dual-stage +2% / +5%).
   const forceTrailing =
     raw.trailingStopForcedV1 !== true
       ? {
           autoTrailingStop: true,
           liveAutoTrailingStop: true,
           trailingStopPercent:
-            after.trailingStopPercent > 0 ? after.trailingStopPercent : 1.5,
+            after.trailingStopPercent > 0 ? after.trailingStopPercent : 2,
+          trailingStopAfterTargetPercent:
+            after.trailingStopAfterTargetPercent > 0
+              ? after.trailingStopAfterTargetPercent
+              : 2,
           liveTrailingStopPercent:
             Number(after.liveTrailingStopPercent) > 0
               ? after.liveTrailingStopPercent
-              : 1.5,
+              : 2,
+          liveTrailingStopAfterTargetPercent:
+            Number(after.liveTrailingStopAfterTargetPercent) > 0
+              ? after.liveTrailingStopAfterTargetPercent
+              : 2,
           trailingStopForcedV1: true,
         }
       : null;
@@ -364,8 +372,12 @@ async function loadUserSettings(
     after.autoTrailingStop = true;
     after.liveAutoTrailingStop = true;
     after.trailingStopPercent = forceTrailing.trailingStopPercent as number;
+    after.trailingStopAfterTargetPercent =
+      forceTrailing.trailingStopAfterTargetPercent as number;
     after.liveTrailingStopPercent =
       forceTrailing.liveTrailingStopPercent as number;
+    after.liveTrailingStopAfterTargetPercent =
+      forceTrailing.liveTrailingStopAfterTargetPercent as number;
   }
 
   const antiChurn = antiChurnSettingsPersistPatch(before, after);
