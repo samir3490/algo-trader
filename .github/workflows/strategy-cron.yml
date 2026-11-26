@@ -15,6 +15,15 @@ on:
     # UTC: ~09:00–15:45 IST (market 09:15–15:30); adjust if needed
     - cron: "*/15 4-10 * * 1-5"
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "run = place trades (market hours); lastScan = dump saved diagnostics"
+        required: false
+        default: "run"
+        type: choice
+        options:
+          - run
+          - lastScan
 
 jobs:
   trigger:
@@ -51,7 +60,13 @@ jobs:
           APP_URL: ${{ vars.APP_URL }}
         run: |
           BASE="${APP_URL:-https://algo-trader-umber.vercel.app}"
-          URL="${BASE}/api/cron/strategies"
+          # lastScan=1 returns saved scan diagnostics without placing trades (works after hours)
+          MODE="${{ github.event.inputs.mode }}"
+          if [ "$MODE" = "lastScan" ]; then
+            URL="${BASE}/api/cron/strategies?lastScan=1"
+          else
+            URL="${BASE}/api/cron/strategies"
+          fi
           # Trim accidental newlines/spaces from GitHub secret paste
           SECRET="$(printf '%s' "$CRON_SECRET" | tr -d '\r\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
           echo "GET ${URL}"
@@ -62,10 +77,10 @@ jobs:
           echo "HTTP ${HTTP}"
           # Compact diagnostics first (survives log truncation); then a short raw preview
           if command -v jq >/dev/null 2>&1; then
-            jq -c '{ok,ranAt,totalTrades,results:[.results[]?|{userId,tradesExecuted,diagnostics:(.diagnostics|{paperBalance,openPositions,maxPositions,paperSignals,liveSignals,buyDecisions,sellDecisions})}]}' \
+            jq -c '{ok,ranAt,totalTrades,results:[.results[]?|{userId,tradesExecuted,diagnostics:(.diagnostics|{paperBalance,openPositions,maxPositions,paperSignals,liveSignals,buyDecisions,sellDecisions})}],lastScans:[.lastScans[]?|{userId,lastCronAt,ranAt:.lastScanSummary.ranAt,signals:.lastScanSummary.signalsFound,trades:.lastScanSummary.tradesExecuted,diagnostics:(.lastScanSummary.diagnostics|{buySignals,sellSignals,buyDecisions,sellDecisions,paperSignals,liveSignals,openPositions,maxPositions,slotsToFill,paperBalance,skipReasons})}]}' \
               /tmp/cron-body.json || true
           fi
-          cat /tmp/cron-body.json | head -c 2000 || true
+          cat /tmp/cron-body.json | head -c 8000 || true
           echo ""
 
           if [ "$HTTP" = "503" ]; then

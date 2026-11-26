@@ -2,9 +2,37 @@ import { NextRequest, NextResponse } from "next/server";
 import { isMarketOpen } from "@/lib/utils";
 import { runStrategiesForAllUsers } from "@/lib/strategies/run-server";
 import { sendCronFailureAlert } from "@/lib/health/health-alerts";
+import {
+  getAdminFirestore,
+  isFirebaseAdminConfigured,
+} from "@/lib/firebase-admin";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
+
+/** Read last saved scan summaries (no strategy run) — for post-mortem when market is closed. */
+async function loadLastScanSummaries() {
+  if (!isFirebaseAdminConfigured()) return [];
+  const db = getAdminFirestore();
+  const snap = await db.collectionGroup("data").get();
+  const out: Array<{
+    userId: string;
+    lastCronAt?: string;
+    lastScanSummary?: unknown;
+  }> = [];
+  for (const docSnap of snap.docs) {
+    if (docSnap.id !== "strategyRunner") continue;
+    const userId = docSnap.ref.parent.parent?.id;
+    if (!userId) continue;
+    const data = docSnap.data();
+    out.push({
+      userId,
+      lastCronAt: data.lastCronAt as string | undefined,
+      lastScanSummary: data.lastScanSummary ?? null,
+    });
+  }
+  return out;
+}
 
 type CronAuthResult =
   | { ok: true }
@@ -49,15 +77,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  if (!isMarketOpen()) {
+  const wantLastScan =
+    request.nextUrl.searchParams.get("lastScan") === "1" ||
+    request.nextUrl.searchParams.get("diag") === "1";
+
+  if (wantLastScan || !isMarketOpen()) {
     const ranAt = new Date().toISOString();
+    const lastScans = await loadLastScanSummaries().catch(() => []);
     return NextResponse.json({
       ok: true,
-      skipped: true,
-      reason: "Market closed (IST)",
+      skipped: !wantLastScan,
+      reason: wantLastScan ? "lastScan diagnostics only" : "Market closed (IST)",
       ranAt,
       invokedBy: "cron",
       schedule: "Every 15 min, Mon–Fri 9:15–15:30 IST",
+      lastScans,
     });
   }
 
