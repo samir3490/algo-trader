@@ -81,13 +81,29 @@ export async function GET(request: NextRequest) {
     request.nextUrl.searchParams.get("lastScan") === "1" ||
     request.nextUrl.searchParams.get("diag") === "1";
 
-  if (wantLastScan || !isMarketOpen()) {
+  // lastScan=1: return saved diagnostics without running strategies (works after hours).
+  // After-hours scheduled hits still skip trading, but include lastScans for ops visibility.
+  if (wantLastScan) {
     const ranAt = new Date().toISOString();
     const lastScans = await loadLastScanSummaries().catch(() => []);
     return NextResponse.json({
       ok: true,
-      skipped: !wantLastScan,
-      reason: wantLastScan ? "lastScan diagnostics only" : "Market closed (IST)",
+      skipped: false,
+      reason: "lastScan diagnostics only",
+      ranAt,
+      invokedBy: "cron",
+      schedule: "Every 15 min, Mon–Fri 9:15–15:30 IST",
+      lastScans,
+    });
+  }
+
+  if (!isMarketOpen()) {
+    const ranAt = new Date().toISOString();
+    const lastScans = await loadLastScanSummaries().catch(() => []);
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: "Market closed (IST)",
       ranAt,
       invokedBy: "cron",
       schedule: "Every 15 min, Mon–Fri 9:15–15:30 IST",

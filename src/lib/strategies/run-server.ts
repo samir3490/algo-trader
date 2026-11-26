@@ -1933,26 +1933,30 @@ export async function runStrategiesForUser(
     [dateIST]: dayRollup,
   });
 
-  await db.doc(`users/${userId}/data/strategyRunner`).set(
-    {
-      dedupeKeys: [...dedupe],
-      emailDedupeKeys: [...emailDedupe],
-      symbolCooldownUntil,
-      symbolsLockedToday,
-      lastRunAt: now,
-      ...(options?.invokedBy === "cron" ? { lastCronAt: now } : {}),
-      lastScanSummary: {
-        ranAt: now,
-        scanned,
-        signalsFound: rawSignals.length,
-        tradesExecuted,
-        diagnostics,
-      },
-      shortlistDayRollups,
-      updatedAt: FieldValue.serverTimestamp(),
+  // mergeFields (not merge:true) so nested maps like skipReasons / details are
+  // replaced each scan — merge:true deep-merges maps and accumulates stale reasons.
+  const runnerPatch: Record<string, unknown> = {
+    dedupeKeys: [...dedupe],
+    emailDedupeKeys: [...emailDedupe],
+    symbolCooldownUntil,
+    symbolsLockedToday,
+    lastRunAt: now,
+    lastScanSummary: {
+      ranAt: now,
+      scanned,
+      signalsFound: rawSignals.length,
+      tradesExecuted,
+      diagnostics,
     },
-    { merge: true }
-  );
+    shortlistDayRollups,
+    updatedAt: FieldValue.serverTimestamp(),
+  };
+  if (options?.invokedBy === "cron") {
+    runnerPatch.lastCronAt = now;
+  }
+  await db
+    .doc(`users/${userId}/data/strategyRunner`)
+    .set(runnerPatch, { mergeFields: Object.keys(runnerPatch) });
 
   const auditMessage = formatScanAuditMessage(
     rawSignals.length,
